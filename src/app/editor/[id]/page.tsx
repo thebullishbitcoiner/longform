@@ -65,7 +65,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           </button>
         </div>
       </div>
-      <Editor draft={draft} onSave={handleSave} onClose={() => router.push('/')} />
+      <Editor draft={draft} onSave={handleSave} />
     </main>
   );
 } 

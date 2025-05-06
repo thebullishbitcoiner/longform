@@ -7,10 +7,9 @@ import './Editor.css';
 interface EditorProps {
   draft: Draft;
   onSave: (draft: Draft) => void;
-  onClose: () => void;
 }
 
-export default function Editor({ draft, onSave, onClose }: EditorProps) {
+export default function Editor({ draft, onSave }: EditorProps) {
   const handleContentChange = (value?: string) => {
     if (!value) return;
     onSave({
