@@ -1,0 +1,98 @@
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3rem;
+}
+
+.draft-count {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.new-draft-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.new-draft-button:hover {
+  background-color: var(--button-hover);
+}
+
+.new-draft-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.draft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.draft-item {
+  background-color: #18181b;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.draft-item:hover {
+  background-color: var(--hover);
+}
+
+.draft-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.draft-info {
+  padding-left: 1rem;
+}
+
+.draft-title {
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.draft-date {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.delete-button {
+  padding: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.draft-item:hover .delete-button {
+  opacity: 1;
+}
+
+.delete-button:hover {
+  background-color: var(--hover);
+}
+
+.delete-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--text-secondary);
+}
+
+.delete-button:hover svg {
+  color: #f87171;
+} 

@@ -1,0 +1,79 @@
+.editor-header {
+  margin-bottom: 0rem;
+}
+
+.editor-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  padding: 0.5rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: color 0.2s;
+  margin-bottom: 1rem;
+}
+
+.back-button:hover {
+  color: var(--text);
+}
+
+.back-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.title-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 2rem;
+  font-weight: 600;
+  padding: 0.5rem 0;
+  outline: none;
+}
+
+.title-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.save-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.save-button:hover {
+  background-color: var(--button-hover);
+  transform: translateY(-1px);
+}
+
+.save-button svg {
+  width: 1rem;
+  height: 1rem;
+} 
