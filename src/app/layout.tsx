@@ -7,11 +7,25 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Long - Blog Drafts",
-  description: "A minimalist blog draft editor",
+  title: "Long",
+  description: "A minimalist editor for Nostr longform",
+  manifest: "/manifest.json",
   icons: {
     icon: '/images/long-icon.png',
+    apple: '/images/long-icon.png',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Long',
+  },
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
+  themeColor: '#000000',
 };
 
 export default function RootLayout({
@@ -21,6 +35,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Long" />
+        <link rel="apple-touch-icon" href="/images/long-icon.png" />
+        <meta name="theme-color" content="#000000" />
+      </head>
       <body className={inter.className}>
         <Header />
         {children}
