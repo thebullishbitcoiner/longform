@@ -46,6 +46,7 @@
   border: 1px solid var(--border);
   cursor: pointer;
   transition: background-color 0.2s;
+  position: relative;
 }
 
 .draft-item:hover {
@@ -56,10 +57,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  pointer-events: none;
 }
 
 .draft-info {
   flex: 1;
+  pointer-events: none;
 }
 
 .draft-title {
@@ -81,6 +84,9 @@
   transition: background-color 0.2s;
   border-radius: 0.375rem;
   margin-left: 1rem;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .delete-button:hover {
