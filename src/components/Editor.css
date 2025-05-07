@@ -1,7 +1,8 @@
 .editor-container {
-  margin-top: 2rem;
+  width: 100%;
+  height: calc(100vh - 12rem);
   position: relative;
-  padding-bottom: 5rem;
+  margin-bottom: 5rem;
 }
 
 .editor-toolbar {
@@ -47,39 +48,49 @@
   --md-editor-bg-color: #000000 !important;
   --md-editor-border-color: #27272a !important;
   --md-editor-text-color: #ffffff !important;
+  height: 100% !important;
 }
 
 .w-md-editor {
   background-color: var(--md-editor-bg-color) !important;
-  border: 1px solid var(--md-editor-border-color) !important;
+  border: none !important;
+  height: 100% !important;
 }
 
 .w-md-editor-toolbar {
   background-color: var(--md-editor-bg-color) !important;
   border-bottom: 1px solid var(--md-editor-border-color) !important;
+  padding: 0.5rem !important;
 }
 
 .w-md-editor-toolbar button {
   color: var(--md-editor-text-color) !important;
+  opacity: 0.8;
 }
 
 .w-md-editor-toolbar button:hover {
   background-color: var(--hover) !important;
+  opacity: 1;
 }
 
 .w-md-editor-text-pre > code,
 .w-md-editor-text-input {
   color: var(--md-editor-text-color) !important;
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
 }
 
 .w-md-editor-preview {
   background-color: var(--md-editor-bg-color) !important;
   border-left: 1px solid var(--md-editor-border-color) !important;
+  padding: 1rem !important;
 }
 
 .w-md-editor-preview .wmde-markdown {
   background-color: var(--md-editor-bg-color) !important;
   color: var(--md-editor-text-color) !important;
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
 }
 
 .w-md-editor-preview .wmde-markdown h1,
@@ -89,23 +100,70 @@
 .w-md-editor-preview .wmde-markdown h5,
 .w-md-editor-preview .wmde-markdown h6 {
   color: var(--md-editor-text-color) !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.w-md-editor-preview .wmde-markdown h1 {
+  font-size: 2rem !important;
+}
+
+.w-md-editor-preview .wmde-markdown h2 {
+  font-size: 1.5rem !important;
+}
+
+.w-md-editor-preview .wmde-markdown h3 {
+  font-size: 1.25rem !important;
+}
+
+.w-md-editor-preview .wmde-markdown p {
+  margin-bottom: 1rem !important;
 }
 
 .w-md-editor-preview .wmde-markdown a {
   color: #3b82f6 !important;
+  text-decoration: none !important;
+}
+
+.w-md-editor-preview .wmde-markdown a:hover {
+  text-decoration: underline !important;
 }
 
 .w-md-editor-preview .wmde-markdown code {
   background-color: var(--hover) !important;
   color: var(--md-editor-text-color) !important;
+  padding: 0.2rem 0.4rem !important;
+  border-radius: 0.25rem !important;
+  font-size: 0.875rem !important;
 }
 
 .w-md-editor-preview .wmde-markdown pre {
   background-color: var(--hover) !important;
   border: 1px solid var(--md-editor-border-color) !important;
+  padding: 1rem !important;
+  border-radius: 0.5rem !important;
+  margin: 1rem 0 !important;
+}
+
+.w-md-editor-preview .wmde-markdown pre code {
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
 }
 
 .w-md-editor-preview .wmde-markdown blockquote {
   border-left: 4px solid var(--md-editor-border-color) !important;
   color: var(--text-secondary) !important;
+  margin: 1rem 0 !important;
+  padding: 0.5rem 0 0.5rem 1rem !important;
+}
+
+.w-md-editor-preview .wmde-markdown ul,
+.w-md-editor-preview .wmde-markdown ol {
+  margin: 1rem 0 !important;
+  padding-left: 2rem !important;
+}
+
+.w-md-editor-preview .wmde-markdown li {
+  margin: 0.5rem 0 !important;
 } 

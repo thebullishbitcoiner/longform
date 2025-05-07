@@ -35,7 +35,7 @@ body {
 }
 
 .header {
-  margin-bottom: 1rem;
+  margin-bottom: 0px;
 }
 
 .header p {
@@ -134,78 +134,6 @@ body {
 
 .delete-button:hover svg {
   color: #f87171;
-}
-
-/* Editor Styles */
-.editor-container {
-  margin-top: 2rem;
-}
-
-.markdown-editor {
-  --md-editor-bg-color: #000000 !important;
-  --md-editor-border-color: #27272a !important;
-  --md-editor-text-color: #ffffff !important;
-}
-
-.w-md-editor {
-  background-color: var(--md-editor-bg-color) !important;
-  border: 1px solid var(--md-editor-border-color) !important;
-}
-
-.w-md-editor-toolbar {
-  background-color: var(--md-editor-bg-color) !important;
-  border-bottom: 1px solid var(--md-editor-border-color) !important;
-}
-
-.w-md-editor-toolbar button {
-  color: var(--md-editor-text-color) !important;
-}
-
-.w-md-editor-toolbar button:hover {
-  background-color: var(--hover) !important;
-}
-
-.w-md-editor-text-pre > code,
-.w-md-editor-text-input {
-  color: var(--md-editor-text-color) !important;
-}
-
-.w-md-editor-preview {
-  background-color: var(--md-editor-bg-color) !important;
-  border-left: 1px solid var(--md-editor-border-color) !important;
-}
-
-.w-md-editor-preview .wmde-markdown {
-  background-color: var(--md-editor-bg-color) !important;
-  color: var(--md-editor-text-color) !important;
-}
-
-.w-md-editor-preview .wmde-markdown h1,
-.w-md-editor-preview .wmde-markdown h2,
-.w-md-editor-preview .wmde-markdown h3,
-.w-md-editor-preview .wmde-markdown h4,
-.w-md-editor-preview .wmde-markdown h5,
-.w-md-editor-preview .wmde-markdown h6 {
-  color: var(--md-editor-text-color) !important;
-}
-
-.w-md-editor-preview .wmde-markdown a {
-  color: #3b82f6 !important;
-}
-
-.w-md-editor-preview .wmde-markdown code {
-  background-color: var(--hover) !important;
-  color: var(--md-editor-text-color) !important;
-}
-
-.w-md-editor-preview .wmde-markdown pre {
-  background-color: var(--hover) !important;
-  border: 1px solid var(--md-editor-border-color) !important;
-}
-
-.w-md-editor-preview .wmde-markdown blockquote {
-  border-left: 4px solid var(--md-editor-border-color) !important;
-  color: var(--text-secondary) !important;
 }
 
 .editor-header {

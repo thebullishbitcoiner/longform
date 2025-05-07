@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, CheckIcon, ClipboardIcon } from '@heroicons/react/24/outline';
 import { getDraft, updateDraft, Draft } from '@/utils/storage';
 import { use } from 'react';
 import Editor from '@/components/Editor';
@@ -38,6 +38,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     updateDraft(updatedDraft);
   };
 
+  const handleCopy = () => {
+    if (!draft) return;
+    const content = `${draft.title}\n\n${draft.content}`;
+    navigator.clipboard.writeText(content);
+  };
+
   if (!draft) return null;
 
   return (
@@ -47,25 +53,35 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           <ArrowLeftIcon />
           Back to Drafts
         </button>
-        <div className="title-row">
-          <input
-            type="text"
-            value={draft.title}
-            onChange={handleTitleChange}
-            className="title-input"
-            placeholder="Untitled Draft"
-          />
+        <input
+          type="text"
+          value={draft.title}
+          onChange={handleTitleChange}
+          className="title-input"
+          placeholder="Untitled Draft"
+        />
+      </div>
+      <Editor draft={draft} onSave={handleSave} />
+      <div className="editor-footer">
+        <div className="editor-actions">
           <button 
             onClick={() => handleSave(draft)} 
-            className="save-button"
+            className="action-button save-button"
             title="Save Draft"
           >
             <CheckIcon />
             Save
           </button>
+          <button 
+            onClick={handleCopy} 
+            className="action-button copy-button"
+            title="Copy to Clipboard"
+          >
+            <ClipboardIcon />
+            Copy
+          </button>
         </div>
       </div>
-      <Editor draft={draft} onSave={handleSave} />
     </main>
   );
 } 
