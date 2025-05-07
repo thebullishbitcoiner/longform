@@ -35,10 +35,14 @@ export default function DraftList() {
       content: '',
       lastModified: new Date().toISOString(),
     };
+    
+    // Navigate immediately
+    router.push(`/editor/${newDraft.id}`);
+    
+    // Update storage and state after navigation
     const updatedDrafts = [...drafts, newDraft];
     localStorage.setItem('drafts', JSON.stringify(updatedDrafts));
     setDrafts(updatedDrafts);
-    router.push(`/editor/${newDraft.id}`);
   };
 
   const handleDeleteDraft = (id: string, title: string, e: React.MouseEvent) => {
@@ -72,7 +76,7 @@ export default function DraftList() {
               <div className="draft-info">
                 <div className="draft-title">{draft.title}</div>
                 <div className="draft-date">
-                  {new Date(draft.lastModified).toLocaleDateString()}
+                  Last Modified: {new Date(draft.lastModified).toLocaleDateString()}
                 </div>
               </div>
               <button

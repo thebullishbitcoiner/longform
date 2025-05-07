@@ -3,6 +3,9 @@
   max-width: 100%;
   margin: 0;
   padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-header {
@@ -42,6 +45,20 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  position: relative;
+  overflow: hidden;
+  padding: 0.5rem 0;
+}
+
+.title-row::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 2rem;
+  background: linear-gradient(to right, transparent, var(--background));
+  pointer-events: none;
 }
 
 .title-input {
@@ -49,9 +66,20 @@
   background: none;
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 600;
   outline: none;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.title-input::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .title-input::placeholder {
@@ -60,7 +88,7 @@
 
 .editor-footer {
   padding: 1rem 0;
-  margin-top: 1rem;
+  margin-top: auto;
 }
 
 .editor-actions {

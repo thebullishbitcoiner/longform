@@ -41,8 +41,8 @@
 }
 
 .draft-item {
-  background-color: #18181b;
-  padding: 1.5rem;
+  background-color: #111;
+  padding: 1rem;
   border: 1px solid var(--border);
   cursor: pointer;
   transition: background-color 0.2s;
