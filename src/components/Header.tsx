@@ -1,4 +1,5 @@
 import React from 'react';
+import { APP_VERSION } from '../config/version';
 import './Header.css';
 
 const Header: React.FC = () => {
@@ -7,7 +8,7 @@ const Header: React.FC = () => {
       <div className="header-container">
         <h1 className="header-title">
           Long
-          <span className="header-version">v0.0.3</span>
+          <span className="header-version">v{APP_VERSION}</span>
         </h1>
       </div>
     </header>
