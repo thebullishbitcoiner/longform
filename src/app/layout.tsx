@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import Header from "@/components/Header";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -8,6 +9,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Long - Blog Drafts",
   description: "A minimalist blog draft editor",
+  icons: {
+    icon: '/images/long-icon.png',
+  },
 };
 
 export default function RootLayout({
@@ -18,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <Header />
         {children}
         <Toaster
           position="bottom-left"

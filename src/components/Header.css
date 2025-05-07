@@ -1,0 +1,26 @@
+.header {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(to right, #000, #111);
+  border-bottom: 1px solid #374151;
+}
+
+.header-container {
+  max-width: 80rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.header-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+}
+
+.header-version {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #9ca3af;
+  margin-left: 0.5rem;
+} 

@@ -44,13 +44,6 @@ body {
   color: var(--text-secondary);
 }
 
-.action-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 3rem;
-}
-
 .draft-count {
   font-size: 0.875rem;
   color: var(--text-secondary);
