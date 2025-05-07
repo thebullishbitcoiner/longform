@@ -41,10 +41,12 @@ export default function DraftList() {
     router.push(`/editor/${newDraft.id}`);
   };
 
-  const handleDeleteDraft = (id: string, e: React.MouseEvent) => {
+  const handleDeleteDraft = (id: string, title: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    deleteDraft(id);
-    setDrafts(drafts.filter(draft => draft.id !== id));
+    if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
+      deleteDraft(id);
+      setDrafts(drafts.filter(draft => draft.id !== id));
+    }
   };
 
   return (
@@ -74,7 +76,7 @@ export default function DraftList() {
                 </div>
               </div>
               <button
-                onClick={(e) => handleDeleteDraft(draft.id, e)}
+                onClick={(e) => handleDeleteDraft(draft.id, draft.title, e)}
                 className="delete-button"
               >
                 <TrashIcon />

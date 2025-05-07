@@ -55,11 +55,11 @@
 .draft-content {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .draft-info {
-  padding-left: 1rem;
+  flex: 1;
 }
 
 .draft-title {
@@ -75,12 +75,12 @@
 
 .delete-button {
   padding: 0.5rem;
-  opacity: 0;
-  transition: opacity 0.2s, background-color 0.2s;
-}
-
-.draft-item:hover .delete-button {
-  opacity: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 0.375rem;
+  margin-left: 1rem;
 }
 
 .delete-button:hover {
