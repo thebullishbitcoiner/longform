@@ -1,6 +1,7 @@
 .container {
   min-height: 100vh;
   background-color: #111;
+  color: #fff;
 }
 
 .content {
@@ -18,24 +19,27 @@
 
 .title {
   font-size: 2rem;
-  font-weight: 700;
-  color: white;
+  font-weight: 600;
+  color: #fff;
 }
 
 .addButton {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background-color: #2563eb;
-  color: white;
-  border-radius: 0.375rem;
+  background-color: #ffffff;
+  color: #000000;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
   font-weight: 500;
+  letter-spacing: 0.025em;
+  border: none;
+  cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .addButton:hover {
-  background-color: #1d4ed8;
+  background-color: #f4f4f5;
 }
 
 .menuButton {
@@ -117,7 +121,7 @@
 .postsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  gap: 2rem;
 }
 
 .postCard {
