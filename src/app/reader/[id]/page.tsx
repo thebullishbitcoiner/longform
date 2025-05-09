@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useBlog } from '@/contexts/BlogContext';
+import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import Link from 'next/link';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
@@ -11,14 +12,16 @@ import styles from './page.module.css';
 export default function BlogPost() {
   const params = useParams();
   const { getPost } = useBlog();
-  const [post, setPost] = useState<any>(null);
+  const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchPost = async () => {
       if (params.id) {
-        const postData = await getPost(params.id as string);
-        setPost(postData);
+        const postData = getPost(params.id as string);
+        if (postData) {
+          setPost(postData);
+        }
         setLoading(false);
       }
     };

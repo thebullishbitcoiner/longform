@@ -18,7 +18,7 @@ function getTagValues(tags: string[][], tagName: string): string[] {
 
 export default function ReaderPage() {
   const { ndk, isLoading } = useNostr();
-  const { posts, getSortedPosts, addPost, updateAuthorProfile } = useBlog();
+  const { getSortedPosts, addPost, updateAuthorProfile } = useBlog();
   const [subscriptions, setSubscriptions] = useState<string[]>([]);
 
   useEffect(() => {
