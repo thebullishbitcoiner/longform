@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import Header from "@/components/Header";
+import { NostrProvider } from "@/contexts/NostrContext";
+import { BlogProvider } from "@/contexts/BlogContext";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -44,30 +46,34 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
       </head>
       <body className={inter.className}>
-        <Header />
-        {children}
-        <Toaster
-          position="bottom-left"
-          toastOptions={{
-            style: {
-              background: '#18181b',
-              color: '#ffffff',
-              border: '1px solid #27272a',
-            },
-            success: {
-              iconTheme: {
-                primary: '#22c55e',
-                secondary: '#ffffff',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: '#ef4444',
-                secondary: '#ffffff',
-              },
-            },
-          }}
-        />
+        <NostrProvider>
+          <BlogProvider>
+            <Header />
+            {children}
+            <Toaster
+              position="bottom-left"
+              toastOptions={{
+                style: {
+                  background: '#18181b',
+                  color: '#ffffff',
+                  border: '1px solid #27272a',
+                },
+                success: {
+                  iconTheme: {
+                    primary: '#22c55e',
+                    secondary: '#ffffff',
+                  },
+                },
+                error: {
+                  iconTheme: {
+                    primary: '#ef4444',
+                    secondary: '#ffffff',
+                  },
+                },
+              }}
+            />
+          </BlogProvider>
+        </NostrProvider>
       </body>
     </html>
   );
