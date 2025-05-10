@@ -32,11 +32,11 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const scale = useTransform(x, [-100, 0, 100], [0.99, 1, 0.99]);
 
   const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 100;
+    const threshold = 200; // Much higher threshold
     const velocity = info.velocity.x;
     
     // Check if the swipe was "thrown" (high velocity) or dragged past threshold
-    if ((info.offset.x < -threshold || velocity < -500) && !isPostRead(post.id)) {
+    if ((info.offset.x < -threshold || velocity < -1000) && !isPostRead(post.id)) {
       // Swipe left - mark as read
       await controls.start({ 
         x: -600,
@@ -46,7 +46,7 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       markPostAsRead(post.id);
       toast.success('Marked as read');
       controls.set({ x: 0, opacity: 1 });
-    } else if ((info.offset.x > threshold || velocity > 500) && isPostRead(post.id)) {
+    } else if ((info.offset.x > threshold || velocity > 1000) && isPostRead(post.id)) {
       // Swipe right - mark as unread
       await controls.start({ 
         x: 600,
@@ -76,7 +76,7 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
         style={{ opacity: leftOpacity }}
         initial={{ opacity: 0 }}
       >
-       MARK AS READ
+        MARK AS READ
       </motion.div>
       <motion.div 
         className={`${styles.swipeAction} ${styles.swipeActionRight}`}
