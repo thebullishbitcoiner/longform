@@ -9,6 +9,7 @@ import styles from './page.module.css';
 import { nip19 } from 'nostr-tools';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { useSwipeable } from 'react-swipeable';
+import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 
 function getTagValue(tags: string[][], tagName: string): string | undefined {
   return tags.find(tag => tag[0] === tagName)?.[1];
@@ -96,7 +97,7 @@ export default function ReaderPage() {
   }, []); // Only run once on mount
 
   useEffect(() => {
-    let sub: any = null;
+    let sub: NDKSubscription | null = null;
 
     // Subscribe to blog posts if NDK is ready and we have subscriptions
     if (ndk && subscriptions.length > 0) {
@@ -108,7 +109,7 @@ export default function ReaderPage() {
         { closeOnEose: false }
       );
 
-      const handleEvent = async (event: any) => {
+      const handleEvent = async (event: NDKEvent) => {
         // Skip if we've already processed this event
         if (processedEvents.has(event.id)) return;
         processedEvents.add(event.id);

@@ -10,6 +10,7 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
+import { NDKEvent } from '@nostr-dev-kit/ndk';
 
 export default function BlogPost() {
   const params = useParams();
@@ -214,7 +215,7 @@ export default function BlogPost() {
           <div className={styles.postContent}>
             <ReactMarkdown
               components={{
-                a: ({ node, ...props }) => {
+                a: ({ ...props }) => {
                   const isNostrLink = props.href?.includes('njump.me');
                   const isRegularLink = props.href?.startsWith('http://') || props.href?.startsWith('https://');
                   const linkClass = isNostrLink ? styles.nostrLink : isRegularLink ? styles.regularLink : styles.link;
