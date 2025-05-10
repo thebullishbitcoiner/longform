@@ -263,9 +263,48 @@
 
 .swipeContainer {
   position: relative;
-  touch-action: pan-y pinch-zoom;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+  width: 100%;
+  overflow: hidden;
+}
+
+.swipeAction {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.swipeActionLeft {
+  left: 0;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.9), rgba(34, 197, 94, 0));
+}
+
+.swipeActionRight {
+  right: 0;
+  background: linear-gradient(to left, rgba(239, 68, 68, 0.9), rgba(239, 68, 68, 0));
+}
+
+.swipeActionVisible {
+  opacity: 1;
+}
+
+.postCard {
+  position: relative;
+  background: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-font-smoothing: antialiased;
 } 

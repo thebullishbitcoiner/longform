@@ -21,28 +21,52 @@ function getTagValues(tags: string[][], tagName: string): string[] {
 
 const PostCard = memo(({ post }: { post: BlogPost }) => {
   const { isPostRead, markPostAsRead, markPostAsUnread } = useBlog();
+  const [swipeDelta, setSwipeDelta] = useState(0);
+  const SWIPE_THRESHOLD = 100; // pixels needed to trigger the action
   
   const handlers = useSwipeable({
+    onSwiping: (e) => {
+      setSwipeDelta(e.deltaX);
+    },
     onSwipedLeft: () => {
-      if (!isPostRead(post.id)) {
+      if (swipeDelta < -SWIPE_THRESHOLD && !isPostRead(post.id)) {
         markPostAsRead(post.id);
         toast.success('Marked as read');
       }
+      setSwipeDelta(0);
     },
     onSwipedRight: () => {
-      if (isPostRead(post.id)) {
+      if (swipeDelta > SWIPE_THRESHOLD && isPostRead(post.id)) {
         markPostAsUnread(post.id);
         toast.success('Marked as unread');
       }
+      setSwipeDelta(0);
+    },
+    onSwiped: () => {
+      setSwipeDelta(0);
     },
     trackMouse: true,
     delta: 10,
     swipeDuration: 500,
   });
 
+  const cardStyle = {
+    transform: `translateX(${swipeDelta}px)`,
+  };
+
   return (
     <div {...handlers} className={styles.swipeContainer}>
-      <Link href={`/reader/${post.id}`} className={`${styles.postCard} ${isPostRead(post.id) ? styles.read : ''}`}>
+      <div className={`${styles.swipeAction} ${styles.swipeActionLeft} ${swipeDelta < -50 ? styles.swipeActionVisible : ''}`}>
+        Mark as read
+      </div>
+      <div className={`${styles.swipeAction} ${styles.swipeActionRight} ${swipeDelta > 50 ? styles.swipeActionVisible : ''}`}>
+        Mark as unread
+      </div>
+      <Link 
+        href={`/reader/${post.id}`} 
+        className={`${styles.postCard} ${isPostRead(post.id) ? styles.read : ''}`}
+        style={cardStyle}
+      >
         <div className={styles.readIndicator} />
         {post.image && (
           <div className={styles.postCardImage}>
