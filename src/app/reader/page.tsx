@@ -87,8 +87,9 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       </motion.div>
       <motion.div
         drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.3}
+        dragConstraints={{ left: -300, right: 300 }}
+        dragElastic={0.2}
+        dragDirectionLock
         dragTransition={{ bounceStiffness: 300, bounceDamping: 20 }}
         onDragEnd={handleDragEnd}
         animate={controls}
