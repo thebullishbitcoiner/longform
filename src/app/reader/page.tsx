@@ -76,14 +76,14 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
         style={{ opacity: leftOpacity }}
         initial={{ opacity: 0 }}
       >
-        Mark as read
+       MARK AS READ
       </motion.div>
       <motion.div 
         className={`${styles.swipeAction} ${styles.swipeActionRight}`}
         style={{ opacity: rightOpacity }}
         initial={{ opacity: 0 }}
       >
-        Mark as unread
+        MARK AS UNREAD
       </motion.div>
       <motion.div
         drag="x"

@@ -167,6 +167,7 @@
   background: linear-gradient(to left, rgba(34, 197, 94, 0.95), rgba(34, 197, 94, 0.7));
   justify-content: flex-end;
   padding-right: 0.5rem;
+  width: 2rem;
 }
 
 .swipeActionRight {
@@ -174,6 +175,7 @@
   background: linear-gradient(to right, rgba(239, 68, 68, 0.95), rgba(239, 68, 68, 0.7));
   justify-content: flex-start;
   padding-left: 0.5rem;
+  width: 2rem;
 }
 
 .postCard {
@@ -189,6 +191,7 @@
   border: 1px solid rgb(39 39 42);
   transition: border-color 0.2s;
   z-index: 2;
+  margin: 0 2rem;
 }
 
 .postCard:hover {
