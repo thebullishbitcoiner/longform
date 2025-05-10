@@ -25,30 +25,45 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const controls = useAnimation();
   
   // Transform x position to opacity for the action indicators
-  const leftOpacity = useTransform(x, [-100, -50], [1, 0]);
-  const rightOpacity = useTransform(x, [50, 100], [1, 0]);
+  const leftOpacity = useTransform(x, [-50, -25], [1, 0]);
+  const rightOpacity = useTransform(x, [25, 50], [1, 0]);
   
   // Transform x position to scale for the card
-  const scale = useTransform(x, [-100, 0, 100], [0.95, 1, 0.95]);
+  const scale = useTransform(x, [-100, 0, 100], [0.98, 1, 0.98]);
 
   const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 100;
+    const threshold = 50; // Reduced threshold for easier triggering
     
     if (info.offset.x < -threshold && !isPostRead(post.id)) {
       // Swipe left - mark as read
-      await controls.start({ x: -200, opacity: 0 });
+      await controls.start({ 
+        x: -300,
+        opacity: 0,
+        transition: { duration: 0.2 }
+      });
       markPostAsRead(post.id);
       toast.success('Marked as read');
       controls.set({ x: 0, opacity: 1 });
     } else if (info.offset.x > threshold && isPostRead(post.id)) {
       // Swipe right - mark as unread
-      await controls.start({ x: 200, opacity: 0 });
+      await controls.start({ 
+        x: 300,
+        opacity: 0,
+        transition: { duration: 0.2 }
+      });
       markPostAsUnread(post.id);
       toast.success('Marked as unread');
       controls.set({ x: 0, opacity: 1 });
     } else {
-      // Return to center
-      controls.start({ x: 0 });
+      // Return to center with spring animation
+      controls.start({ 
+        x: 0,
+        transition: {
+          type: "spring",
+          stiffness: 300,
+          damping: 30
+        }
+      });
     }
   };
 
@@ -71,7 +86,7 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       <motion.div
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.1}
+        dragElastic={0.2}
         onDragEnd={handleDragEnd}
         animate={controls}
         style={{ x, scale }}
