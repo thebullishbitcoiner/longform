@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { nip19 } from 'nostr-tools';
 import { PlusIcon } from '@heroicons/react/24/outline';
-import { motion, useMotionValue, useTransform, useAnimation } from 'framer-motion';
+import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 
 function getTagValue(tags: string[][], tagName: string): string | undefined {
@@ -31,7 +31,7 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   // Transform x position to scale for the card
   const scale = useTransform(x, [-100, 0, 100], [0.95, 1, 0.95]);
 
-  const handleDragEnd = async (event: any, info: any) => {
+  const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 100;
     
     if (info.offset.x < -threshold && !isPostRead(post.id)) {
