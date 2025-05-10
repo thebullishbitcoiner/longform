@@ -154,6 +154,10 @@
   z-index: 1;
   border-radius: 12px;
   overflow: hidden;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  padding: 1rem;
 }
 
 .swipeActionLeft {

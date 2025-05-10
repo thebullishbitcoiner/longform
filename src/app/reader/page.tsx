@@ -25,21 +25,21 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const controls = useAnimation();
   
   // Transform x position to opacity for the action indicators
-  const leftOpacity = useTransform(x, [-50, -25], [1, 0]);
-  const rightOpacity = useTransform(x, [25, 50], [1, 0]);
+  const leftOpacity = useTransform(x, [-20, -5], [1, 0]);
+  const rightOpacity = useTransform(x, [5, 20], [1, 0]);
   
   // Transform x position to scale for the card
-  const scale = useTransform(x, [-100, 0, 100], [0.98, 1, 0.98]);
+  const scale = useTransform(x, [-100, 0, 100], [0.99, 1, 0.99]);
 
   const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 50; // Reduced threshold for easier triggering
+    const threshold = 30;
     
     if (info.offset.x < -threshold && !isPostRead(post.id)) {
       // Swipe left - mark as read
       await controls.start({ 
         x: -300,
         opacity: 0,
-        transition: { duration: 0.2 }
+        transition: { duration: 0.15 }
       });
       markPostAsRead(post.id);
       toast.success('Marked as read');
@@ -49,7 +49,7 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       await controls.start({ 
         x: 300,
         opacity: 0,
-        transition: { duration: 0.2 }
+        transition: { duration: 0.15 }
       });
       markPostAsUnread(post.id);
       toast.success('Marked as unread');
@@ -60,8 +60,8 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
         x: 0,
         transition: {
           type: "spring",
-          stiffness: 300,
-          damping: 30
+          stiffness: 400,
+          damping: 25
         }
       });
     }
@@ -86,7 +86,8 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       <motion.div
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.2}
+        dragElastic={0.3}
+        dragTransition={{ bounceStiffness: 300, bounceDamping: 20 }}
         onDragEnd={handleDragEnd}
         animate={controls}
         style={{ x, scale }}
