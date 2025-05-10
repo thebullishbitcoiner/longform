@@ -24,17 +24,19 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
   
-  // Transform x position to opacity for the action indicators
-  const leftOpacity = useTransform(x, [-20, -5], [1, 0]);
-  const rightOpacity = useTransform(x, [5, 20], [1, 0]);
+  // Transform x position to opacity for the action indicators - now visible at the edge
+  const leftOpacity = useTransform(x, [-1, 0], [1, 0]);
+  const rightOpacity = useTransform(x, [0, 1], [0, 1]);
   
   // Transform x position to scale for the card
   const scale = useTransform(x, [-100, 0, 100], [0.99, 1, 0.99]);
 
   const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 30;
+    const velocity = info.velocity.x;
     
-    if (info.offset.x < -threshold && !isPostRead(post.id)) {
+    // Check if the swipe was "thrown" (high velocity) or dragged past threshold
+    if ((info.offset.x < -threshold || velocity < -500) && !isPostRead(post.id)) {
       // Swipe left - mark as read
       await controls.start({ 
         x: -300,
@@ -44,7 +46,7 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       markPostAsRead(post.id);
       toast.success('Marked as read');
       controls.set({ x: 0, opacity: 1 });
-    } else if (info.offset.x > threshold && isPostRead(post.id)) {
+    } else if ((info.offset.x > threshold || velocity > 500) && isPostRead(post.id)) {
       // Swipe right - mark as unread
       await controls.start({ 
         x: 300,
