@@ -7,18 +7,18 @@
 .content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1.5rem;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .title {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: #fff;
 }
@@ -36,10 +36,17 @@
   border: none;
   cursor: pointer;
   transition: background-color 0.2s;
+  white-space: nowrap;
 }
 
 .addButton:hover {
   background-color: #f4f4f5;
+}
+
+.icon {
+  width: 1rem;
+  height: 1rem;
+  color: #000000;
 }
 
 .menuButton {
@@ -134,11 +141,27 @@
   transition: transform 0.2s, border-color 0.2s;
   text-decoration: none;
   color: inherit;
+  position: relative;
 }
 
 .postCard:hover {
   transform: translateY(-2px);
   border-color: rgb(63 63 70);
+}
+
+.readIndicator {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: #fff;
+  display: none;
+}
+
+.postCard.read .readIndicator {
+  display: block;
 }
 
 .postCardImage {
@@ -229,4 +252,20 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: rgb(161 161 170);
+  font-size: 1rem;
+}
+
+.swipeContainer {
+  position: relative;
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 } 

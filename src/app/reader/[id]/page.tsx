@@ -1,33 +1,153 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useBlog } from '@/contexts/BlogContext';
 import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import Link from 'next/link';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
+import { useNostr } from '@/contexts/NostrContext';
+import { nip19 } from 'nostr-tools';
 
 export default function BlogPost() {
   const params = useParams();
-  const { getPost } = useBlog();
+  const { getPost, addPost, updateAuthorProfile, markPostAsRead } = useBlog();
+  const { ndk } = useNostr();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
+  const [processedContent, setProcessedContent] = useState('');
+  const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
+  const endOfContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchPost = async () => {
       if (params.id) {
-        const postData = getPost(params.id as string);
+        let postData = getPost(params.id as string);
+        
+        // If post is not in context, fetch it directly from Nostr
+        if (!postData && ndk) {
+          try {
+            const event = await ndk.fetchEvent({ ids: [params.id as string] });
+            if (event) {
+              const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
+              const summary = event.tags.find(tag => tag[0] === 'summary')?.[1] || '';
+              const published_at = parseInt(event.tags.find(tag => tag[0] === 'published_at')?.[1] || event.created_at.toString());
+              const image = event.tags.find(tag => tag[0] === 'image')?.[1];
+              const tags = event.tags.filter(tag => tag[0] === 't').map(tag => tag[1]);
+
+              postData = {
+                id: event.id,
+                pubkey: event.pubkey,
+                created_at: event.created_at,
+                content: event.content,
+                title,
+                summary,
+                published_at,
+                image,
+                tags
+              };
+
+              // Add post to context for future use
+              addPost(postData);
+
+              // Fetch author profile
+              const user = ndk.getUser({ pubkey: event.pubkey });
+              const profile = await user.fetchProfile();
+              if (profile) {
+                updateAuthorProfile(event.pubkey, {
+                  name: profile.name,
+                  displayName: profile.displayName
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching post:', error);
+          }
+        }
+
         if (postData) {
           setPost(postData);
+          // Process content to replace npubs with usernames
+          if (ndk) {
+            const content = await processNpubs(postData.content, ndk);
+            setProcessedContent(content);
+          } else {
+            setProcessedContent(postData.content);
+          }
         }
         setLoading(false);
       }
     };
 
     fetchPost();
-  }, [params.id, getPost]);
+  }, [params.id, getPost, ndk, addPost, updateAuthorProfile]);
+
+  // Mark post as read when end of content is reached
+  useEffect(() => {
+    if (!post || hasMarkedAsRead || !endOfContentRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          markPostAsRead(post.id);
+          setHasMarkedAsRead(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.5 } // Trigger when at least 50% of the element is visible
+    );
+
+    observer.observe(endOfContentRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [post, hasMarkedAsRead, markPostAsRead]);
+
+  const processNpubs = async (content: string, ndk: any) => {
+    let processedContent = content;
+
+    // First process npubs
+    const npubRegex = /nostr:npub1[a-zA-Z0-9]+/g;
+    const npubs = content.match(npubRegex) || [];
+    
+    for (const npub of npubs) {
+      try {
+        const npubPart = npub.replace('nostr:', '');
+        const decoded = nip19.decode(npubPart);
+        if (decoded.type === 'npub') {
+          const user = ndk.getUser({ pubkey: decoded.data });
+          const profile = await user.fetchProfile();
+          if (profile) {
+            const username = profile.displayName || profile.name || npubPart.slice(0, 8) + '...';
+            const njumpLink = `[@${username}](https://njump.me/${npubPart})`;
+            processedContent = processedContent.replace(npub, njumpLink);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing npub:', error);
+      }
+    }
+
+    // Then process any remaining plain URLs that aren't already in markdown format
+    const urlRegex = /(?<![\[\(])(https?:\/\/[^\s]+)(?![\]\)])/g;
+    processedContent = processedContent.replace(urlRegex, (match) => {
+      return `[${match}](${match})`;
+    });
+    
+    return processedContent;
+  };
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const href = e.currentTarget.href;
+    if (href.startsWith('nostr:')) {
+      e.preventDefault();
+      // Handle nostr links (you can add specific handling here)
+      console.log('Nostr link clicked:', href);
+    }
+  };
 
   if (loading) {
     return <div className={styles.loading}>Loading...</div>;
@@ -40,7 +160,7 @@ export default function BlogPost() {
           <div className={styles.notFound}>
             <h1>Post not found</h1>
             <Link href="/reader" className={styles.backLink}>
-              <ArrowLeftIcon className="w-5 h-5" />
+              <ArrowLeftIcon className={styles.icon} />
               Back to reader
             </Link>
           </div>
@@ -53,7 +173,7 @@ export default function BlogPost() {
     <div className={styles.container}>
       <div className={styles.mainContent}>
         <Link href="/reader" className={styles.backLink}>
-          <ArrowLeftIcon className="w-5 h-5" />
+          <ArrowLeftIcon className={styles.icon} />
           Back to reader
         </Link>
 
@@ -92,7 +212,27 @@ export default function BlogPost() {
           )}
 
           <div className={styles.postContent}>
-            <ReactMarkdown>{post.content}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                a: ({ node, ...props }) => {
+                  const isNostrLink = props.href?.includes('njump.me');
+                  const isRegularLink = props.href?.startsWith('http://') || props.href?.startsWith('https://');
+                  const linkClass = isNostrLink ? styles.nostrLink : isRegularLink ? styles.regularLink : styles.link;
+                  return (
+                    <a 
+                      {...props} 
+                      onClick={handleLinkClick} 
+                      className={linkClass}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    />
+                  );
+                },
+              }}
+            >
+              {processedContent}
+            </ReactMarkdown>
+            <div ref={endOfContentRef} style={{ height: '1px' }} />
           </div>
         </article>
       </div>

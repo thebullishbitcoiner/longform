@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 interface AuthorProfile {
   name?: string;
@@ -20,20 +20,30 @@ export interface BlogPost {
   author?: AuthorProfile;
 }
 
-interface BlogContextType {
+export type BlogContextType = {
   posts: BlogPost[];
-  getSortedPosts: () => BlogPost[];
+  authorProfiles: Record<string, AuthorProfile>;
+  readPosts: Set<string>;
   addPost: (post: BlogPost) => void;
-  getPost: (id: string) => BlogPost | undefined;
   updateAuthorProfile: (pubkey: string, profile: AuthorProfile) => void;
-}
+  getPost: (id: string) => BlogPost | undefined;
+  getSortedPosts: () => BlogPost[];
+  isPostRead: (id: string) => boolean;
+  markPostAsRead: (id: string) => void;
+  markPostAsUnread: (id: string) => void;
+};
 
 const BlogContext = createContext<BlogContextType>({
   posts: [],
-  getSortedPosts: () => [],
+  authorProfiles: {},
+  readPosts: new Set(),
   addPost: () => {},
-  getPost: () => undefined,
   updateAuthorProfile: () => {},
+  getPost: () => undefined,
+  getSortedPosts: () => [],
+  isPostRead: () => false,
+  markPostAsRead: () => {},
+  markPostAsUnread: () => {},
 });
 
 export const useBlog = () => useContext(BlogContext);
@@ -43,7 +53,35 @@ interface BlogProviderProps {
 }
 
 export function BlogProvider({ children }: BlogProviderProps) {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [posts, setPosts] = useState<BlogPost[]>(() => {
+    if (typeof window !== 'undefined') {
+      const cachedPosts = localStorage.getItem('long_posts');
+      return cachedPosts ? JSON.parse(cachedPosts) : [];
+    }
+    return [];
+  });
+
+  const [readPosts, setReadPosts] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const cachedReadPosts = localStorage.getItem('long_read_posts');
+      return new Set(cachedReadPosts ? JSON.parse(cachedReadPosts) : []);
+    }
+    return new Set();
+  });
+
+  // Save to localStorage when posts change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('long_posts', JSON.stringify(posts));
+    }
+  }, [posts]);
+
+  // Save to localStorage when readPosts change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('long_read_posts', JSON.stringify([...readPosts]));
+    }
+  }, [readPosts]);
 
   const addPost = (post: BlogPost) => {
     setPosts(prev => {
@@ -72,8 +110,38 @@ export function BlogProvider({ children }: BlogProviderProps) {
     }));
   };
 
+  const markPostAsRead = (id: string) => {
+    setReadPosts(prev => {
+      const newReadPosts = new Set(prev).add(id);
+      return newReadPosts;
+    });
+  };
+
+  const isPostRead = (id: string) => {
+    return readPosts.has(id);
+  };
+
+  const markPostAsUnread = (id: string) => {
+    setReadPosts(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(id);
+      return newSet;
+    });
+  };
+
   return (
-    <BlogContext.Provider value={{ posts, getSortedPosts, addPost, getPost, updateAuthorProfile }}>
+    <BlogContext.Provider value={{
+      posts,
+      authorProfiles: {},
+      readPosts,
+      addPost,
+      updateAuthorProfile,
+      getPost,
+      getSortedPosts,
+      isPostRead,
+      markPostAsRead,
+      markPostAsUnread
+    }}>
       {children}
     </BlogContext.Provider>
   );
