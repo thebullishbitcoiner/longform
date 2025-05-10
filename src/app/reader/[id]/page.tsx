@@ -10,7 +10,7 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
-import { NDKEvent } from '@nostr-dev-kit/ndk';
+import NDK from '@nostr-dev-kit/ndk';
 
 export default function BlogPost() {
   const params = useParams();
@@ -107,7 +107,7 @@ export default function BlogPost() {
     };
   }, [post, hasMarkedAsRead, markPostAsRead]);
 
-  const processNpubs = async (content: string, ndk: any) => {
+  const processNpubs = async (content: string, ndk: NDK) => {
     let processedContent = content;
 
     // First process npubs

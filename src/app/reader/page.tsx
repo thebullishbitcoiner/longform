@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useBlog, BlogPost } from '@/contexts/BlogContext';
 import Link from 'next/link';
