@@ -162,13 +162,17 @@
 }
 
 .swipeActionLeft {
-  left: 0;
+  right: 0;
   background: linear-gradient(to left, rgba(34, 197, 94, 0.95), rgba(34, 197, 94, 0.7));
+  justify-content: flex-end;
+  padding-right: 0.5rem;
 }
 
 .swipeActionRight {
-  right: 0;
+  left: 0;
   background: linear-gradient(to right, rgba(239, 68, 68, 0.95), rgba(239, 68, 68, 0.7));
+  justify-content: flex-start;
+  padding-left: 0.5rem;
 }
 
 .postCard {
