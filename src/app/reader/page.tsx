@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { nip19 } from 'nostr-tools';
 import { PlusIcon } from '@heroicons/react/24/outline';
-import { useSwipeable } from 'react-swipeable';
+import { motion, useMotionValue, useTransform, useAnimation } from 'framer-motion';
 import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 
 function getTagValue(tags: string[][], tagName: string): string | undefined {
@@ -21,84 +21,96 @@ function getTagValues(tags: string[][], tagName: string): string[] {
 
 const PostCard = memo(({ post }: { post: BlogPost }) => {
   const { isPostRead, markPostAsRead, markPostAsUnread } = useBlog();
-  const [swipeDelta, setSwipeDelta] = useState(0);
-  const SWIPE_THRESHOLD = 100; // pixels needed to trigger the action
+  const x = useMotionValue(0);
+  const controls = useAnimation();
   
-  const handlers = useSwipeable({
-    onSwiping: (e) => {
-      setSwipeDelta(e.deltaX);
-    },
-    onSwipedLeft: () => {
-      if (swipeDelta < -SWIPE_THRESHOLD && !isPostRead(post.id)) {
-        markPostAsRead(post.id);
-        toast.success('Marked as read');
-      }
-      setSwipeDelta(0);
-    },
-    onSwipedRight: () => {
-      if (swipeDelta > SWIPE_THRESHOLD && isPostRead(post.id)) {
-        markPostAsUnread(post.id);
-        toast.success('Marked as unread');
-      }
-      setSwipeDelta(0);
-    },
-    onSwiped: () => {
-      setSwipeDelta(0);
-    },
-    trackMouse: true,
-    delta: 10,
-    swipeDuration: 500,
-  });
+  // Transform x position to opacity for the action indicators
+  const leftOpacity = useTransform(x, [-100, -50], [1, 0]);
+  const rightOpacity = useTransform(x, [50, 100], [1, 0]);
+  
+  // Transform x position to scale for the card
+  const scale = useTransform(x, [-100, 0, 100], [0.95, 1, 0.95]);
 
-  const cardStyle = {
-    transform: `translateX(${swipeDelta}px)`,
+  const handleDragEnd = async (event: any, info: any) => {
+    const threshold = 100;
+    
+    if (info.offset.x < -threshold && !isPostRead(post.id)) {
+      // Swipe left - mark as read
+      await controls.start({ x: -200, opacity: 0 });
+      markPostAsRead(post.id);
+      toast.success('Marked as read');
+      controls.set({ x: 0, opacity: 1 });
+    } else if (info.offset.x > threshold && isPostRead(post.id)) {
+      // Swipe right - mark as unread
+      await controls.start({ x: 200, opacity: 0 });
+      markPostAsUnread(post.id);
+      toast.success('Marked as unread');
+      controls.set({ x: 0, opacity: 1 });
+    } else {
+      // Return to center
+      controls.start({ x: 0 });
+    }
   };
 
   return (
-    <div {...handlers} className={styles.swipeContainer}>
-      <div className={`${styles.swipeAction} ${styles.swipeActionLeft} ${swipeDelta < -50 ? styles.swipeActionVisible : ''}`}>
-        Mark as read
-      </div>
-      <div className={`${styles.swipeAction} ${styles.swipeActionRight} ${swipeDelta > 50 ? styles.swipeActionVisible : ''}`}>
-        Mark as unread
-      </div>
-      <Link 
-        href={`/reader/${post.id}`} 
-        className={`${styles.postCard} ${isPostRead(post.id) ? styles.read : ''}`}
-        style={cardStyle}
+    <div className={styles.swipeContainer}>
+      <motion.div 
+        className={`${styles.swipeAction} ${styles.swipeActionLeft}`}
+        style={{ opacity: leftOpacity }}
+        initial={{ opacity: 0 }}
       >
-        <div className={styles.readIndicator} />
-        {post.image && (
-          <div className={styles.postCardImage}>
-            <img src={post.image} alt={post.title} loading="lazy" />
-          </div>
-        )}
-        <div className={styles.postCardContent}>
-          <h2 className={styles.postCardTitle}>{post.title}</h2>
-          {post.summary && (
-            <p className={styles.postCardSummary}>{post.summary}</p>
-          )}
-          <div className={styles.postCardMeta}>
-            <span className={styles.postCardAuthor}>
-              {post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...'}
-            </span>
-            <div className={styles.postCardDate}>
-              <span className={styles.dateLabel}>Created On:</span>
-              <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
-            </div>
-          </div>
-          {post.tags.length > 0 && (
-            <div className={styles.postCardTags}>
-              {post.tags.slice(0, 3).map(tag => (
-                <span key={tag} className={styles.postCardTag}>#{tag}</span>
-              ))}
-              {post.tags.length > 3 && (
-                <span className={styles.postCardTag}>+{post.tags.length - 3}</span>
-              )}
+        Mark as read
+      </motion.div>
+      <motion.div 
+        className={`${styles.swipeAction} ${styles.swipeActionRight}`}
+        style={{ opacity: rightOpacity }}
+        initial={{ opacity: 0 }}
+      >
+        Mark as unread
+      </motion.div>
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.1}
+        onDragEnd={handleDragEnd}
+        animate={controls}
+        style={{ x, scale }}
+        className={`${styles.postCard} ${isPostRead(post.id) ? styles.read : ''}`}
+      >
+        <Link href={`/reader/${post.id}`} className={styles.postCardLink}>
+          <div className={styles.readIndicator} />
+          {post.image && (
+            <div className={styles.postCardImage}>
+              <img src={post.image} alt={post.title} loading="lazy" />
             </div>
           )}
-        </div>
-      </Link>
+          <div className={styles.postCardContent}>
+            <h2 className={styles.postCardTitle}>{post.title}</h2>
+            {post.summary && (
+              <p className={styles.postCardSummary}>{post.summary}</p>
+            )}
+            <div className={styles.postCardMeta}>
+              <span className={styles.postCardAuthor}>
+                {post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...'}
+              </span>
+              <div className={styles.postCardDate}>
+                <span className={styles.dateLabel}>Created On:</span>
+                <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
+              </div>
+            </div>
+            {post.tags.length > 0 && (
+              <div className={styles.postCardTags}>
+                {post.tags.slice(0, 3).map(tag => (
+                  <span key={tag} className={styles.postCardTag}>#{tag}</span>
+                ))}
+                {post.tags.length > 3 && (
+                  <span className={styles.postCardTag}>+{post.tags.length - 3}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </Link>
+      </motion.div>
     </div>
   );
 });
