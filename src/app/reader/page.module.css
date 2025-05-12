@@ -195,16 +195,36 @@
   will-change: transform;
   backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
   z-index: 2;
 }
 
-.postCard:hover {
-  background: #1f1f1f;
+.postCard.read {
+  background: #0a0a0a;
+  opacity: 0.8;
 }
 
-.postCard:active {
-  cursor: grabbing;
+.postCard.read .postCardTitle {
+  color: rgb(161 161 170);
+}
+
+.postCard.read .postCardSummary {
+  color: rgb(113 113 122);
+}
+
+.postCard.read .postCardDate {
+  color: rgb(161 161 170);
+}
+
+.readIndicator {
+  display: none;
+}
+
+.postCardContent {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .postCardLink {
@@ -215,27 +235,8 @@
   touch-action: pan-y;
 }
 
-.readIndicator {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background-color: #fff;
-  display: none;
-  z-index: 3;
-}
-
-.postCard.read .readIndicator {
-  display: block;
-}
-
-.postCardContent {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.postCard:active {
+  cursor: grabbing;
 }
 
 .postCardHeader {
