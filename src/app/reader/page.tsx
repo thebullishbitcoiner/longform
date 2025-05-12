@@ -24,9 +24,9 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
   
-  // Transform x position to opacity for the action indicators - now visible at the edge
-  const leftOpacity = useTransform(x, [-1, 0], [1, 0]);
-  const rightOpacity = useTransform(x, [0, 1], [0, 1]);
+  // Transform x position to opacity for the action indicators
+  const leftOpacity = useTransform(x, [-30, -15], [1, 0]);
+  const rightOpacity = useTransform(x, [15, 30], [0, 1]);
   
   // Transform x position to scale for the card
   const scale = useTransform(x, [-100, 0, 100], [0.99, 1, 0.99]);
@@ -72,14 +72,14 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
         style={{ opacity: leftOpacity }}
         initial={{ opacity: 0 }}
       >
-        MARK AS READ
+        Mark as read
       </motion.div>
       <motion.div 
         className={`${styles.swipeAction} ${styles.swipeActionRight}`}
         style={{ opacity: rightOpacity }}
         initial={{ opacity: 0 }}
       >
-        MARK AS UNREAD
+        Mark as unread
       </motion.div>
       <motion.div
         drag="x"
