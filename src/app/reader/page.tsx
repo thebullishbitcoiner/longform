@@ -32,12 +32,10 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const scale = useTransform(x, [-100, 0, 100], [0.99, 1, 0.99]);
 
   const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 200; // Much higher threshold
+    const threshold = 200;
     const velocity = info.velocity.x;
     
-    // Check if the swipe was "thrown" (high velocity) or dragged past threshold
     if ((info.offset.x < -threshold || velocity < -1000) && !isPostRead(post.id)) {
-      // Swipe left - mark as read
       await controls.start({ 
         x: -600,
         opacity: 0,
@@ -47,7 +45,6 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       toast.success('Marked as read');
       controls.set({ x: 0, opacity: 1 });
     } else if ((info.offset.x > threshold || velocity > 1000) && isPostRead(post.id)) {
-      // Swipe right - mark as unread
       await controls.start({ 
         x: 600,
         opacity: 0,
@@ -57,7 +54,6 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       toast.success('Marked as unread');
       controls.set({ x: 0, opacity: 1 });
     } else {
-      // Return to center with spring animation
       controls.start({ 
         x: 0,
         transition: {
@@ -98,34 +94,20 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       >
         <Link href={`/reader/${post.id}`} className={styles.postCardLink}>
           <div className={styles.readIndicator} />
-          {post.image && (
-            <div className={styles.postCardImage}>
-              <img src={post.image} alt={post.title} loading="lazy" />
-            </div>
-          )}
           <div className={styles.postCardContent}>
-            <h2 className={styles.postCardTitle}>{post.title}</h2>
+            <div className={styles.postCardHeader}>
+              <h2 className={styles.postCardTitle}>{post.title}</h2>
+              <div className={styles.postCardMeta}>
+                <span className={styles.postCardAuthor}>
+                  {post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...'}
+                </span>
+                <div className={styles.postCardDate}>
+                  <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
+                </div>
+              </div>
+            </div>
             {post.summary && (
               <p className={styles.postCardSummary}>{post.summary}</p>
-            )}
-            <div className={styles.postCardMeta}>
-              <span className={styles.postCardAuthor}>
-                {post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...'}
-              </span>
-              <div className={styles.postCardDate}>
-                <span className={styles.dateLabel}>Created On:</span>
-                <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
-              </div>
-            </div>
-            {post.tags.length > 0 && (
-              <div className={styles.postCardTags}>
-                {post.tags.slice(0, 3).map(tag => (
-                  <span key={tag} className={styles.postCardTag}>#{tag}</span>
-                ))}
-                {post.tags.length > 3 && (
-                  <span className={styles.postCardTag}>+{post.tags.length - 3}</span>
-                )}
-              </div>
             )}
           </div>
         </Link>

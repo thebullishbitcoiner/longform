@@ -1,26 +1,30 @@
 .container {
   min-height: 100vh;
-  background-color: #111;
   color: #fff;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
 }
 
 .content {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin: 1rem;
+  padding: 0 1rem;
 }
 
 .title {
   font-size: 1.5rem;
   font-weight: 600;
   color: #fff;
+  margin: 0;
 }
 
 .addButton {
@@ -37,6 +41,7 @@
   cursor: pointer;
   transition: background-color 0.2s;
   white-space: nowrap;
+  margin: 0;
 }
 
 .addButton:hover {
@@ -126,9 +131,10 @@
 }
 
 .postsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
 }
 
 .swipeContainer {
@@ -136,7 +142,8 @@
   width: 100%;
   overflow: hidden;
   touch-action: none;
-  border-radius: 12px;
+  border-radius: 0;
+  border-bottom: 1px solid rgb(39 39 42);
 }
 
 .swipeAction {
@@ -147,12 +154,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: 500;
   color: white;
   pointer-events: none;
   z-index: 1;
-  border-radius: 12px;
   overflow: hidden;
   writing-mode: vertical-lr;
   text-orientation: upright;
@@ -182,22 +188,19 @@
 
 .postCard {
   position: relative;
-  background: #1a1a1a;
-  border-radius: 12px;
+  background: #111;
   overflow: hidden;
   cursor: grab;
   touch-action: none;
   will-change: transform;
   backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
-  border: 1px solid rgb(39 39 42);
   transition: border-color 0.2s;
   z-index: 2;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .postCard:hover {
-  border-color: rgb(63 63 70);
+  background: #1f1f1f;
 }
 
 .postCard:active {
@@ -213,8 +216,8 @@
 
 .readIndicator {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.75rem;
+  right: 0.75rem;
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
@@ -227,52 +230,33 @@
   display: block;
 }
 
-.postCardImage {
-  width: 100%;
-  height: 200px;
-  overflow: hidden;
-}
-
-.postCardImage img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .postCardContent {
-  padding: 1.25rem;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  flex: 1;
+  gap: 0.5rem;
+}
+
+.postCardHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .postCardTitle {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 600;
   color: rgb(244 244 245);
   line-height: 1.4;
-}
-
-.postCardSummary {
-  color: rgb(161 161 170);
-  font-size: 0.875rem;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  margin: 0;
 }
 
 .postCardMeta {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.25rem;
   font-size: 0.75rem;
   color: rgb(161 161 170);
-  margin-top: 1rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgb(39 39 42);
 }
 
 .postCardAuthor {
@@ -281,12 +265,19 @@
 }
 
 .postCardDate {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.25rem;
   font-size: 0.75rem;
   color: rgb(244 244 245);
+}
+
+.postCardSummary {
+  color: rgb(161 161 170);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .dateLabel {
@@ -326,4 +317,35 @@
 
 .swipeActionVisible {
   opacity: 1;
+}
+
+@media (min-width: 640px) {
+  .container {
+    width: 100%;
+  }
+
+  .content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .header {
+    margin: 0 0 1rem 0;
+    padding: 0;
+  }
+
+  .postsGrid {
+    gap: 0.5rem;
+  }
+
+  .swipeContainer {
+    border-radius: 8px;
+    border-bottom: none;
+  }
+
+  .postCard {
+    border-radius: 8px;
+    border: 1px solid rgb(39 39 42);
+  }
 } 
