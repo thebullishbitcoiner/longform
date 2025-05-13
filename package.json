@@ -1,6 +1,6 @@
 {
   "name": "long",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -11,6 +11,8 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@nostr-dev-kit/ndk": "^2.14.9",
+    "@nostrify/nostrify": "npm:@jsr/nostrify__nostrify@^0.46.0",
+    "@nostrify/types": "npm:@jsr/nostrify__types@^0.36.0",
     "@uiw/react-md-editor": "^4.0.6",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.10.5",

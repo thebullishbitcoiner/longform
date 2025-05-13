@@ -39,6 +39,15 @@ export default function SubscriptionsPage() {
       const newSubscriptions = subscriptions.filter(sub => sub !== subscriptionToRemove);
       localStorage.setItem('long_subscriptions', JSON.stringify(newSubscriptions));
       setSubscriptions(newSubscriptions);
+      
+      // Clear posts from localStorage when subscription is removed
+      const cachedPosts = localStorage.getItem('long_posts');
+      if (cachedPosts) {
+        const posts = JSON.parse(cachedPosts);
+        const filteredPosts = posts.filter((post: any) => post.pubkey !== subscriptionToRemove);
+        localStorage.setItem('long_posts', JSON.stringify(filteredPosts));
+      }
+      
       toast.success('Subscription removed');
       setIsConfirmModalOpen(false);
       setSubscriptionToRemove(null);

@@ -27,37 +27,54 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const rightOpacity = useTransform(x, [15, 30], [0, 1]);
   
   // Transform x position to scale for the card
-  const scale = useTransform(x, [-100, 0, 100], [0.99, 1, 0.99]);
+  const scale = useTransform(x, [-100, 0, 100], [0.98, 1, 0.98]);
+
+  // Add haptic feedback if available
+  const vibrate = (pattern: number | number[]) => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+  };
 
   const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 200;
+    const threshold = 150; // Reduced threshold for easier triggering
     const velocity = info.velocity.x;
     
-    if ((info.offset.x < -threshold || velocity < -1000) && !isPostRead(post.id)) {
+    if ((info.offset.x < -threshold || velocity < -800) && !isPostRead(post.id)) {
+      vibrate(50); // Short vibration for read action
       await controls.start({ 
         x: -600,
         opacity: 0,
-        transition: { duration: 0.15 }
+        transition: { 
+          duration: 0.2,
+          ease: [0.4, 0, 0.2, 1] // Custom easing for smoother animation
+        }
       });
       markPostAsRead(post.id);
       toast.success('Marked as read');
       controls.set({ x: 0, opacity: 1 });
-    } else if ((info.offset.x > threshold || velocity > 1000) && isPostRead(post.id)) {
+    } else if ((info.offset.x > threshold || velocity > 800) && isPostRead(post.id)) {
+      vibrate(50); // Short vibration for unread action
       await controls.start({ 
         x: 600,
         opacity: 0,
-        transition: { duration: 0.15 }
+        transition: { 
+          duration: 0.2,
+          ease: [0.4, 0, 0.2, 1] // Custom easing for smoother animation
+        }
       });
       markPostAsUnread(post.id);
       toast.success('Marked as unread');
       controls.set({ x: 0, opacity: 1 });
     } else {
+      vibrate(20); // Light vibration for bounce back
       controls.start({ 
         x: 0,
         transition: {
           type: "spring",
-          stiffness: 400,
-          damping: 25
+          stiffness: 500, // Increased stiffness for snappier response
+          damping: 30, // Adjusted damping for better bounce
+          mass: 0.8 // Added mass for more natural feel
         }
       });
     }
@@ -82,9 +99,9 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
       <motion.div
         drag="x"
         dragConstraints={{ left: -300, right: 300 }}
-        dragElastic={0.2}
+        dragElastic={0.1} // Reduced elastic for more controlled feel
         dragDirectionLock
-        dragTransition={{ bounceStiffness: 300, bounceDamping: 20 }}
+        dragTransition={{ bounceStiffness: 400, bounceDamping: 30 }}
         onDragEnd={handleDragEnd}
         animate={controls}
         style={{ x, scale }}
@@ -120,9 +137,10 @@ export default function ReaderPage() {
   const { ndk, isLoading } = useNostr();
   const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead } = useBlog();
   const [subscriptions, setSubscriptions] = useState<string[]>([]);
-  const [processedEvents] = useState(new Set<string>());
+  const processedEvents = useRef(new Set<string>());
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
   const hasClearedPosts = useRef(false);
+  const subscriptionRef = useRef<NDKSubscription | null>(null);
 
   useEffect(() => {
     // Load subscriptions from localStorage
@@ -130,6 +148,8 @@ export default function ReaderPage() {
     if (savedSubscriptions) {
       const subs = JSON.parse(savedSubscriptions);
       setSubscriptions(subs);
+      // Clear posts when subscriptions change
+      clearPosts();
       hasClearedPosts.current = false;
     } else if (!hasClearedPosts.current) {
       // Clear posts if no subscriptions exist and we haven't cleared them yet
@@ -137,87 +157,117 @@ export default function ReaderPage() {
       setSubscriptions([]);
       hasClearedPosts.current = true;
     }
-  }, [clearPosts]); // Added clearPosts to dependency array
+  }, [clearPosts]);
 
   useEffect(() => {
-    let sub: NDKSubscription | null = null;
+    const setupSubscription = async () => {
+      // Clean up any existing subscription
+      if (subscriptionRef.current) {
+        subscriptionRef.current.stop();
+        subscriptionRef.current = null;
+      }
 
-    // Subscribe to blog posts if NDK is ready and we have subscriptions
-    if (ndk && subscriptions.length > 0) {
-      sub = ndk.subscribe(
-        {
+      // Clear processed events
+      processedEvents.current.clear();
+
+      // Only proceed if we have NDK and subscriptions
+      if (!ndk || subscriptions.length === 0) {
+        return;
+      }
+
+      try {
+        // Create filter object explicitly
+        const filter = {
           kinds: [30023],
           authors: subscriptions
-        },
-        { closeOnEose: false }
-      );
+        };
 
-      const handleEvent = async (event: NDKEvent) => {
-        // Skip if we've already processed this event
-        if (processedEvents.has(event.id)) return;
-        processedEvents.add(event.id);
+        // Create new subscription with explicit filter and handlers
+        subscriptionRef.current = ndk.subscribe(
+          filter,
+          { 
+            closeOnEose: false,
+            groupable: false // Disable filter merging
+          },
+          {
+            onEvent: async (event) => {
+              // Skip if we've already processed this event
+              if (processedEvents.current.has(event.id)) return;
+              processedEvents.current.add(event.id);
 
-        try {
-          const title = getTagValue(event.tags, 'title') || 'Untitled';
-          const summary = getTagValue(event.tags, 'summary') || '';
-          const published_at = parseInt(getTagValue(event.tags, 'published_at') || event.created_at.toString());
-          const image = getTagValue(event.tags, 'image');
-          const tags = getTagValues(event.tags, 't');
+              try {
+                const title = getTagValue(event.tags, 'title') || 'Untitled';
+                const summary = getTagValue(event.tags, 'summary') || '';
+                const published_at = parseInt(getTagValue(event.tags, 'published_at') || event.created_at.toString());
+                const image = getTagValue(event.tags, 'image');
+                const tags = getTagValues(event.tags, 't');
 
-          const post: BlogPost = {
-            id: event.id,
-            pubkey: event.pubkey,
-            created_at: event.created_at,
-            content: event.content,
-            title,
-            summary,
-            published_at,
-            image,
-            tags
-          };
+                const post: BlogPost = {
+                  id: event.id,
+                  pubkey: event.pubkey,
+                  created_at: event.created_at,
+                  content: event.content,
+                  title,
+                  summary,
+                  published_at,
+                  image,
+                  tags
+                };
 
-          addPost(post);
+                addPost(post);
 
-          // Fetch profile if we haven't already
-          const user = ndk.getUser({ pubkey: event.pubkey });
-          const profile = await user.fetchProfile();
-          if (profile) {
-            updateAuthorProfile(event.pubkey, {
-              name: profile.name,
-              displayName: profile.displayName
-            });
+                // Fetch profile if we haven't already
+                const user = ndk.getUser({ pubkey: event.pubkey });
+                const profile = await user.fetchProfile();
+                if (profile) {
+                  updateAuthorProfile(event.pubkey, {
+                    name: profile.name,
+                    displayName: profile.displayName
+                  });
+                }
+              } catch (error) {
+                console.error('Error processing blog post:', error);
+              }
+            },
+            onEose: (subscription) => {
+              console.log('Subscription reached EOSE:', subscription.internalId);
+            }
           }
-        } catch (error) {
-          console.error('Error processing blog post:', error);
-        }
-      };
+        );
+      } catch (error) {
+        console.error('Error setting up subscription:', error);
+      }
+    };
 
-      sub.on('event', handleEvent);
-    }
+    // Set up the subscription
+    setupSubscription();
 
     // Cleanup subscription on unmount or when dependencies change
     return () => {
-      if (sub) {
-        sub.stop();
+      if (subscriptionRef.current) {
+        subscriptionRef.current.stop();
+        subscriptionRef.current = null;
       }
     };
-  }, [ndk, subscriptions, addPost, updateAuthorProfile, processedEvents]);
+  }, [ndk, subscriptions, addPost, updateAuthorProfile]);
 
   if (isLoading) {
     return <div className={styles.loading}>Loading...</div>;
   }
 
   const sortedPosts = getSortedPosts();
-  const filteredPosts = sortedPosts.filter(post => {
-    switch (filter) {
-      case 'read':
-        return isPostRead(post.id);
-      case 'unread':
-        return !isPostRead(post.id);
-      default:
-        return true;
-    }
-  });
+  const filteredPosts = sortedPosts
+    .filter(post => subscriptions.includes(post.pubkey)) // Only show posts from current subscriptions
+    .filter(post => {
+      switch (filter) {
+        case 'read':
+          return isPostRead(post.id);
+        case 'unread':
+          return !isPostRead(post.id);
+        default:
+          return true;
+      }
+    });
 
   return (
     <div className={styles.container}>
