@@ -5,11 +5,14 @@ import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import AddNpubModal from '@/components/AddNpubModal';
+import ConfirmModal from '@/components/ConfirmModal';
 import SubscriptionItem from '@/components/SubscriptionItem';
 
 export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [subscriptionToRemove, setSubscriptionToRemove] = useState<string | null>(null);
 
   useEffect(() => {
     // Load subscriptions from localStorage
@@ -27,10 +30,19 @@ export default function SubscriptionsPage() {
   };
 
   const handleRemoveNpub = (hexPubkey: string) => {
-    const newSubscriptions = subscriptions.filter(sub => sub !== hexPubkey);
-    localStorage.setItem('long_subscriptions', JSON.stringify(newSubscriptions));
-    setSubscriptions(newSubscriptions);
-    toast.success('Subscription removed');
+    setSubscriptionToRemove(hexPubkey);
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmRemoveNpub = () => {
+    if (subscriptionToRemove) {
+      const newSubscriptions = subscriptions.filter(sub => sub !== subscriptionToRemove);
+      localStorage.setItem('long_subscriptions', JSON.stringify(newSubscriptions));
+      setSubscriptions(newSubscriptions);
+      toast.success('Subscription removed');
+      setIsConfirmModalOpen(false);
+      setSubscriptionToRemove(null);
+    }
   };
 
   return (
@@ -65,6 +77,17 @@ export default function SubscriptionsPage() {
         onClose={() => setIsModalOpen(false)}
         onAdd={handleAddNpub}
         existingSubscriptions={subscriptions}
+      />
+
+      <ConfirmModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => {
+          setIsConfirmModalOpen(false);
+          setSubscriptionToRemove(null);
+        }}
+        onConfirm={confirmRemoveNpub}
+        title="Remove Subscription"
+        message="Are you sure you want to remove this subscription?"
       />
     </div>
   );
