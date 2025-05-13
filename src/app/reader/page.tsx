@@ -138,7 +138,7 @@ export default function ReaderPage() {
       setSubscriptions([]);
       hasClearedPosts.current = true;
     }
-  }, []); // Only run once on mount
+  }, [clearPosts]); // Added clearPosts to dependency array
 
   useEffect(() => {
     let sub: NDKSubscription | null = null;
@@ -254,7 +254,7 @@ export default function ReaderPage() {
             <div className={styles.emptyState}>
               {subscriptions.length === 0 ? (
                 <>
-                  You don't have any reads. Add an npub in the{' '}
+                  You don&apos;t have any reads. Add an npub in the{' '}
                   <Link href="/subscriptions" className={styles.emptyStateLink}>
                     subscriptions
                   </Link>

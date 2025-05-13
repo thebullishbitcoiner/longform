@@ -9,7 +9,6 @@ import AddNpubModal from '@/components/AddNpubModal';
 import SubscriptionItem from '@/components/SubscriptionItem';
 
 export default function SubscriptionsPage() {
-  const { ndk } = useNostr();
   const [subscriptions, setSubscriptions] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
