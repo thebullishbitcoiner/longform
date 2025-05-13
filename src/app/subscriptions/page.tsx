@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useNostr } from '@/contexts/NostrContext';
 import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { PlusIcon } from '@heroicons/react/24/outline';

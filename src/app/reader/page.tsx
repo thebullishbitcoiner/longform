@@ -6,7 +6,6 @@ import { useBlog, BlogPost } from '@/contexts/BlogContext';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import styles from './page.module.css';
-import { nip19 } from 'nostr-tools';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 
