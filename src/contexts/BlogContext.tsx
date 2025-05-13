@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 
 interface AuthorProfile {
   name?: string;
@@ -31,6 +31,7 @@ export type BlogContextType = {
   isPostRead: (id: string) => boolean;
   markPostAsRead: (id: string) => void;
   markPostAsUnread: (id: string) => void;
+  clearPosts: () => void;
 };
 
 const BlogContext = createContext<BlogContextType>({
@@ -44,6 +45,7 @@ const BlogContext = createContext<BlogContextType>({
   isPostRead: () => false,
   markPostAsRead: () => {},
   markPostAsUnread: () => {},
+  clearPosts: () => {},
 });
 
 export const useBlog = () => useContext(BlogContext);
@@ -67,6 +69,13 @@ export function BlogProvider({ children }: BlogProviderProps) {
       return new Set(cachedReadPosts ? JSON.parse(cachedReadPosts) : []);
     }
     return new Set();
+  });
+
+  const clearPostsRef = useRef(() => {
+    setPosts([]);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('long_posts');
+    }
   });
 
   // Save to localStorage when posts change
@@ -140,7 +149,8 @@ export function BlogProvider({ children }: BlogProviderProps) {
       getSortedPosts,
       isPostRead,
       markPostAsRead,
-      markPostAsUnread
+      markPostAsUnread,
+      clearPosts: clearPostsRef.current
     }}>
       {children}
     </BlogContext.Provider>

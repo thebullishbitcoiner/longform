@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useRef } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useBlog, BlogPost } from '@/contexts/BlogContext';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { nip19 } from 'nostr-tools';
-import { PlusIcon } from '@heroicons/react/24/outline';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 
@@ -120,9 +119,11 @@ PostCard.displayName = 'PostCard';
 
 export default function ReaderPage() {
   const { ndk, isLoading } = useNostr();
-  const { getSortedPosts, addPost, updateAuthorProfile } = useBlog();
+  const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead } = useBlog();
   const [subscriptions, setSubscriptions] = useState<string[]>([]);
   const [processedEvents] = useState(new Set<string>());
+  const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
+  const hasClearedPosts = useRef(false);
 
   useEffect(() => {
     // Load subscriptions from localStorage
@@ -130,6 +131,12 @@ export default function ReaderPage() {
     if (savedSubscriptions) {
       const subs = JSON.parse(savedSubscriptions);
       setSubscriptions(subs);
+      hasClearedPosts.current = false;
+    } else if (!hasClearedPosts.current) {
+      // Clear posts if no subscriptions exist and we haven't cleared them yet
+      clearPosts();
+      setSubscriptions([]);
+      hasClearedPosts.current = true;
     }
   }, []); // Only run once on mount
 
@@ -197,99 +204,69 @@ export default function ReaderPage() {
     };
   }, [ndk, subscriptions, addPost, updateAuthorProfile, processedEvents]);
 
-  const handleAddNpub = async () => {
-    const npub = prompt('Enter npub:');
-    if (!npub) return;
-
-    try {
-      // Convert npub to hex
-      const decoded = nip19.decode(npub);
-      if (decoded.type !== 'npub') {
-        toast.error('Invalid npub format');
-        return;
-      }
-      const hexPubkey = decoded.data;
-
-      // Save to localStorage
-      const newSubscriptions = [...subscriptions, hexPubkey];
-      localStorage.setItem('long_subscriptions', JSON.stringify(newSubscriptions));
-      setSubscriptions(newSubscriptions);
-
-      // Subscribe to blog events
-      if (ndk) {
-        ndk.subscribe(
-          { kinds: [30023], authors: [hexPubkey] },
-          { closeOnEose: false },
-          {
-            onEvent: async (event) => {
-              try {
-                const title = getTagValue(event.tags, 'title') || 'Untitled';
-                const summary = getTagValue(event.tags, 'summary') || '';
-                const published_at = parseInt(getTagValue(event.tags, 'published_at') || event.created_at.toString());
-                const image = getTagValue(event.tags, 'image');
-                const tags = getTagValues(event.tags, 't');
-
-                const post: BlogPost = {
-                  id: event.id,
-                  pubkey: event.pubkey,
-                  created_at: event.created_at,
-                  content: event.content,
-                  title,
-                  summary,
-                  published_at,
-                  image,
-                  tags
-                };
-
-                addPost(post);
-
-                // Fetch profile if we haven't already
-                const user = ndk.getUser({ pubkey: event.pubkey });
-                const profile = await user.fetchProfile();
-                if (profile) {
-                  updateAuthorProfile(event.pubkey, {
-                    name: profile.name,
-                    displayName: profile.displayName
-                  });
-                }
-              } catch (error) {
-                console.error('Error processing blog post:', error);
-              }
-            }
-          }
-        );
-
-        toast.success('Successfully subscribed to ' + npub);
-      }
-    } catch (error) {
-      console.error('Error adding subscription:', error);
-      toast.error('Failed to add subscription');
-    }
-  };
-
   if (isLoading) {
     return <div className={styles.loading}>Loading...</div>;
   }
 
   const sortedPosts = getSortedPosts();
+  const filteredPosts = sortedPosts.filter(post => {
+    switch (filter) {
+      case 'read':
+        return isPostRead(post.id);
+      case 'unread':
+        return !isPostRead(post.id);
+      default:
+        return true;
+    }
+  });
 
   return (
     <div className={styles.container}>
       <div className={styles.content}>
         <div className={styles.header}>
           <h1 className={styles.title}>Reads</h1>
-          <button onClick={handleAddNpub} className={styles.addButton}>
-            <PlusIcon className={styles.icon} />
-            Add npub
-          </button>
+          <div className={styles.filterButtons}>
+            <button
+              onClick={() => setFilter('all')}
+              className={`${styles.filterButton} ${filter === 'all' ? styles.filterButtonActive : ''}`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilter('unread')}
+              className={`${styles.filterButton} ${filter === 'unread' ? styles.filterButtonActive : ''}`}
+            >
+              Unread
+            </button>
+            <button
+              onClick={() => setFilter('read')}
+              className={`${styles.filterButton} ${filter === 'read' ? styles.filterButtonActive : ''}`}
+            >
+              Read
+            </button>
+          </div>
         </div>
         <div className={styles.postsGrid}>
-          {sortedPosts.map((post) => (
+          {filteredPosts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
-          {sortedPosts.length === 0 && subscriptions.length > 0 && (
+          {filteredPosts.length === 0 && (
             <div className={styles.emptyState}>
-              No blog posts found from your subscriptions.
+              {subscriptions.length === 0 ? (
+                <>
+                  You don't have any reads. Add an npub in the{' '}
+                  <Link href="/subscriptions" className={styles.emptyStateLink}>
+                    subscriptions
+                  </Link>
+                  {' '}page!
+                </>
+              ) : filter === 'all' ? (
+                "No blog posts found from your subscriptions."
+              ) : filter === 'read' ? (
+                "No read posts found."
+              ) : (
+                "No unread posts found."
+              )}
             </div>
           )}
         </div>
