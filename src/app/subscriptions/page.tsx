@@ -7,6 +7,7 @@ import { PlusIcon } from '@heroicons/react/24/outline';
 import AddNpubModal from '@/components/AddNpubModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import SubscriptionItem from '@/components/SubscriptionItem';
+import type { BlogPost } from '@/contexts/BlogContext';
 
 export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<string[]>([]);
@@ -43,8 +44,8 @@ export default function SubscriptionsPage() {
       // Clear posts from localStorage when subscription is removed
       const cachedPosts = localStorage.getItem('long_posts');
       if (cachedPosts) {
-        const posts = JSON.parse(cachedPosts);
-        const filteredPosts = posts.filter((post: any) => post.pubkey !== subscriptionToRemove);
+        const posts = JSON.parse(cachedPosts) as BlogPost[];
+        const filteredPosts = posts.filter(post => post.pubkey !== subscriptionToRemove);
         localStorage.setItem('long_posts', JSON.stringify(filteredPosts));
       }
       

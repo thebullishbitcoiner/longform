@@ -7,7 +7,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
-import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
+import { NDKSubscription } from '@nostr-dev-kit/ndk';
 
 function getTagValue(tags: string[][], tagName: string): string | undefined {
   return tags.find(tag => tag[0] === tagName)?.[1];

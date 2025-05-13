@@ -115,7 +115,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       if (!file) return;
 
       try {
-        const [[_, url], ...tags] = await uploader.upload(file);
+        const [[, url]] = await uploader.upload(file);
         
         // Insert the image markdown at the cursor position
         const imageMarkdown = `![${file.name}](${url})`;
