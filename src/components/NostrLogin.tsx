@@ -3,20 +3,6 @@
 import { useEffect } from 'react';
 import styles from './NostrLogin.module.css';
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      'nostr-login': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
-        'data-dark-mode'?: string;
-        'data-theme'?: string;
-        'data-title'?: string;
-        'data-description'?: string;
-        'data-start-screen'?: string;
-      }, HTMLElement>;
-    }
-  }
-}
-
 export default function NostrLogin() {
   useEffect(() => {
     // Load nostr-login script
