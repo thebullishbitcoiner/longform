@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import styles from './NostrLogin.module.css';
 
 declare global {
@@ -18,8 +18,6 @@ declare global {
 }
 
 export default function NostrLogin() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
   useEffect(() => {
     // Load nostr-login script
     const script = document.createElement('script');
@@ -32,28 +30,7 @@ export default function NostrLogin() {
     script.async = true;
     document.head.appendChild(script);
 
-    const checkLoginStatus = () => {
-      const nostrLogin = document.querySelector('nostr-login');
-      if (nostrLogin) {
-        setIsLoggedIn(nostrLogin.hasAttribute('logged-in'));
-      }
-    };
-
-    // Initial check
-    checkLoginStatus();
-
-    // Set up observer for changes
-    const observer = new MutationObserver(checkLoginStatus);
-    const nostrLogin = document.querySelector('nostr-login');
-    if (nostrLogin) {
-      observer.observe(nostrLogin, {
-        attributes: true,
-        attributeFilter: ['logged-in']
-      });
-    }
-
     return () => {
-      observer.disconnect();
       document.head.removeChild(script);
     };
   }, []);
