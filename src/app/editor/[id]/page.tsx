@@ -8,39 +8,54 @@ import { use } from 'react';
 import Editor from '@/components/Editor';
 import { NostrBuildUploader } from '@nostrify/nostrify/uploaders';
 import type { NostrEvent, NostrSigner } from '@nostrify/types';
+import NostrLogin from '@/components/NostrLogin';
 import './page.css';
-
-interface Nip07Signer {
-  getPublicKey(): Promise<string>;
-  signEvent(event: NostrEvent): Promise<{ sig: string }>;
-  getRelays?(): Promise<Record<string, { read: boolean; write: boolean }>>;
-  nip04?: {
-    encrypt(pubkey: string, plaintext: string): Promise<string>;
-    decrypt(pubkey: string, ciphertext: string): Promise<string>;
-  };
-  nip44?: {
-    encrypt(pubkey: string, plaintext: string): Promise<string>;
-    decrypt(pubkey: string, ciphertext: string): Promise<string>;
-  };
-}
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
   const { id } = use(params);
   
+  useEffect(() => {
+    const checkAuth = () => {
+      const nostr = window.nostr;
+      if (nostr) {
+        setIsAuthenticated(true);
+      }
+    };
+
+    // Check initial auth state
+    checkAuth();
+
+    // Listen for nostr-login events
+    window.addEventListener('nostr-login:success', checkAuth);
+    window.addEventListener('nostr-login:logout', () => setIsAuthenticated(false));
+
+    return () => {
+      window.removeEventListener('nostr-login:success', checkAuth);
+      window.removeEventListener('nostr-login:logout', () => setIsAuthenticated(false));
+    };
+  }, []);
+
   const signer: NostrSigner = {
     getPublicKey: async () => {
-      const nostr = window.nostr as Nip07Signer | undefined;
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated. Please log in with nostr-login.');
+      }
+      const nostr = window.nostr;
       if (!nostr) {
-        throw new Error('Nostr extension not found. Please install nos2x.');
+        throw new Error('Nostr extension not found. Please log in with nostr-login.');
       }
       return nostr.getPublicKey();
     },
     signEvent: async (event) => {
-      const nostr = window.nostr as Nip07Signer | undefined;
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated. Please log in with nostr-login.');
+      }
+      const nostr = window.nostr;
       if (!nostr) {
-        throw new Error('Nostr extension not found. Please install nos2x.');
+        throw new Error('Nostr extension not found. Please log in with nostr-login.');
       }
       const pubkey = await nostr.getPublicKey();
       const { sig } = await nostr.signEvent({
@@ -99,9 +114,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const handleImageUpload = async () => {
     if (!draft) return;
 
-    const nostr = window.nostr as Nip07Signer | undefined;
-    if (!nostr) {
-      alert('Please install nos2x extension to upload images.');
+    if (!isAuthenticated) {
+      alert('Please log in with nostr-login to upload images.');
       return;
     }
 
@@ -155,14 +169,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       <Editor draft={draft} onSave={handleSave} />
       <div className="editor-footer">
         <div className="editor-actions">
-          <button 
-            onClick={() => handleSave(draft)} 
-            className="action-button save-button"
-            title="Save Draft"
-          >
-            <CheckIcon />
-            Save
-          </button>
           <button 
             onClick={handleCopy} 
             className="action-button copy-button"
