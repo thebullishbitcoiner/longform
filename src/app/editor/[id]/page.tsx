@@ -146,12 +146,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
         await Promise.race([publishPromise, timeoutPromise]);
         toast.success('Saved locally and to Nostr!');
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error saving to Nostr:', error);
-        if (error.message?.includes('timed out')) {
-          toast.error('Relay connection timed out. Please try again.');
-        } else if (error.message?.includes('Not enough relays')) {
-          toast.error('Could not connect to any relays. Please check your connection.');
+        if (error instanceof Error) {
+          if (error.message?.includes('timed out')) {
+            toast.error('Relay connection timed out. Please try again.');
+          } else if (error.message?.includes('Not enough relays')) {
+            toast.error('Could not connect to any relays. Please check your connection.');
+          } else {
+            toast.error('Saved locally, but failed to save to Nostr.');
+          }
         } else {
           toast.error('Saved locally, but failed to save to Nostr.');
         }
