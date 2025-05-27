@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftIcon, CheckIcon, ClipboardIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, ClipboardIcon, PhotoIcon } from '@heroicons/react/24/outline';
 import { getDraft, updateDraft, Draft } from '@/utils/storage';
 import { use } from 'react';
 import Editor from '@/components/Editor';
 import { NostrBuildUploader } from '@nostrify/nostrify/uploaders';
-import type { NostrEvent, NostrSigner } from '@nostrify/types';
-import NostrLogin from '@/components/NostrLogin';
+import type { NostrSigner } from '@nostrify/types';
 import './page.css';
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
