@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import { APP_VERSION } from '../config/version';
 import Link from 'next/link';
@@ -8,6 +8,11 @@ import './Header.css';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleLinkClick = () => {
     setIsMenuOpen(false);
@@ -18,7 +23,7 @@ const Header: React.FC = () => {
       <div className="header-container">
         <h1 className="header-title">
           Long
-          <span className="header-version">v{APP_VERSION}</span>
+          {mounted && <span className="header-version">v{APP_VERSION}</span>}
         </h1>
         <button
           onClick={() => setIsMenuOpen(true)}

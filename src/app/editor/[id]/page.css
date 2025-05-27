@@ -87,13 +87,22 @@
 }
 
 .editor-footer {
-  padding: 1rem 0;
-  margin-top: auto;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  background-color: var(--background);
+  border-top: 1px solid var(--border);
+  z-index: 100;
 }
 
 .editor-actions {
   display: flex;
   gap: 1rem;
+  justify-content: center;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .action-button {
@@ -118,7 +127,18 @@
   transform: translateY(-1px);
 }
 
+.action-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .action-button svg {
   width: 1rem;
   height: 1rem;
+}
+
+/* Add padding to the bottom of the main container to account for fixed footer */
+.container {
+  padding-bottom: 5rem;
 } 

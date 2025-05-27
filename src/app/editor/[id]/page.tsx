@@ -2,19 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftIcon, ClipboardIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { getDraft, updateDraft, Draft } from '@/utils/storage';
 import { use } from 'react';
 import Editor from '@/components/Editor';
 import { NostrBuildUploader } from '@nostrify/nostrify/uploaders';
 import type { NostrSigner } from '@nostrify/types';
+import { useNostr } from '@/contexts/NostrContext';
+import toast from 'react-hot-toast';
 import './page.css';
+import { NDKEvent } from '@nostr-dev-kit/ndk';
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const router = useRouter();
   const { id } = use(params);
+  const { ndk } = useNostr();
   
   useEffect(() => {
     const checkAuth = () => {
@@ -99,15 +104,61 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     updateDraft(updatedDraft);
   };
 
-  const handleSave = (updatedDraft: Draft) => {
+  const handleSave = async (updatedDraft: Draft) => {
+    // Save to local storage
     setDraft(updatedDraft);
     updateDraft(updatedDraft);
-  };
 
-  const handleCopy = () => {
-    if (!draft) return;
-    const content = `${draft.title}\n\n${draft.content}`;
-    navigator.clipboard.writeText(content);
+    // If authenticated, also save to Nostr
+    if (ndk && isAuthenticated) {
+      try {
+        setIsPublishing(true);
+
+        // Check if we have any connected relays
+        const connectedRelays = ndk.pool.connectedRelays;
+        if (connectedRelays.length === 0) {
+          toast.error('No connected relays. Please check your connection.');
+          return;
+        }
+
+        // Create a NIP-23 draft event
+        const event = {
+          kind: 30024,
+          content: updatedDraft.content,
+          tags: [
+            ['title', updatedDraft.title],
+            ['published_at', Math.floor(Date.now() / 1000).toString()],
+            ['t', 'longform'], // Add a tag to identify this as a longform post
+          ],
+          created_at: Math.floor(Date.now() / 1000),
+        };
+
+        // Sign the event
+        const signedEvent = await signer.signEvent(event);
+        // Create NDKEvent and publish
+        const ndkEvent = new NDKEvent(ndk, signedEvent);
+        
+        // Try to publish with a timeout
+        const publishPromise = ndkEvent.publish();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Publishing timed out')), 10000)
+        );
+
+        await Promise.race([publishPromise, timeoutPromise]);
+        toast.success('Saved locally and to Nostr!');
+      } catch (error: any) {
+        console.error('Error saving to Nostr:', error);
+        if (error.message?.includes('timed out')) {
+          toast.error('Relay connection timed out. Please try again.');
+        } else if (error.message?.includes('Not enough relays')) {
+          toast.error('Could not connect to any relays. Please check your connection.');
+        } else {
+          toast.error('Saved locally, but failed to save to Nostr.');
+        }
+      } finally {
+        setIsPublishing(false);
+      }
+    }
   };
 
   const handleImageUpload = async () => {
@@ -148,6 +199,43 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     input.click();
   };
 
+  const handlePublish = async () => {
+    if (!draft || !ndk || !isAuthenticated) {
+      toast.error('Please log in with nostr-login to publish.');
+      return;
+    }
+
+    try {
+      setIsPublishing(true);
+
+      // Create a NIP-23 article event
+      const event = {
+        kind: 30023,
+        content: draft.content,
+        tags: [
+          ['title', draft.title],
+          ['published_at', Math.floor(Date.now() / 1000).toString()],
+          ['t', 'longform'], // Add a tag to identify this as a longform post
+        ],
+        created_at: Math.floor(Date.now() / 1000),
+      };
+
+      // Sign the event
+      const signedEvent = await signer.signEvent(event);
+      // Create NDKEvent and publish
+      const ndkEvent = new NDKEvent(ndk, signedEvent);
+      await ndkEvent.publish();
+
+      toast.success('Published successfully!');
+      router.push('/reader'); // Redirect to reader page
+    } catch (error) {
+      console.error('Error publishing:', error);
+      toast.error('Failed to publish. Please try again.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   if (!draft) return null;
 
   return (
@@ -169,20 +257,29 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       <div className="editor-footer">
         <div className="editor-actions">
           <button 
-            onClick={handleCopy} 
-            className="action-button copy-button"
-            title="Copy to Clipboard"
-          >
-            <ClipboardIcon />
-            Copy
-          </button>
-          <button 
             onClick={handleImageUpload} 
             className="action-button image-button"
-            title="Insert Image"
+            title="Upload Image"
           >
             <PhotoIcon />
-            Insert Image
+            Upload
+          </button>
+          <button
+            onClick={() => draft && handleSave(draft)}
+            className="action-button save-button"
+            title="Save Draft"
+            disabled={isPublishing}
+          >
+            {isPublishing ? 'Saving...' : 'Save'}
+          </button>
+          <button 
+            onClick={handlePublish} 
+            className="action-button publish-button"
+            title="Publish to Nostr"
+            disabled={isPublishing}
+          >
+            <ArrowUpTrayIcon />
+            {isPublishing ? 'Publishing...' : 'Publish'}
           </button>
         </div>
       </div>
