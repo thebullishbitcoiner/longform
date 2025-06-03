@@ -4,6 +4,11 @@ import { useNostr } from '@/contexts/NostrContext';
 import { useEffect, useState } from 'react';
 
 export function NostrTest() {
+  // Only render in development
+  if (process.env.NODE_ENV === 'production') {
+    return null;
+  }
+
   const { ndk, isLoading } = useNostr();
   const [testResult, setTestResult] = useState<string>('');
 

@@ -3,7 +3,7 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-// Create a singleton NDK instance with a shorter timeout
+// Create a singleton NDK instance
 const ndkInstance = new NDK({
   explicitRelayUrls: [
     'wss://relay.damus.io',
@@ -12,7 +12,6 @@ const ndkInstance = new NDK({
     'wss://nostr.bitcoiner.social',
     'wss://relay.snort.social'
   ],
-  connectTimeout: 5000, // 5 second timeout
 });
 
 interface NostrContextType {
@@ -52,9 +51,6 @@ export function NostrProvider({ children }: NostrProviderProps) {
         ]);
         
         console.log('Connected to relays');
-
-        // Give a small delay for connections to establish
-        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Verify we have at least one connected relay
         const connectedRelays = ndkInstance.pool.connectedRelays();
