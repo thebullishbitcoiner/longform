@@ -115,9 +115,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         setIsPublishing(true);
 
         // Check if we have any connected relays
-        const connectedRelays = ndk.pool.connectedRelays;
+        const connectedRelays = ndk.pool.connectedRelays();
         if (connectedRelays.length === 0) {
           toast.error('No connected relays. Please check your connection.');
+          return;
+        }
+
+        // Wait for at least one relay to be ready
+        const readyRelays = connectedRelays.filter(relay => relay.status === 1);
+        if (readyRelays.length === 0) {
+          toast.error('Waiting for relay connections...');
           return;
         }
 
@@ -269,7 +276,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             Upload
           </button>
           <button
-            onClick={() => draft && handleSave(draft)}
+            onClick={() => {
+              if (draft) {
+                const updatedDraft = {
+                  ...draft,
+                  lastModified: new Date().toISOString()
+                };
+                handleSave(updatedDraft);
+              }
+            }}
             className="action-button save-button"
             title="Save Draft"
             disabled={isPublishing}
