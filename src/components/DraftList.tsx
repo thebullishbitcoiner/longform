@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { getDrafts, deleteDraft } from '@/utils/storage';
 import { useNostr } from '@/contexts/NostrContext';
-import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
+import { NDKKind } from '@nostr-dev-kit/ndk';
 import './DraftList.css';
 
 interface Draft {
