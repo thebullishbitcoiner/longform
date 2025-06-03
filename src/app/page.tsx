@@ -3,6 +3,7 @@
 import DraftList from '@/components/DraftList';
 import NostrLogin from '@/components/NostrLogin';
 import styles from '@/components/NostrLogin.module.css';
+import { NostrTest } from '@/components/NostrTest';
 
 export default function Home() {
   return (
@@ -11,6 +12,7 @@ export default function Home() {
         <NostrLogin />
       </div>
       <DraftList />
+      <NostrTest />
     </main>
   );
 }

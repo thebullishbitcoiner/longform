@@ -21,10 +21,10 @@ const Header: React.FC = () => {
   return (
     <header className="header">
       <div className="header-container">
-        <h1 className="header-title">
+        <Link href="/" className="header-title">
           Long
           {mounted && <span className="header-version">v{APP_VERSION}</span>}
-        </h1>
+        </Link>
         <button
           onClick={() => setIsMenuOpen(true)}
           className="menu-button"

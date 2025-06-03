@@ -3,13 +3,24 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
+// Create a singleton NDK instance with more reliable relays
+const ndkInstance = new NDK({
+  explicitRelayUrls: [
+    'wss://relay.damus.io',
+    'wss://relay.primal.net',
+    'wss://nostr.wine',
+    'wss://relay.nostr.band',
+    'wss://nostr.bitcoiner.social'
+  ],
+});
+
 interface NostrContextType {
-  ndk: NDK | null;
+  ndk: NDK;
   isLoading: boolean;
 }
 
 const NostrContext = createContext<NostrContextType>({
-  ndk: null,
+  ndk: ndkInstance,
   isLoading: true,
 });
 
@@ -20,38 +31,50 @@ interface NostrProviderProps {
 }
 
 export function NostrProvider({ children }: NostrProviderProps) {
-  const [ndk, setNdk] = useState<NDK | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const initializeNDK = async () => {
+      console.log('Starting NDK initialization...');
       try {
-        const ndkInstance = new NDK({
-          explicitRelayUrls: [
-            'wss://relay.damus.io',
-            'wss://relay.nostr.band',
-            'wss://relay.primal.net',
-            'wss://nostr.bitcoiner.social',
-            'wss://relay.nostr.bg',
-            'wss://relay.snort.social'
-          ],
+        console.log('Attempting to connect to relays...');
+        
+        // Create a promise that rejects after timeout
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Connection timeout')), 10000);
         });
 
-        // Connect to relays
-        await ndkInstance.connect();
+        // Race between connection and timeout
+        await Promise.race([
+          ndkInstance.connect(),
+          timeoutPromise
+        ]);
+        
+        console.log('Connected to relays');
+
+        // Give a small delay for connections to establish
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Verify we have at least one connected relay
-        const connectedRelays = ndkInstance.pool.connectedRelays;
+        const connectedRelays = ndkInstance.pool.connectedRelays();
+        console.log('Connected relays:', connectedRelays.map(r => r.url).join(', '));
+        
         if (connectedRelays.length === 0) {
           console.error('No relays connected after initialization');
           throw new Error('No relays connected');
         }
 
-        console.log(`Connected to ${connectedRelays.length} relays`);
-        setNdk(ndkInstance);
+        console.log(`Successfully connected to ${connectedRelays.length} relays`);
       } catch (error) {
         console.error('Failed to initialize NDK:', error);
+        // Log more details about the error
+        if (error instanceof Error) {
+          console.error('Error name:', error.name);
+          console.error('Error message:', error.message);
+          console.error('Error stack:', error.stack);
+        }
       } finally {
+        console.log('Setting isLoading to false');
         setIsLoading(false);
       }
     };
@@ -60,7 +83,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   }, []);
 
   return (
-    <NostrContext.Provider value={{ ndk, isLoading }}>
+    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading }}>
       {children}
     </NostrContext.Provider>
   );
