@@ -3,15 +3,16 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-// Create a singleton NDK instance with more reliable relays
+// Create a singleton NDK instance with a shorter timeout
 const ndkInstance = new NDK({
   explicitRelayUrls: [
     'wss://relay.damus.io',
-    'wss://relay.primal.net',
-    'wss://nostr.wine',
     'wss://relay.nostr.band',
-    'wss://nostr.bitcoiner.social'
+    'wss://relay.primal.net',
+    'wss://nostr.bitcoiner.social',
+    'wss://relay.snort.social'
   ],
+  connectTimeout: 5000, // 5 second timeout
 });
 
 interface NostrContextType {

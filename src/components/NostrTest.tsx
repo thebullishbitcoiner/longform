@@ -2,7 +2,6 @@
 
 import { useNostr } from '@/contexts/NostrContext';
 import { useEffect, useState } from 'react';
-import { NDKRelay } from '@nostr-dev-kit/ndk';
 
 export function NostrTest() {
   const { ndk, isLoading } = useNostr();
