@@ -13,7 +13,15 @@ interface Draft {
   title: string;
   content: string;
   lastModified: string;
-  source?: 'local' | 'nostr';
+  sources: Array<'local' | 'nostr'>;
+}
+
+interface SavedDraft {
+  id: string;
+  title: string;
+  content: string;
+  lastModified: string;
+  sources?: Array<'local' | 'nostr'>;
 }
 
 export default function DraftList() {
@@ -45,8 +53,13 @@ export default function DraftList() {
 
   useEffect(() => {
     const loadDrafts = () => {
-      const savedDrafts = getDrafts();
-      setDrafts(savedDrafts.map(draft => ({ ...draft, source: 'local' })));
+      const savedDrafts = getDrafts() as SavedDraft[];
+      // Ensure all drafts have the sources property
+      const draftsWithSources = savedDrafts.map(draft => ({
+        ...draft,
+        sources: draft.sources || ['local']
+      }));
+      setDrafts(draftsWithSources);
     };
 
     loadDrafts();
@@ -74,11 +87,20 @@ export default function DraftList() {
                 title,
                 content: event.content,
                 lastModified: new Date(event.created_at * 1000).toISOString(),
-                source: 'nostr'
+                sources: ['nostr'] as const
               };
               setDrafts(prev => {
-                const filtered = prev.filter(d => d.id !== draft.id);
-                return [...filtered, draft];
+                // Check if we have a local draft with the same content
+                const existingDraft = prev.find(d => d.content === draft.content);
+                if (existingDraft) {
+                  // Merge the sources
+                  return prev.map(d => 
+                    d.content === draft.content 
+                      ? { ...d, sources: [...new Set([...d.sources, 'nostr'])] as Array<'local' | 'nostr'> }
+                      : d
+                  );
+                }
+                return [...prev, draft];
               });
             }
           }
@@ -96,12 +118,12 @@ export default function DraftList() {
   }, [ndk, isAuthenticated]);
 
   const handleCreateDraft = () => {
-    const newDraft = {
+    const newDraft: Draft = {
       id: Date.now().toString(),
       title: 'Untitled Draft',
       content: '',
       lastModified: new Date().toISOString(),
-      source: 'local' as const
+      sources: ['local']
     };
     
     // Navigate immediately
@@ -149,16 +171,18 @@ export default function DraftList() {
               <div className="draft-info">
                 <div className="draft-title">
                   {draft.title}
-                  <span className={`draft-source ${draft.source}`}>
-                    {draft.source === 'nostr' ? 'Nostr' : 'Local'}
-                  </span>
+                  {(draft.sources || ['local']).map(source => (
+                    <span key={source} className={`draft-source ${source}`}>
+                      {source === 'nostr' ? 'Nostr' : 'Local'}
+                    </span>
+                  ))}
                 </div>
                 <div className="draft-date">
                   Last Modified: {new Date(draft.lastModified).toLocaleDateString()}
                 </div>
               </div>
               <button
-                onClick={(e) => handleDeleteDraft(draft.id, draft.title, draft.source!, e)}
+                onClick={(e) => handleDeleteDraft(draft.id, draft.title, draft.sources[0], e)}
                 className="delete-button"
               >
                 <TrashIcon />

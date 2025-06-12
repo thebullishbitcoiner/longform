@@ -15,32 +15,19 @@ import { NDKEvent } from '@nostr-dev-kit/ndk';
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const router = useRouter();
   const { id } = use(params);
-  const { ndk } = useNostr();
+  const { ndk, isConnected, isAuthenticated } = useNostr();
   
   useEffect(() => {
-    const checkAuth = () => {
-      const nostr = window.nostr;
-      if (nostr) {
-        setIsAuthenticated(true);
-      }
-    };
-
-    // Check initial auth state
-    checkAuth();
-
-    // Listen for nostr-login events
-    window.addEventListener('nostr-login:success', checkAuth);
-    window.addEventListener('nostr-login:logout', () => setIsAuthenticated(false));
-
-    return () => {
-      window.removeEventListener('nostr-login:success', checkAuth);
-      window.removeEventListener('nostr-login:logout', () => setIsAuthenticated(false));
-    };
-  }, []);
+    const savedDraft = getDraft(id);
+    if (!savedDraft) {
+      router.push('/');
+      return;
+    }
+    setDraft(savedDraft);
+  }, [id, router]);
 
   const signer: NostrSigner = {
     getPublicKey: async () => {
@@ -84,15 +71,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     }
   });
 
-  useEffect(() => {
-    const savedDraft = getDraft(id);
-    if (!savedDraft) {
-      router.push('/');
-      return;
-    }
-    setDraft(savedDraft);
-  }, [id, router]);
-
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!draft) return;
     const updatedDraft = {
@@ -113,38 +91,35 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     if (ndk && isAuthenticated) {
       try {
         setIsPublishing(true);
+        console.log('Editor: Starting save process...');
 
         // Check if we have any connected relays
         const connectedRelays = ndk.pool.connectedRelays();
+        console.log('Editor: Connected relays:', connectedRelays.map(r => r.url).join(', '));
         if (connectedRelays.length === 0) {
+          console.log('Editor: No connected relays found');
           toast.error('No connected relays. Please check your connection.');
           return;
         }
 
-        // Wait for at least one relay to be ready
-        const readyRelays = connectedRelays.filter(relay => relay.status === 1);
-        if (readyRelays.length === 0) {
-          toast.error('Waiting for relay connections...');
-          return;
-        }
+        // Create and publish the event using NDK's methods
+        const ndkEvent = new NDKEvent(ndk);
+        ndkEvent.kind = 30024;
+        ndkEvent.content = updatedDraft.content;
+        ndkEvent.tags = [
+          ['title', updatedDraft.title],
+          ['published_at', Math.floor(Date.now() / 1000).toString()],
+          ['t', 'longform']
+        ];
+        ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
-        // Create a NIP-23 draft event
-        const event = {
-          kind: 30024,
-          content: updatedDraft.content,
-          tags: [
-            ['title', updatedDraft.title],
-            ['published_at', Math.floor(Date.now() / 1000).toString()],
-            ['t', 'longform'], // Add a tag to identify this as a longform post
-          ],
-          created_at: Math.floor(Date.now() / 1000),
-        };
+        console.log('Editor: Publishing event:', {
+          kind: ndkEvent.kind,
+          content: ndkEvent.content,
+          tags: ndkEvent.tags,
+          created_at: ndkEvent.created_at
+        });
 
-        // Sign the event
-        const signedEvent = await signer.signEvent(event);
-        // Create NDKEvent and publish
-        const ndkEvent = new NDKEvent(ndk, signedEvent);
-        
         // Try to publish with a timeout
         const publishPromise = ndkEvent.publish();
         const timeoutPromise = new Promise((_, reject) => 
@@ -219,24 +194,25 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     try {
       setIsPublishing(true);
 
-      // Create a NIP-23 article event
-      const event = {
-        kind: 30023,
-        content: draft.content,
-        tags: [
-          ['title', draft.title],
-          ['published_at', Math.floor(Date.now() / 1000).toString()],
-          ['t', 'longform'], // Add a tag to identify this as a longform post
-        ],
-        created_at: Math.floor(Date.now() / 1000),
-      };
+      // Create and publish the event using NDK's methods
+      const ndkEvent = new NDKEvent(ndk);
+      ndkEvent.kind = 30023;
+      ndkEvent.content = draft.content;
+      ndkEvent.tags = [
+        ['title', draft.title],
+        ['published_at', Math.floor(Date.now() / 1000).toString()],
+        ['t', 'longform']
+      ];
+      ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
-      // Sign the event
-      const signedEvent = await signer.signEvent(event);
-      // Create NDKEvent and publish
-      const ndkEvent = new NDKEvent(ndk, signedEvent);
+      console.log('Editor: Publishing article:', {
+        kind: ndkEvent.kind,
+        content: ndkEvent.content,
+        tags: ndkEvent.tags,
+        created_at: ndkEvent.created_at
+      });
+
       await ndkEvent.publish();
-
       toast.success('Published successfully!');
       router.push('/reader'); // Redirect to reader page
     } catch (error) {
@@ -287,18 +263,18 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             }}
             className="action-button save-button"
             title="Save Draft"
-            disabled={isPublishing}
+            disabled={isPublishing || !isConnected}
           >
-            {isPublishing ? 'Saving...' : 'Save'}
+            {isPublishing ? 'Saving...' : !isConnected ? 'Connecting...' : 'Save'}
           </button>
           <button 
             onClick={handlePublish} 
             className="action-button publish-button"
             title="Publish to Nostr"
-            disabled={isPublishing}
+            disabled={isPublishing || !isConnected}
           >
             <ArrowUpTrayIcon />
-            {isPublishing ? 'Publishing...' : 'Publish'}
+            {isPublishing ? 'Publishing...' : !isConnected ? 'Connecting...' : 'Publish'}
           </button>
         </div>
       </div>
