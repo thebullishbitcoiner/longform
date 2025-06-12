@@ -22,8 +22,7 @@ const Header: React.FC = () => {
     <header className="header">
       <div className="header-container">
         <Link href="/" className="header-title">
-          Long
-          {mounted && <span className="header-version">v{APP_VERSION}</span>}
+          Longform._
         </Link>
         <button
           onClick={() => setIsMenuOpen(true)}
@@ -51,6 +50,7 @@ const Header: React.FC = () => {
             <Link href="/subscriptions" className="menu-link" onClick={handleLinkClick}>
               Subscriptions
             </Link>
+            {mounted && <div className="menu-version">v{APP_VERSION}</div>}
           </div>
         </div>
       )}

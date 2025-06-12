@@ -23,13 +23,6 @@
   text-decoration: none;
 }
 
-.header-version {
-  font-size: 0.875rem;
-  font-weight: 400;
-  color: #9ca3af;
-  padding-top: 0.5rem;
-}
-
 .header-actions {
   display: flex;
   align-items: center;
@@ -129,4 +122,12 @@
 
 .menu-link:hover {
   color: #2563eb;
+}
+
+.menu-version {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.5rem;
+  text-align: right;
+  width: 100%;
 } 
