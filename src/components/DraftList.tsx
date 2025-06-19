@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
@@ -14,17 +14,20 @@ interface Draft {
   content: string;
   lastModified: string;
   sources: Array<'local' | 'nostr'>;
+  dTag?: string; // Store the 'd' tag value for tracking relationships
 }
 
 export default function DraftList() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const eventsRef = useRef<any[]>([]);
   const router = useRouter();
   const { ndk, isAuthenticated } = useNostr();
 
   useEffect(() => {
     const loadNostrDrafts = async () => {
       setIsLoading(true);
+      eventsRef.current = []; // Reset events
       
       if (!ndk || !isAuthenticated) {
         setIsLoading(false);
@@ -40,33 +43,60 @@ export default function DraftList() {
         
         const pubkey = await nostr.getPublicKey();
         
+        // Subscribe to draft events
         const subscription = ndk.subscribe(
-          { kinds: [30024 as NDKKind], authors: [pubkey] },
+          { 
+            kinds: [30024 as NDKKind], // Draft events only
+            authors: [pubkey] 
+          },
           { closeOnEose: true },
           {
             onEvent: (event) => {
-              const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
-              const draft: Draft = {
-                id: event.id,
-                title,
-                content: event.content,
-                lastModified: new Date(event.created_at * 1000).toISOString(),
-                sources: ['nostr'] as const
-              };
-              setDrafts(prev => {
-                // Check if we already have this draft
-                const existingDraft = prev.find(d => d.id === draft.id);
-                if (existingDraft) {
-                  return prev.map(d => d.id === draft.id ? draft : d);
-                }
-                return [...prev, draft];
-              });
+              // Just collect all events
+              eventsRef.current.push(event);
             }
           }
         );
 
-        // Set a timeout to stop loading if no events are received
+        // Set a timeout to process all events after they're received
         setTimeout(() => {
+          console.log('DraftList: Processing all events:', eventsRef.current.length);
+          
+          // Convert events to drafts and remove duplicates by ID
+          const uniqueEvents = eventsRef.current.filter((event, index, self) => 
+            index === self.findIndex(e => e.id === event.id)
+          );
+          
+          const allDrafts: Draft[] = uniqueEvents.map(event => {
+            const title = event.tags.find((tag: any) => tag[0] === 'title')?.[1] || 'Untitled';
+            const dTag = event.tags.find((tag: any) => tag[0] === 'd')?.[1];
+            return {
+              id: event.id,
+              title,
+              content: event.content,
+              lastModified: new Date(event.created_at * 1000).toISOString(),
+              sources: ['nostr'] as const,
+              dTag
+            };
+          });
+          
+          console.log('DraftList: All drafts before cleanup:', allDrafts.map(d => ({ id: d.id, title: d.title, dTag: d.dTag })));
+          
+          // Clean up: keep only the latest version of each draft
+          const finalDrafts = allDrafts.filter(draft => {
+            // If this draft is referenced by any other draft, it's an older version
+            const isReferenced = allDrafts.some(otherDraft => 
+              otherDraft.dTag === draft.id
+            );
+            if (isReferenced) {
+              console.log('DraftList: Removing older draft', draft.id, 'referenced by newer draft');
+            }
+            return !isReferenced;
+          });
+          
+          console.log('DraftList: Final drafts after cleanup:', finalDrafts.map(d => ({ id: d.id, title: d.title, dTag: d.dTag })));
+          
+          setDrafts(finalDrafts);
           setIsLoading(false);
         }, 5000);
 

@@ -236,14 +236,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           return;
         }
 
-        // Create and publish the updated event
+        // Create a new event with updated content
+        // Use the 'd' tag to link it to the original draft
         const ndkEvent = new NDKEvent(ndk);
         ndkEvent.kind = 30024;
         ndkEvent.content = updatedDraft.content;
         ndkEvent.tags = [
           ['title', updatedDraft.title],
           ['published_at', Math.floor(Date.now() / 1000).toString()],
-          ['t', 'longform']
+          ['t', 'longform'],
+          ['d', updatedDraft.id] // Link to the original draft
         ];
         ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
@@ -254,6 +256,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         );
 
         await Promise.race([publishPromise, timeoutPromise]);
+        
+        // Update the draft with the new Nostr ID
+        const savedDraft: Draft = {
+          ...updatedDraft,
+          id: ndkEvent.id,
+          lastModified: new Date().toISOString(),
+          sources: ['nostr']
+        };
+        setDraft(savedDraft);
+        
+        // Update the URL to reflect the new Nostr event ID
+        router.replace(`/editor/${ndkEvent.id}`);
+        
         toast.success('Draft updated on Nostr!');
       } catch (error: unknown) {
         console.error('Editor: Error updating Nostr draft:', error);

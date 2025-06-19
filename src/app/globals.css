@@ -63,9 +63,18 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 80vh;
+  height: calc(100vh - 4rem - 2rem); /* Account for header height and container padding */
   text-align: center;
   padding: 2rem 1rem;
+  box-sizing: border-box;
+}
+
+.welcome-content {
+  padding-top: 0;
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+  margin-top: -10vh;
 }
 
 .welcome-title {
@@ -85,6 +94,8 @@ body {
   color: var(--text-secondary);
   margin-bottom: 2rem;
   max-width: 32rem;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 @media (min-width: 640px) {

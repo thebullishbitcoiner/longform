@@ -33,17 +33,19 @@ export default function Home() {
     return (
       <main className="container">
         <div className="welcome-section">
-          <h1 className="welcome-title">A focused space for Nostr longform.</h1>
-          <p className="welcome-description">
-            Create, edit, and read longform content with a clean, distraction-free experience.
-          </p>
-          <button 
-            onClick={handleLogin}
-            disabled={isLoading}
-            className="login-button"
-          >
-            {isLoading ? 'Connecting...' : 'Login with Nostr'}
-          </button>
+          <div className="welcome-content">
+            <h1 className="welcome-title">A focused space for Nostr longform.</h1>
+            <p className="welcome-description">
+              Create, edit, and read longform content with a clean, distraction-free experience.
+            </p>
+            <button 
+              onClick={handleLogin}
+              disabled={isLoading}
+              className="login-button"
+            >
+              {isLoading ? 'Connecting...' : 'Login with Nostr'}
+            </button>
+          </div>
         </div>
       </main>
     );
