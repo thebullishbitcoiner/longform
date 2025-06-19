@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
-import { getDraft, updateDraft, Draft } from '@/utils/storage';
+import { Draft } from '@/utils/storage';
 import { use } from 'react';
 import Editor, { EditorRef } from '@/components/Editor';
 import { NostrBuildUploader } from '@nostrify/nostrify/uploaders';

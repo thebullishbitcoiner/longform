@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import DraftList from '@/components/DraftList';
 import { useNostr } from '@/contexts/NostrContext';
 
