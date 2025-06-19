@@ -13,7 +13,6 @@ interface Draft {
   title: string;
   content: string;
   lastModified: string;
-  sources: Array<'local' | 'nostr'>;
   dTag?: string; // Store the 'd' tag value for tracking relationships
 }
 
@@ -75,7 +74,6 @@ export default function DraftList() {
               title,
               content: event.content,
               lastModified: new Date(event.created_at * 1000).toISOString(),
-              sources: ['nostr'] as const,
               dTag
             };
           });
@@ -197,14 +195,14 @@ export default function DraftList() {
                 <div className="draft-info">
                   <div className="draft-title">
                     {draft.title}
-                    {(draft.sources || ['local']).map(source => (
-                      <span key={source} className={`draft-source ${source}`}>
-                        {source === 'nostr' ? 'Nostr' : 'Local'}
-                      </span>
-                    ))}
                   </div>
                   <div className="draft-date">
-                    Last Modified: {new Date(draft.lastModified).toLocaleDateString()}
+                    Last modified: {new Date(draft.lastModified).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit'
+                    })}
                   </div>
                 </div>
                 <button
