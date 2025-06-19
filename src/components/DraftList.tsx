@@ -197,9 +197,11 @@ export default function DraftList() {
                     {draft.title}
                   </div>
                   <div className="draft-date">
-                    Last modified: {new Date(draft.lastModified).toLocaleString('en-US', {
-                      month: 'short',
+                    Last modified: {new Date(draft.lastModified).toLocaleDateString('en-US', {
+                      month: 'numeric',
                       day: 'numeric',
+                      year: '2-digit'
+                    })} {new Date(draft.lastModified).toLocaleTimeString('en-US', {
                       hour: 'numeric',
                       minute: '2-digit'
                     })}
