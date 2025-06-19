@@ -20,7 +20,7 @@ interface Draft {
 export default function DraftList() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const eventsRef = useRef<any[]>([]);
+  const eventsRef = useRef<NDKEvent[]>([]);
   const router = useRouter();
   const { ndk, isAuthenticated } = useNostr();
 
@@ -68,8 +68,8 @@ export default function DraftList() {
           );
           
           const allDrafts: Draft[] = uniqueEvents.map(event => {
-            const title = event.tags.find((tag: any) => tag[0] === 'title')?.[1] || 'Untitled';
-            const dTag = event.tags.find((tag: any) => tag[0] === 'd')?.[1];
+            const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
+            const dTag = event.tags.find((tag: string[]) => tag[0] === 'd')?.[1];
             return {
               id: event.id,
               title,
