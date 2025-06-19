@@ -1,7 +1,7 @@
 {
   "name": "Long",
   "short_name": "Long",
-  "description": "A minimalist editor for Nostr longform",
+  "description": "A focused space for Nostr longform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

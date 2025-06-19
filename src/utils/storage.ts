@@ -3,6 +3,7 @@ export interface Draft {
   title: string;
   content: string;
   lastModified: string;
+  sources?: Array<'local' | 'nostr'>;
 }
 
 export function getDrafts(): Draft[] {

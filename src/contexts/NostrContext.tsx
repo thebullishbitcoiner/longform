@@ -3,8 +3,7 @@
 import NDK, { NDKNip07Signer } from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-// Create a singleton NDK instance with NIP-07 signer
-const nip07signer = new NDKNip07Signer();
+// Create a singleton NDK instance without signer initially
 const ndkInstance = new NDK({
   explicitRelayUrls: [
     'wss://relay.damus.io',
@@ -12,8 +11,7 @@ const ndkInstance = new NDK({
     'wss://relay.primal.net',
     'wss://nostr.bitcoiner.social',
     'wss://relay.snort.social'
-  ],
-  signer: nip07signer
+  ]
 });
 
 // Initialize connection outside of React lifecycle
@@ -87,13 +85,15 @@ interface NostrContextType {
   isLoading: boolean;
   isConnected: boolean;
   isAuthenticated: boolean;
+  checkAuthentication: () => Promise<boolean>;
 }
 
 const NostrContext = createContext<NostrContextType>({
   ndk: ndkInstance,
   isLoading: true,
   isConnected: false,
-  isAuthenticated: false
+  isAuthenticated: false,
+  checkAuthentication: async () => false
 });
 
 export const useNostr = () => useContext(NostrContext);
@@ -107,6 +107,23 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  const checkAuthentication = async (): Promise<boolean> => {
+    try {
+      // Only create signer when explicitly checking authentication
+      const nip07signer = new NDKNip07Signer();
+      ndkInstance.signer = nip07signer;
+      
+      const user = await nip07signer.user();
+      const hasUser = !!user.npub;
+      setIsAuthenticated(hasUser);
+      return hasUser;
+    } catch (error) {
+      console.error('NDK Provider: Error checking authentication:', error);
+      setIsAuthenticated(false);
+      return false;
+    }
+  };
+
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -117,14 +134,9 @@ export function NostrProvider({ children }: NostrProviderProps) {
         const hasConnectedRelays = connectedRelays.length > 0;
         console.log('NDK Provider: Setting isConnected to:', hasConnectedRelays);
         setIsConnected(hasConnectedRelays);
-
-        // Check if we have a NIP-07 signer
-        const user = await nip07signer.user();
-        setIsAuthenticated(!!user.npub);
       } catch (error) {
         console.error('NDK Provider: Error checking connection:', error);
         setIsConnected(false);
-        setIsAuthenticated(false);
       } finally {
         setIsLoading(false);
       }
@@ -141,7 +153,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   }, []);
 
   return (
-    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated }}>
+    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, checkAuthentication }}>
       {children}
     </NostrContext.Provider>
   );
