@@ -17,17 +17,10 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Long",
-  description: "A minimalist editor for Nostr longform",
-  manifest: "/manifest.json",
+  title: "Longform._",
+  description: "A focused space for Nostr longform.",
   icons: {
     icon: '/images/long-icon.png',
-    apple: '/images/long-icon.png',
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Long',
   },
 };
 
@@ -39,10 +32,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Long" />
-        <link rel="apple-touch-icon" href="/images/long-icon.png" />
         <meta name="theme-color" content="#000000" />
       </head>
       <body className={inter.className}>
