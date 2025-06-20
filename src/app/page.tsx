@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import DraftList from '@/components/DraftList';
 import { useNostr } from '@/contexts/NostrContext';
+import toast from 'react-hot-toast';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
-  const { isAuthenticated, checkAuthentication } = useNostr();
+  const { isAuthenticated, isWhitelisted, checkAuthentication } = useNostr();
 
   const handleLogin = async () => {
     setIsLoading(true);
@@ -20,7 +21,15 @@ export default function Home() {
       // Request permission to sign
       await nostr.getPublicKey();
       // Check authentication status in context
-      await checkAuthentication();
+      const authResult = await checkAuthentication();
+      
+      // Show toast if authentication failed due to whitelist
+      if (!authResult) {
+        toast.error('Access denied: This app is currently in alpha testing. Only approved testers can access the app.', {
+          duration: 6000,
+          position: 'top-center',
+        });
+      }
     } catch (error) {
       console.error('Login failed:', error);
       alert('Login failed. Please try again.');
@@ -36,7 +45,7 @@ export default function Home() {
           <div className="welcome-content">
             <h1 className="welcome-title">A focused space for Nostr longform.</h1>
             <p className="welcome-description">
-              Create, edit, and read longform content with a clean, distraction-free experience.
+              Create, edit, and read longform content in a clean, distraction-free environment.
             </p>
             <button 
               onClick={handleLogin}
@@ -45,6 +54,11 @@ export default function Home() {
             >
               {isLoading ? 'Connecting...' : 'Login with Nostr'}
             </button>
+            {isAuthenticated === false && !isWhitelisted && (
+              <div className="whitelist-notice">
+                <p>⚠️ This app is currently in alpha testing. Access is restricted to approved testers.</p>
+              </div>
+            )}
           </div>
         </div>
       </main>

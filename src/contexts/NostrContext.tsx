@@ -2,6 +2,7 @@
 
 import NDK, { NDKNip07Signer } from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { isWhitelisted as checkWhitelist, WHITELISTED_PUBLIC_KEYS } from '@/config/whitelist';
 
 // Create a singleton NDK instance without signer initially
 const ndkInstance = new NDK({
@@ -85,6 +86,7 @@ interface NostrContextType {
   isLoading: boolean;
   isConnected: boolean;
   isAuthenticated: boolean;
+  isWhitelisted: boolean;
   checkAuthentication: () => Promise<boolean>;
 }
 
@@ -93,6 +95,7 @@ const NostrContext = createContext<NostrContextType>({
   isLoading: true,
   isConnected: false,
   isAuthenticated: false,
+  isWhitelisted: false,
   checkAuthentication: async () => false
 });
 
@@ -106,6 +109,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isWhitelisted, setIsWhitelisted] = useState(false);
 
   const checkAuthentication = async (): Promise<boolean> => {
     try {
@@ -115,11 +119,37 @@ export function NostrProvider({ children }: NostrProviderProps) {
       
       const user = await nip07signer.user();
       const hasUser = !!user.npub;
-      setIsAuthenticated(hasUser);
-      return hasUser;
+      
+      if (hasUser) {
+        console.log('🔐 Authentication check - User public key:', user.npub);
+        
+        // Check if the user's public key is whitelisted
+        const whitelisted = checkWhitelist(user.npub);
+        console.log('📋 Whitelist check result:', whitelisted);
+        
+        if (!whitelisted) {
+          console.warn('🚫 Access denied - User not in whitelist:', {
+            npub: user.npub,
+            whitelistEnabled: true,
+            whitelistKeys: WHITELISTED_PUBLIC_KEYS.length
+          });
+        } else {
+          console.log('✅ Access granted - User is whitelisted');
+        }
+        
+        setIsWhitelisted(whitelisted);
+        setIsAuthenticated(whitelisted); // Only authenticate if whitelisted
+        return whitelisted;
+      } else {
+        console.log('❌ No user found - Authentication failed');
+        setIsAuthenticated(false);
+        setIsWhitelisted(false);
+        return false;
+      }
     } catch (error) {
       console.error('NDK Provider: Error checking authentication:', error);
       setIsAuthenticated(false);
+      setIsWhitelisted(false);
       return false;
     }
   };
@@ -153,7 +183,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   }, []);
 
   return (
-    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, checkAuthentication }}>
+    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, isWhitelisted, checkAuthentication }}>
       {children}
     </NostrContext.Provider>
   );
