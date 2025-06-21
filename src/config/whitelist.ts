@@ -8,15 +8,18 @@ export const WHITELISTED_PUBLIC_KEYS: string[] = [
   // '02a1b2c3d4e5f6...', // Or hex format public keys
   'npub1supp0rtpuvrvl7fj2nq7nhk6l4m4kfykxj0c3u9freahyufz3guq9qae45', //Nostr Support
   'npub15ypxpg429uyjmp0zczuza902chuvvr4pn35wfzv8rx6cej4z8clq6jmpcx', //thebullishbitcoiner
-  'npub13fz04jej7nktvtvg24dj926a5ctcmaw6ekp9028eux3pz3csxdrqgd77yu', //SelfBankt
-  'npub1w60s85hfvszc0y6gn3cxj5ddzz5fw6qzz7u6pnyaec2xc2eksnes6n5ftw', //TJ.III
-  'npub19aftr8lpgz8knmswjz0d3l9vzwx97dcvqh0zfuxcxu9d57t4yv3sz4v28l', //Diyana
-  'npub17nd4yu9anyd3004pumgrtazaacujjxwzj36thtqsxskjy0r5urgqf6950x', //isolabellart
-  'npub1aeh2zw4elewy5682lxc6xnlqzjnxksq303gwu2npfaxd49vmde6qcq4nwx', //The Daniel
-  'npub1468024mrwz6uhywjvt8s6vw4e604egnv8tfd2m2utrmqyd3nu3fsutvgjn', //Connie
-  'npub1l59ulrx34m5rle67ds8al32rs309hsl4p5nd9409cmfl55slnrqq8jq78u', //Rare
-  'npub1marc26z8nh3xkj5rcx7ufkatvx6ueqhp5vfw9v5teq26z254renshtf3g0', //Marc
   'npub1ezn0mds24xca744nvrs2kkhpfhnvju92cg62avfgz7sc35xuzdgqlesxpt', //eznomada
+  'npub1marc26z8nh3xkj5rcx7ufkatvx6ueqhp5vfw9v5teq26z254renshtf3g0', //Marc
+  'npub1l59ulrx34m5rle67ds8al32rs309hsl4p5nd9409cmfl55slnrqq8jq78u', //Rare
+  'npub1468024mrwz6uhywjvt8s6vw4e604egnv8tfd2m2utrmqyd3nu3fsutvgjn', //Connie
+  'npub1aeh2zw4elewy5682lxc6xnlqzjnxksq303gwu2npfaxd49vmde6qcq4nwx', //The Daniel
+  'npub17nd4yu9anyd3004pumgrtazaacujjxwzj36thtqsxskjy0r5urgqf6950x', //isolabellart
+  'npub19aftr8lpgz8knmswjz0d3l9vzwx97dcvqh0zfuxcxu9d57t4yv3sz4v28l', //Diyana
+  'npub1w60s85hfvszc0y6gn3cxj5ddzz5fw6qzz7u6pnyaec2xc2eksnes6n5ftw', //TJ.III
+  'npub13fz04jej7nktvtvg24dj926a5ctcmaw6ekp9028eux3pz3csxdrqgd77yu', //SelfBankt
+  'npub1nl8r463jkdtr0qu0k3dht03jt9t59cttk0j8gtxg9wea2russlnq2zf9d0', //heatherlarson
+  'npub1kun5628raxpm7usdkj62z2337hr77f3ryrg9cf0vjpyf4jvk9r9smv3lhe', //dikaios1517
+  'npub19ma2w9dmk3kat0nt0k5dwuqzvmg3va9ezwup0zkakhpwv0vcwvcsg8axkl', //vinney
 ];
 
 // Enable/disable whitelist checking
