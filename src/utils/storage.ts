@@ -4,6 +4,8 @@ export interface Draft {
   content: string;
   lastModified: string;
   sources?: Array<'local' | 'nostr'>;
+  dTag?: string;
+  originalTags?: string[][];
 }
 
 export function getDrafts(): Draft[] {

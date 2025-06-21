@@ -5,7 +5,7 @@
   margin-bottom: 1rem;
 }
 
-.draft-count {
+.content-count {
   font-size: 0.875rem;
   color: var(--text-secondary);
 }
@@ -34,24 +34,24 @@
   height: 1rem;
 }
 
-.draft-section {
+.content-section {
   margin-bottom: 2rem;
 }
 
-.draft-section-title {
+.section-title {
   font-size: 1.2rem;
   font-weight: 600;
   margin-bottom: 1rem;
   color: #333;
 }
 
-.draft-list {
+.draft-list, .published-list {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.draft-item {
+.draft-item, .published-item {
   background-color: #111;
   padding: 1rem;
   border: 1px solid var(--border);
@@ -60,23 +60,23 @@
   position: relative;
 }
 
-.draft-item:hover {
+.draft-item:hover, .published-item:hover {
   background-color: var(--hover);
 }
 
-.draft-content {
+.draft-content, .published-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
   pointer-events: none;
 }
 
-.draft-info {
+.draft-info, .published-info {
   flex: 1;
   pointer-events: none;
 }
 
-.draft-title {
+.draft-title, .published-title {
   font-size: 1.125rem;
   font-weight: 500;
   margin-bottom: 0.5rem;
@@ -86,30 +86,12 @@
   pointer-events: none;
 }
 
-.draft-source {
-  font-size: 0.75rem;
-  font-weight: 500;
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  text-transform: uppercase;
-}
-
-.draft-source.local {
-  background-color: var(--hover);
-  color: var(--text-secondary);
-}
-
-.draft-source.nostr {
-  background-color: rgba(3, 105, 161, 0.2);
-  color: #60a5fa;
-}
-
-.draft-date {
+.draft-date, .published-date {
   font-size: 0.875rem;
   color: var(--text-secondary);
 }
 
-.delete-button {
+.delete-button, .view-button {
   padding: 0.5rem;
   background: none;
   border: none;
@@ -122,11 +104,11 @@
   z-index: 1;
 }
 
-.delete-button:hover {
+.delete-button:hover, .view-button:hover {
   background-color: var(--hover);
 }
 
-.delete-button svg {
+.delete-button svg, .view-button svg {
   width: 1.25rem;
   height: 1.25rem;
   color: var(--text-secondary);
@@ -136,13 +118,24 @@
   color: #f87171;
 }
 
+.view-button:hover svg {
+  color: #60a5fa;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 /* Loading Styles */
 .loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 40vh;
+  min-height: 20vh;
   gap: 1rem;
 }
 

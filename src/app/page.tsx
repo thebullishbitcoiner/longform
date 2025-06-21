@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import DraftList from '@/components/DraftList';
+import Longform from '@/components/Longform';
 import { useNostr } from '@/contexts/NostrContext';
 import toast from 'react-hot-toast';
 
@@ -67,7 +67,7 @@ export default function Home() {
 
   return (
     <main className="container">
-      <DraftList />
+      <Longform />
     </main>
   );
 }

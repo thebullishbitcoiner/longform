@@ -60,19 +60,22 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             console.log('Editor: Querying event from Nostr...');
             const event = await ndk.fetchEvent({ 
               ids: [id],
-              kinds: [30024 as NDKKind],
+              kinds: [30024 as NDKKind, 30023 as NDKKind], // Query both drafts and published posts
               authors: [pubkey]
             });
 
             if (event) {
               console.log('Editor: Found event:', event);
               const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
+              const dTag = event.tags.find(tag => tag[0] === 'd')?.[1];
               const nostrDraft: Draft = {
                 id: event.id,
                 title,
                 content: event.content,
                 lastModified: new Date(event.created_at * 1000).toISOString(),
-                sources: ['nostr']
+                sources: ['nostr'],
+                dTag,
+                originalTags: event.tags // Store original tags for preserving metadata
               };
               console.log('Editor: Created draft object:', nostrDraft);
               setDraft(nostrDraft);
@@ -236,40 +239,94 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           return;
         }
 
-        // Create a new event with updated content
-        // Use the 'd' tag to link it to the original draft
+        // Check if this is an update to an already published post
+        // If the current draft ID is from a kind 30023 event, use it as the "d" tag
+        const isUpdatingPublishedPost = updatedDraft.sources?.includes('nostr') && !updatedDraft.id.startsWith('temp_');
+        
+        // Create and publish the event using NDK's methods
         const ndkEvent = new NDKEvent(ndk);
-        ndkEvent.kind = 30024;
+        ndkEvent.kind = 30023;
         ndkEvent.content = updatedDraft.content;
-        ndkEvent.tags = [
-          ['title', updatedDraft.title],
-          ['published_at', Math.floor(Date.now() / 1000).toString()],
-          ['t', 'longform'],
-          ['d', updatedDraft.id] // Link to the original draft
-        ];
+        
+        console.log('Editor: Setting content for publish:', {
+          draftContent: updatedDraft.content.substring(0, 100) + '...',
+          contentLength: updatedDraft.content.length,
+          isUpdatingPublishedPost
+        });
+        
+        if (isUpdatingPublishedPost && updatedDraft.originalTags) {
+          // Preserve all original metadata, updating only necessary fields
+          const updatedTags = updatedDraft.originalTags.map(tag => {
+            const [tagName, tagValue] = tag;
+            
+            // Update title if it changed
+            if (tagName === 'title') {
+              return ['title', updatedDraft.title];
+            }
+            
+            // Preserve published_at - don't update it for existing posts
+            // published_at should represent the original publication date
+            if (tagName === 'published_at') {
+              return tag; // Keep the original published_at value
+            }
+            
+            // Preserve all other tags as-is
+            return tag;
+          });
+          
+          // Add the "d" tag to link to the original post
+          const dTagValue = updatedDraft.dTag || updatedDraft.id;
+          const hasDTag = updatedTags.some(tag => tag[0] === 'd');
+          if (!hasDTag) {
+            updatedTags.push(['d', dTagValue]);
+          }
+          
+          ndkEvent.tags = updatedTags;
+        } else {
+          // For new posts, use standard tags
+          ndkEvent.tags = [
+            ['title', updatedDraft.title],
+            ['published_at', Math.floor(Date.now() / 1000).toString()],
+            ['t', 'longform']
+          ];
+          
+          // If updating a published post without original tags, add the "d" tag
+          if (isUpdatingPublishedPost) {
+            const dTagValue = updatedDraft.dTag || updatedDraft.id;
+            ndkEvent.tags.push(['d', dTagValue]);
+          }
+        }
+        
         ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
-        // Try to publish with a timeout
-        const publishPromise = ndkEvent.publish();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Publishing timed out')), 10000)
-        );
+        console.log('Editor: Publishing article:', {
+          kind: ndkEvent.kind,
+          content: ndkEvent.content,
+          contentLength: ndkEvent.content.length,
+          draftContent: updatedDraft.content,
+          draftContentLength: updatedDraft.content.length,
+          tags: ndkEvent.tags,
+          created_at: ndkEvent.created_at,
+          isUpdatingPublishedPost,
+          hasOriginalTags: !!updatedDraft.originalTags
+        });
 
-        await Promise.race([publishPromise, timeoutPromise]);
+        await ndkEvent.publish();
         
-        // Update the draft with the new Nostr ID
+        // Update the draft with the new Nostr ID and preserve the original tags
         const savedDraft: Draft = {
           ...updatedDraft,
           id: ndkEvent.id,
           lastModified: new Date().toISOString(),
-          sources: ['nostr']
+          sources: ['nostr'],
+          originalTags: ndkEvent.tags // Update with the new tags for future updates
         };
         setDraft(savedDraft);
         
         // Update the URL to reflect the new Nostr event ID
         router.replace(`/editor/${ndkEvent.id}`);
         
-        toast.success('Draft updated on Nostr!');
+        toast.success('Published successfully!');
       } catch (error: unknown) {
         console.error('Editor: Error updating Nostr draft:', error);
         if (error instanceof Error) {
@@ -338,27 +395,94 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     try {
       setIsPublishing(true);
 
+      // Check if this is an update to an already published post
+      // If the current draft ID is from a kind 30023 event, use it as the "d" tag
+      const isUpdatingPublishedPost = draft.sources?.includes('nostr') && !draft.id.startsWith('temp_');
+      
       // Create and publish the event using NDK's methods
       const ndkEvent = new NDKEvent(ndk);
       ndkEvent.kind = 30023;
       ndkEvent.content = draft.content;
-      ndkEvent.tags = [
-        ['title', draft.title],
-        ['published_at', Math.floor(Date.now() / 1000).toString()],
-        ['t', 'longform']
-      ];
+      
+      console.log('Editor: Setting content for publish:', {
+        draftContent: draft.content.substring(0, 100) + '...',
+        contentLength: draft.content.length,
+        isUpdatingPublishedPost
+      });
+      
+      if (isUpdatingPublishedPost && draft.originalTags) {
+        // Preserve all original metadata, updating only necessary fields
+        const updatedTags = draft.originalTags.map(tag => {
+          const [tagName, tagValue] = tag;
+          
+          // Update title if it changed
+          if (tagName === 'title') {
+            return ['title', draft.title];
+          }
+          
+          // Preserve published_at - don't update it for existing posts
+          // published_at should represent the original publication date
+          if (tagName === 'published_at') {
+            return tag; // Keep the original published_at value
+          }
+          
+          // Preserve all other tags as-is
+          return tag;
+        });
+        
+        // Add the "d" tag to link to the original post
+        const dTagValue = draft.dTag || draft.id;
+        const hasDTag = updatedTags.some(tag => tag[0] === 'd');
+        if (!hasDTag) {
+          updatedTags.push(['d', dTagValue]);
+        }
+        
+        ndkEvent.tags = updatedTags;
+      } else {
+        // For new posts, use standard tags
+        ndkEvent.tags = [
+          ['title', draft.title],
+          ['published_at', Math.floor(Date.now() / 1000).toString()],
+          ['t', 'longform']
+        ];
+        
+        // If updating a published post without original tags, add the "d" tag
+        if (isUpdatingPublishedPost) {
+          const dTagValue = draft.dTag || draft.id;
+          ndkEvent.tags.push(['d', dTagValue]);
+        }
+      }
+      
       ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
       console.log('Editor: Publishing article:', {
         kind: ndkEvent.kind,
         content: ndkEvent.content,
+        contentLength: ndkEvent.content.length,
+        draftContent: draft.content,
+        draftContentLength: draft.content.length,
         tags: ndkEvent.tags,
-        created_at: ndkEvent.created_at
+        created_at: ndkEvent.created_at,
+        isUpdatingPublishedPost,
+        hasOriginalTags: !!draft.originalTags
       });
 
       await ndkEvent.publish();
+      
+      // Update the draft with the new Nostr ID and preserve the original tags
+      const updatedDraft: Draft = {
+        ...draft,
+        id: ndkEvent.id,
+        lastModified: new Date().toISOString(),
+        sources: ['nostr'],
+        originalTags: ndkEvent.tags // Update with the new tags for future updates
+      };
+      setDraft(updatedDraft);
+      
+      // Update the URL to reflect the new Nostr event ID
+      router.replace(`/editor/${ndkEvent.id}`);
+      
       toast.success('Published successfully!');
-      router.push('/reader'); // Redirect to reader page
     } catch (error) {
       console.error('Error publishing:', error);
       toast.error('Failed to publish. Please try again.');
@@ -419,7 +543,14 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             {isPublishing ? 'Saving...' : !isConnected ? 'Connecting...' : 'Save'}
           </button>
           <button 
-            onClick={handlePublish} 
+            onClick={async () => {
+              // First save the current content from the editor
+              if (editorRef.current) {
+                editorRef.current.save();
+              }
+              // Then publish
+              await handlePublish();
+            }} 
             className="action-button publish-button"
             title="Publish to Nostr"
             disabled={isPublishing || !isConnected}
