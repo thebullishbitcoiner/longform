@@ -387,26 +387,29 @@ export default function Longform() {
                     <div className="published-title">
                       {note.title}
                     </div>
-                    <div className="published-date">
-                      Published: {new Date(note.publishedAt).toLocaleDateString('en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })} {new Date(note.publishedAt).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      })}
+                    <div className="published-dates">
+                      <div className="last-modified-date">
+                        Last Modified: {new Date(note.createdAt).toLocaleDateString('en-US', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          year: '2-digit'
+                        })} {new Date(note.createdAt).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      <div className="published-date-info">
+                        Published: {new Date(note.publishedAt).toLocaleDateString('en-US', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          year: '2-digit'
+                        })} {new Date(note.publishedAt).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleViewPublished(note.id);
-                    }}
-                    className="view-button"
-                  >
-                    <EyeIcon />
-                  </button>
                 </div>
               </div>
             ))}

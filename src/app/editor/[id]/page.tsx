@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Draft } from '@/utils/storage';
 import { use } from 'react';
 import Editor, { EditorRef } from '@/components/Editor';
@@ -68,6 +68,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               console.log('Editor: Found event:', event);
               const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
               const dTag = event.tags.find(tag => tag[0] === 'd')?.[1];
+              const coverImage = event.tags.find(tag => tag[0] === 'image')?.[1];
               const nostrDraft: Draft = {
                 id: event.id,
                 title,
@@ -75,6 +76,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 lastModified: new Date(event.created_at * 1000).toISOString(),
                 sources: ['nostr'],
                 dTag,
+                coverImage,
                 originalTags: event.tags // Store original tags for preserving metadata
               };
               console.log('Editor: Created draft object:', nostrDraft);
@@ -184,6 +186,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ['published_at', Math.floor(Date.now() / 1000).toString()],
           ['t', 'longform']
         ];
+        
+        // Add cover image tag if present
+        if (updatedDraft.coverImage) {
+          ndkEvent.tags.push(['image', updatedDraft.coverImage]);
+        }
+        
         ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
         // Try to publish with a timeout
@@ -245,7 +253,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         
         // Create and publish the event using NDK's methods
         const ndkEvent = new NDKEvent(ndk);
-        ndkEvent.kind = 30023;
+        ndkEvent.kind = 30024;
         ndkEvent.content = updatedDraft.content;
         
         console.log('Editor: Setting content for publish:', {
@@ -281,6 +289,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             updatedTags.push(['d', dTagValue]);
           }
           
+          // Add or update cover image tag
+          const hasImageTag = updatedTags.some(tag => tag[0] === 'image');
+          if (updatedDraft.coverImage) {
+            if (hasImageTag) {
+              // Update existing image tag
+              const imageTagIndex = updatedTags.findIndex(tag => tag[0] === 'image');
+              updatedTags[imageTagIndex] = ['image', updatedDraft.coverImage];
+            } else {
+              // Add new image tag
+              updatedTags.push(['image', updatedDraft.coverImage]);
+            }
+          }
+          
           ndkEvent.tags = updatedTags;
         } else {
           // For new posts, use standard tags
@@ -294,6 +315,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           if (isUpdatingPublishedPost) {
             const dTagValue = updatedDraft.dTag || updatedDraft.id;
             ndkEvent.tags.push(['d', dTagValue]);
+          }
+          
+          // Add cover image tag if present
+          if (updatedDraft.coverImage) {
+            ndkEvent.tags.push(['image', updatedDraft.coverImage]);
           }
         }
         
@@ -386,6 +412,45 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     input.click();
   };
 
+  const handleCoverImageUpload = async () => {
+    if (!draft) return;
+
+    if (!isAuthenticated) {
+      toast.error('Please log in to upload cover images.');
+      return;
+    }
+
+    // Create a file input element
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        console.log('Editor: Uploading cover image:', file.name);
+        const [[, url]] = await uploader.upload(file);
+        console.log('Editor: Cover image uploaded to:', url);
+        
+        const updatedDraft = {
+          ...draft,
+          coverImage: url,
+          lastModified: new Date().toISOString(),
+        };
+        setDraft(updatedDraft);
+        handleSave(updatedDraft);
+        toast.success('Cover image uploaded successfully!');
+      } catch (error) {
+        console.error('Editor: Error uploading cover image:', error);
+        toast.error('Failed to upload cover image. Please try again.');
+      }
+    };
+
+    input.click();
+  };
+
   const handlePublish = async () => {
     if (!draft || !ndk || !isAuthenticated) {
       toast.error('Please log in with nostr-login to publish.');
@@ -437,6 +502,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           updatedTags.push(['d', dTagValue]);
         }
         
+        // Add or update cover image tag
+        const hasImageTag = updatedTags.some(tag => tag[0] === 'image');
+        if (draft.coverImage) {
+          if (hasImageTag) {
+            // Update existing image tag
+            const imageTagIndex = updatedTags.findIndex(tag => tag[0] === 'image');
+            updatedTags[imageTagIndex] = ['image', draft.coverImage];
+          } else {
+            // Add new image tag
+            updatedTags.push(['image', draft.coverImage]);
+          }
+        }
+        
         ndkEvent.tags = updatedTags;
       } else {
         // For new posts, use standard tags
@@ -450,6 +528,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         if (isUpdatingPublishedPost) {
           const dTagValue = draft.dTag || draft.id;
           ndkEvent.tags.push(['d', dTagValue]);
+        }
+        
+        // Add cover image tag if present
+        if (draft.coverImage) {
+          ndkEvent.tags.push(['image', draft.coverImage]);
         }
       }
       
@@ -511,6 +594,44 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           <ArrowLeftIcon />
           Back to Drafts
         </button>
+        
+        {/* Cover Image Section */}
+        <div className="cover-image-section">
+          {draft.coverImage ? (
+            <div className="cover-image-preview">
+              <img 
+                src={draft.coverImage} 
+                alt="Cover" 
+                className="cover-image"
+                onError={(e) => {
+                  console.error('Failed to load cover image:', draft.coverImage);
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+              <div className="cover-image-overlay">
+                <button 
+                  onClick={handleCoverImageUpload}
+                  className="cover-image-action"
+                  title="Change Cover Image"
+                >
+                  <PhotoIcon />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="cover-image-placeholder">
+              <button 
+                onClick={handleCoverImageUpload}
+                className="cover-image-upload-btn"
+                title="Add Cover Image"
+              >
+                <PhotoIcon />
+                <span>Add Cover Image</span>
+              </button>
+            </div>
+          )}
+        </div>
+        
         <input
           type="text"
           value={draft.title}

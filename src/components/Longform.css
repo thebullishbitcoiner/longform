@@ -91,6 +91,27 @@
   color: var(--text-secondary);
 }
 
+.published-date {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.published-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.last-modified-date {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.published-date-info {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
 .delete-button, .view-button {
   padding: 0.5rem;
   background: none;

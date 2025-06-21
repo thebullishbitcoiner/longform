@@ -6,6 +6,7 @@ export interface Draft {
   sources?: Array<'local' | 'nostr'>;
   dTag?: string;
   originalTags?: string[][];
+  coverImage?: string;
 }
 
 export function getDrafts(): Draft[] {
