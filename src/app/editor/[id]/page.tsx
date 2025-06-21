@@ -257,7 +257,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         if (isUpdatingPublishedPost && updatedDraft.originalTags) {
           // Preserve all original metadata, updating only necessary fields
           const updatedTags = updatedDraft.originalTags.map(tag => {
-            const [tagName, tagValue] = tag;
+            const [tagName] = tag;
             
             // Update title if it changed
             if (tagName === 'title') {
@@ -413,7 +413,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       if (isUpdatingPublishedPost && draft.originalTags) {
         // Preserve all original metadata, updating only necessary fields
         const updatedTags = draft.originalTags.map(tag => {
-          const [tagName, tagValue] = tag;
+          const [tagName] = tag;
           
           // Update title if it changed
           if (tagName === 'title') {
