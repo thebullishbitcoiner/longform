@@ -9,6 +9,7 @@ export const WHITELISTED_PUBLIC_KEYS: string[] = [
   'npub1supp0rtpuvrvl7fj2nq7nhk6l4m4kfykxj0c3u9freahyufz3guq9qae45', //Nostr Support
   'npub15ypxpg429uyjmp0zczuza902chuvvr4pn35wfzv8rx6cej4z8clq6jmpcx', //thebullishbitcoiner
   'npub1w60s85hfvszc0y6gn3cxj5ddzz5fw6qzz7u6pnyaec2xc2eksnes6n5ftw', //TJ.III
+  'npub19aftr8lpgz8knmswjz0d3l9vzwx97dcvqh0zfuxcxu9d57t4yv3sz4v28l', //Diyana
   'npub17nd4yu9anyd3004pumgrtazaacujjxwzj36thtqsxskjy0r5urgqf6950x', //isolabellart
   'npub1aeh2zw4elewy5682lxc6xnlqzjnxksq303gwu2npfaxd49vmde6qcq4nwx', //The Daniel
   'npub1468024mrwz6uhywjvt8s6vw4e604egnv8tfd2m2utrmqyd3nu3fsutvgjn', //Connie
