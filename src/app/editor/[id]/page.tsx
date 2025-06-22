@@ -752,7 +752,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       <div className="editor-header">
         <button onClick={() => router.push('/')} className="back-button">
           <ArrowLeftIcon />
-          Back to Drafts
+          Back to Posts
         </button>
         
         {/* Cover Image Section */}

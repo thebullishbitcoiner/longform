@@ -312,22 +312,19 @@ export default function Longform() {
   return (
     <>
       <div className="action-bar">
-        <div className="content-count">
-          {isLoading ? 'Loading content...' : `${drafts.length} ${drafts.length === 1 ? 'draft' : 'drafts'}`}
-        </div>
-        <button onClick={handleCreateDraft} className="new-draft-button" disabled={isLoading}>
-          <PlusIcon />
-          New Draft
-        </button>
       </div>
 
       {/* Drafts Section */}
       <div className="content-section">
-        <h2 className="section-title">Drafts</h2>
+        <div className="section-header">
+          <h2 className="section-title">Drafts ({drafts.length})</h2>
+          <button onClick={handleCreateDraft} className="new-draft-button" disabled={isLoading}>
+            <PlusIcon />
+          </button>
+        </div>
         {isLoading ? (
           <div className="loading-container">
             <div className="loading-spinner"></div>
-            <p>Loading drafts from Nostr...</p>
           </div>
         ) : (
           <div className="draft-list">
@@ -368,11 +365,12 @@ export default function Longform() {
 
       {/* Published Section */}
       <div className="content-section">
-        <h2 className="section-title">Published</h2>
+        <div className="section-header">
+          <h2 className="section-title">Published ({publishedNotes.length})</h2>
+        </div>
         {isLoadingPublished ? (
           <div className="loading-container">
             <div className="loading-spinner"></div>
-            <p>Loading published notes from Nostr...</p>
           </div>
         ) : (
           <div className="published-list">
