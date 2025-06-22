@@ -20,6 +20,10 @@ export const WHITELISTED_PUBLIC_KEYS: string[] = [
   'npub1nl8r463jkdtr0qu0k3dht03jt9t59cttk0j8gtxg9wea2russlnq2zf9d0', //heatherlarson
   'npub1kun5628raxpm7usdkj62z2337hr77f3ryrg9cf0vjpyf4jvk9r9smv3lhe', //dikaios1517
   'npub19ma2w9dmk3kat0nt0k5dwuqzvmg3va9ezwup0zkakhpwv0vcwvcsg8axkl', //vinney
+  'npub1xe36pc9dk2emzulxw0tp8ytlthpty80ry89w5rw3k28fdyzalprq0au0nh', //FEW_BTC
+  'npub1hqva2radggqltaj8n7vqpj9pkddc7lf6cmsuchm3dp4kr52syeqsrap4sd', //modulo
+  'npub1wf0w8jcnhav6wu7umz2pg6hzrcvt3h874h5g7uq9p0r3m8taxsssfafcny', //Ryan Matta
+  'npub1mgvmt553uphdpxa9gk79xejq3hyzh2xfa8uh6vh236nq78mvh74q8tr9yd', //n0>1
 ];
 
 // Enable/disable whitelist checking
