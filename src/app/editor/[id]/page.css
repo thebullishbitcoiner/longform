@@ -86,6 +86,46 @@
   color: var(--text-secondary);
 }
 
+.title-input-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.input-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summary-input {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 400;
+  outline: none;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  resize: none;
+  min-height: 80px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.summary-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.summary-input:focus {
+  border-color: var(--text);
+}
+
 .editor-footer {
   position: fixed;
   bottom: 0;
@@ -285,4 +325,93 @@
 .cover-image-upload-btn span {
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+.hashtags-container {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.hashtag-input-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 400;
+  outline: none;
+  padding: 0.5rem;
+  font-family: inherit;
+  line-height: 1.5;
+  min-height: 2.5rem;
+  transition: border-color 0.2s;
+}
+
+.hashtag-input-wrapper:focus-within {
+  border-color: var(--text);
+}
+
+.hashtags-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.hashtag-tag-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: var(--background-secondary);
+  color: var(--text);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.hashtag-remove-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  padding: 0;
+  margin-left: 0.25rem;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.hashtag-remove-inline:hover {
+  background-color: var(--text-secondary);
+  color: var(--background);
+}
+
+.hashtag-input {
+  flex: 1;
+  min-width: 120px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 400;
+  outline: none;
+  padding: 0;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.hashtag-input::placeholder {
+  color: var(--text-secondary);
 } 

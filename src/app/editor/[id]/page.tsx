@@ -69,6 +69,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
               const dTag = event.tags.find(tag => tag[0] === 'd')?.[1];
               const coverImage = event.tags.find(tag => tag[0] === 'image')?.[1];
+              const summary = event.tags.find(tag => tag[0] === 'summary')?.[1];
+              const hashtags = event.tags
+                .filter(tag => tag[0] === 't' && tag[1] !== 'longform')
+                .map(tag => tag[1]);
               const nostrDraft: Draft = {
                 id: event.id,
                 title,
@@ -77,6 +81,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 sources: ['nostr'],
                 dTag,
                 coverImage,
+                summary,
+                hashtags,
                 originalTags: event.tags // Store original tags for preserving metadata
               };
               console.log('Editor: Created draft object:', nostrDraft);
@@ -157,6 +163,68 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     // For temporary drafts, we don't save to Nostr until the save button is clicked
   };
 
+  const handleSummaryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (!draft) return;
+    const updatedDraft = {
+      ...draft,
+      summary: e.target.value,
+      lastModified: new Date().toISOString(),
+    };
+    setDraft(updatedDraft);
+    // For temporary drafts, we don't save to Nostr until the save button is clicked
+  };
+
+  const [hashtagInput, setHashtagInput] = useState('');
+
+  const handleHashtagInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setHashtagInput(value);
+    
+    // Check if the last character is a comma
+    if (value.endsWith(',')) {
+      const hashtag = value.slice(0, -1).trim(); // Remove comma and trim whitespace
+      if (hashtag && draft && !draft.hashtags?.includes(hashtag)) {
+        const updatedDraft = {
+          ...draft,
+          hashtags: [...(draft.hashtags || []), hashtag],
+          lastModified: new Date().toISOString(),
+        };
+        setDraft(updatedDraft);
+        setHashtagInput(''); // Clear the input
+      } else {
+        setHashtagInput(''); // Clear the input even if hashtag already exists
+      }
+    }
+  };
+
+  const handleHashtagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && hashtagInput.trim() && draft) {
+      e.preventDefault();
+      const hashtag = hashtagInput.trim();
+      if (!draft.hashtags?.includes(hashtag)) {
+        const updatedDraft = {
+          ...draft,
+          hashtags: [...(draft.hashtags || []), hashtag],
+          lastModified: new Date().toISOString(),
+        };
+        setDraft(updatedDraft);
+        setHashtagInput('');
+      } else {
+        setHashtagInput('');
+      }
+    }
+  };
+
+  const removeHashtag = (hashtagToRemove: string) => {
+    if (!draft) return;
+    const updatedDraft = {
+      ...draft,
+      hashtags: draft.hashtags?.filter(hashtag => hashtag !== hashtagToRemove) || [],
+      lastModified: new Date().toISOString(),
+    };
+    setDraft(updatedDraft);
+  };
+
   const handleSave = async (updatedDraft: Draft) => {
     // Check if this is a temporary draft
     const isTemporaryDraft = updatedDraft.id.startsWith('temp_');
@@ -186,6 +254,18 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ['published_at', Math.floor(Date.now() / 1000).toString()],
           ['t', 'longform']
         ];
+        
+        // Add hashtags as 't' tags
+        if (updatedDraft.hashtags) {
+          updatedDraft.hashtags.forEach(hashtag => {
+            ndkEvent.tags.push(['t', hashtag]);
+          });
+        }
+        
+        // Add summary tag if present
+        if (updatedDraft.summary) {
+          ndkEvent.tags.push(['summary', updatedDraft.summary]);
+        }
         
         // Add cover image tag if present
         if (updatedDraft.coverImage) {
@@ -272,6 +352,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               return ['title', updatedDraft.title];
             }
             
+            // Update summary if it changed
+            if (tagName === 'summary') {
+              return ['summary', updatedDraft.summary || ''];
+            }
+            
             // Preserve published_at - don't update it for existing posts
             // published_at should represent the original publication date
             if (tagName === 'published_at') {
@@ -289,20 +374,43 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             updatedTags.push(['d', dTagValue]);
           }
           
-          // Add or update cover image tag
-          const hasImageTag = updatedTags.some(tag => tag[0] === 'image');
-          if (updatedDraft.coverImage) {
-            if (hasImageTag) {
-              // Update existing image tag
-              const imageTagIndex = updatedTags.findIndex(tag => tag[0] === 'image');
-              updatedTags[imageTagIndex] = ['image', updatedDraft.coverImage];
+          // Remove existing hashtags (t tags except 'longform') and add new ones
+          const filteredTags = updatedTags.filter(tag => !(tag[0] === 't' && tag[1] !== 'longform'));
+          
+          // Add hashtags as 't' tags
+          if (updatedDraft.hashtags) {
+            updatedDraft.hashtags.forEach(hashtag => {
+              filteredTags.push(['t', hashtag]);
+            });
+          }
+          
+          // Add or update summary tag
+          const hasSummaryTag = filteredTags.some(tag => tag[0] === 'summary');
+          if (updatedDraft.summary) {
+            if (hasSummaryTag) {
+              // Update existing summary tag
+              const summaryTagIndex = filteredTags.findIndex(tag => tag[0] === 'summary');
+              filteredTags[summaryTagIndex] = ['summary', updatedDraft.summary];
             } else {
-              // Add new image tag
-              updatedTags.push(['image', updatedDraft.coverImage]);
+              // Add new summary tag
+              filteredTags.push(['summary', updatedDraft.summary]);
             }
           }
           
-          ndkEvent.tags = updatedTags;
+          // Add or update cover image tag
+          const hasImageTag = filteredTags.some(tag => tag[0] === 'image');
+          if (updatedDraft.coverImage) {
+            if (hasImageTag) {
+              // Update existing image tag
+              const imageTagIndex = filteredTags.findIndex(tag => tag[0] === 'image');
+              filteredTags[imageTagIndex] = ['image', updatedDraft.coverImage];
+            } else {
+              // Add new image tag
+              filteredTags.push(['image', updatedDraft.coverImage]);
+            }
+          }
+          
+          ndkEvent.tags = filteredTags;
         } else {
           // For new posts, use standard tags
           ndkEvent.tags = [
@@ -315,6 +423,18 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           if (isUpdatingPublishedPost) {
             const dTagValue = updatedDraft.dTag || updatedDraft.id;
             ndkEvent.tags.push(['d', dTagValue]);
+          }
+          
+          // Add hashtags as 't' tags
+          if (updatedDraft.hashtags) {
+            updatedDraft.hashtags.forEach(hashtag => {
+              ndkEvent.tags.push(['t', hashtag]);
+            });
+          }
+          
+          // Add summary tag if present
+          if (updatedDraft.summary) {
+            ndkEvent.tags.push(['summary', updatedDraft.summary]);
           }
           
           // Add cover image tag if present
@@ -485,6 +605,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             return ['title', draft.title];
           }
           
+          // Update summary if it changed
+          if (tagName === 'summary') {
+            return ['summary', draft.summary || ''];
+          }
+          
           // Preserve published_at - don't update it for existing posts
           // published_at should represent the original publication date
           if (tagName === 'published_at') {
@@ -502,20 +627,43 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           updatedTags.push(['d', dTagValue]);
         }
         
-        // Add or update cover image tag
-        const hasImageTag = updatedTags.some(tag => tag[0] === 'image');
-        if (draft.coverImage) {
-          if (hasImageTag) {
-            // Update existing image tag
-            const imageTagIndex = updatedTags.findIndex(tag => tag[0] === 'image');
-            updatedTags[imageTagIndex] = ['image', draft.coverImage];
+        // Remove existing hashtags (t tags except 'longform') and add new ones
+        const filteredTags = updatedTags.filter(tag => !(tag[0] === 't' && tag[1] !== 'longform'));
+        
+        // Add hashtags as 't' tags
+        if (draft.hashtags) {
+          draft.hashtags.forEach(hashtag => {
+            filteredTags.push(['t', hashtag]);
+          });
+        }
+        
+        // Add or update summary tag
+        const hasSummaryTag = filteredTags.some(tag => tag[0] === 'summary');
+        if (draft.summary) {
+          if (hasSummaryTag) {
+            // Update existing summary tag
+            const summaryTagIndex = filteredTags.findIndex(tag => tag[0] === 'summary');
+            filteredTags[summaryTagIndex] = ['summary', draft.summary];
           } else {
-            // Add new image tag
-            updatedTags.push(['image', draft.coverImage]);
+            // Add new summary tag
+            filteredTags.push(['summary', draft.summary]);
           }
         }
         
-        ndkEvent.tags = updatedTags;
+        // Add or update cover image tag
+        const hasImageTag = filteredTags.some(tag => tag[0] === 'image');
+        if (draft.coverImage) {
+          if (hasImageTag) {
+            // Update existing image tag
+            const imageTagIndex = filteredTags.findIndex(tag => tag[0] === 'image');
+            filteredTags[imageTagIndex] = ['image', draft.coverImage];
+          } else {
+            // Add new image tag
+            filteredTags.push(['image', draft.coverImage]);
+          }
+        }
+        
+        ndkEvent.tags = filteredTags;
       } else {
         // For new posts, use standard tags
         ndkEvent.tags = [
@@ -528,6 +676,18 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         if (isUpdatingPublishedPost) {
           const dTagValue = draft.dTag || draft.id;
           ndkEvent.tags.push(['d', dTagValue]);
+        }
+        
+        // Add hashtags as 't' tags
+        if (draft.hashtags) {
+          draft.hashtags.forEach(hashtag => {
+            ndkEvent.tags.push(['t', hashtag]);
+          });
+        }
+        
+        // Add summary tag if present
+        if (draft.summary) {
+          ndkEvent.tags.push(['summary', draft.summary]);
         }
         
         // Add cover image tag if present
@@ -632,13 +792,63 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           )}
         </div>
         
-        <input
-          type="text"
-          value={draft.title}
-          onChange={handleTitleChange}
-          className="title-input"
-          placeholder="Untitled Draft"
-        />
+        <div className="title-input-container">
+          <label htmlFor="title-input" className="input-label">
+            Title
+          </label>
+          <input
+            id="title-input"
+            type="text"
+            value={draft.title}
+            onChange={handleTitleChange}
+            className="title-input"
+          />
+          
+          <label htmlFor="summary-input" className="input-label">
+            Summary
+          </label>
+          <textarea
+            id="summary-input"
+            value={draft.summary || ''}
+            onChange={handleSummaryChange}
+            className="summary-input"
+            rows={3}
+          />
+          
+          <label htmlFor="hashtag-input" className="input-label">
+            Hashtags
+          </label>
+          <div className="hashtags-container">
+            <div className="hashtag-input-wrapper">
+              {draft.hashtags && draft.hashtags.length > 0 && (
+                <div className="hashtags-inline">
+                  {draft.hashtags.map((hashtag, index) => (
+                    <span key={index} className="hashtag-tag-inline">
+                      #{hashtag}
+                      <button
+                        type="button"
+                        onClick={() => removeHashtag(hashtag)}
+                        className="hashtag-remove-inline"
+                        title="Remove hashtag"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                id="hashtag-input"
+                type="text"
+                value={hashtagInput}
+                onChange={handleHashtagInputChange}
+                onKeyDown={handleHashtagKeyDown}
+                className="hashtag-input"
+                placeholder={draft.hashtags && draft.hashtags.length > 0 ? "" : "Type hashtags separated by commas..."}
+              />
+            </div>
+          </div>
+        </div>
       </div>
       <Editor draft={draft} onSave={handleSave} ref={editorRef} />
       <div className="editor-footer">

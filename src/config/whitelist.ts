@@ -2,10 +2,7 @@ import { normalizePublicKey, isValidPublicKey } from '@/utils/nostr';
 
 // Whitelist of approved public keys for alpha testing
 // Add npub or hex public keys here to restrict access during alpha phase
-export const WHITELISTED_PUBLIC_KEYS: string[] = [
-  // Example: Add your approved testers' public keys here
-  // 'npub1example...', // Replace with actual npub keys
-  // '02a1b2c3d4e5f6...', // Or hex format public keys
+export const ALPHA_WHITELIST: string[] = [
   'npub1supp0rtpuvrvl7fj2nq7nhk6l4m4kfykxj0c3u9freahyufz3guq9qae45', //Nostr Support
   'npub15ypxpg429uyjmp0zczuza902chuvvr4pn35wfzv8rx6cej4z8clq6jmpcx', //thebullishbitcoiner
   'npub1ezn0mds24xca744nvrs2kkhpfhnvju92cg62avfgz7sc35xuzdgqlesxpt', //eznomada
@@ -24,6 +21,7 @@ export const WHITELISTED_PUBLIC_KEYS: string[] = [
   'npub1hqva2radggqltaj8n7vqpj9pkddc7lf6cmsuchm3dp4kr52syeqsrap4sd', //modulo
   'npub1wf0w8jcnhav6wu7umz2pg6hzrcvt3h874h5g7uq9p0r3m8taxsssfafcny', //Ryan Matta
   'npub1mgvmt553uphdpxa9gk79xejq3hyzh2xfa8uh6vh236nq78mvh74q8tr9yd', //n0>1
+  'npub1ftkx02mg3u6l6ksfzv6r0nzed03cqcmy9me3vf75zkcjeca0alvq7lskzl', //Dave Plotz
 ];
 
 // Enable/disable whitelist checking
@@ -34,8 +32,8 @@ export const isWhitelisted = (publicKey: string): boolean => {
   console.log('🔍 Checking whitelist for public key:', publicKey);
   console.log('📋 Whitelist status:', {
     enabled: ENABLE_WHITELIST,
-    keysCount: WHITELISTED_PUBLIC_KEYS.length,
-    keys: WHITELISTED_PUBLIC_KEYS
+    keysCount: ALPHA_WHITELIST.length,
+    keys: ALPHA_WHITELIST
   });
 
   if (!ENABLE_WHITELIST) {
@@ -43,7 +41,7 @@ export const isWhitelisted = (publicKey: string): boolean => {
     return true; // If whitelist is disabled, allow all users
   }
 
-  if (WHITELISTED_PUBLIC_KEYS.length === 0) {
+  if (ALPHA_WHITELIST.length === 0) {
     console.log('🚫 Whitelist enabled but empty - denying all users');
     return false; // If whitelist is empty, deny all users
   }
@@ -58,7 +56,7 @@ export const isWhitelisted = (publicKey: string): boolean => {
   console.log('🔧 Normalized input key:', normalizedInput);
 
   // Check if the normalized public key matches any in the whitelist
-  const isWhitelisted = WHITELISTED_PUBLIC_KEYS.some(whitelistedKey => {
+  const isWhitelisted = ALPHA_WHITELIST.some(whitelistedKey => {
     const normalizedWhitelisted = normalizePublicKey(whitelistedKey);
     const matches = normalizedWhitelisted && normalizedWhitelisted === normalizedInput;
     console.log('🔍 Comparing with whitelisted key:', {
@@ -86,12 +84,12 @@ export const addToWhitelist = (publicKey: string): boolean => {
   }
 
   // Check if already in whitelist
-  if (WHITELISTED_PUBLIC_KEYS.some(key => normalizePublicKey(key) === normalized)) {
+  if (ALPHA_WHITELIST.some(key => normalizePublicKey(key) === normalized)) {
     console.warn('Public key already in whitelist:', publicKey);
     return false;
   }
 
   // Add to whitelist (this would need to be persisted in a real implementation)
-  WHITELISTED_PUBLIC_KEYS.push(publicKey);
+  ALPHA_WHITELIST.push(publicKey);
   return true;
 }; 

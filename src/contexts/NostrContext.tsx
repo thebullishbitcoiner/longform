@@ -2,7 +2,7 @@
 
 import NDK, { NDKNip07Signer } from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { isWhitelisted as checkWhitelist, WHITELISTED_PUBLIC_KEYS } from '@/config/whitelist';
+import { isWhitelisted as checkWhitelist, ALPHA_WHITELIST } from '@/config/whitelist';
 
 // Create a singleton NDK instance without signer initially
 const ndkInstance = new NDK({
@@ -131,7 +131,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
           console.warn('🚫 Access denied - User not in whitelist:', {
             npub: user.npub,
             whitelistEnabled: true,
-            whitelistKeys: WHITELISTED_PUBLIC_KEYS.length
+            whitelistKeys: ALPHA_WHITELIST.length
           });
         } else {
           console.log('✅ Access granted - User is whitelisted');

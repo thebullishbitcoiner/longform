@@ -7,6 +7,8 @@ export interface Draft {
   dTag?: string;
   originalTags?: string[][];
   coverImage?: string;
+  summary?: string;
+  hashtags?: string[];
 }
 
 export function getDrafts(): Draft[] {
