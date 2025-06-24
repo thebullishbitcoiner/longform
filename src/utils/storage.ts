@@ -9,6 +9,7 @@ export interface Draft {
   coverImage?: string;
   summary?: string;
   hashtags?: string[];
+  kind?: number; // 30024 for drafts, 30023 for published posts
 }
 
 export function getDrafts(): Draft[] {

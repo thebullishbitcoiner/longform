@@ -17,6 +17,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [draft, setDraft] = useState<Draft | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const router = useRouter();
   const { id } = use(params);
   const { ndk, isConnected, isAuthenticated } = useNostr();
@@ -35,7 +36,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             title: 'Untitled Draft',
             content: '',
             lastModified: new Date().toISOString(),
-            sources: ['local']
+            sources: ['local'],
+            kind: 30024 // Temporary drafts are kind 30024
           };
           console.log('Editor: Created temporary draft:', tempDraft);
           setDraft(tempDraft);
@@ -83,7 +85,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 coverImage,
                 summary,
                 hashtags,
-                originalTags: event.tags // Store original tags for preserving metadata
+                originalTags: event.tags, // Store original tags for preserving metadata
+                kind: event.kind // Store the event kind to determine if it's a draft or published post
               };
               console.log('Editor: Created draft object:', nostrDraft);
               setDraft(nostrDraft);
@@ -160,6 +163,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       lastModified: new Date().toISOString(),
     };
     setDraft(updatedDraft);
+    setHasUnsavedChanges(true);
     // For temporary drafts, we don't save to Nostr until the save button is clicked
   };
 
@@ -171,6 +175,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       lastModified: new Date().toISOString(),
     };
     setDraft(updatedDraft);
+    setHasUnsavedChanges(true);
     // For temporary drafts, we don't save to Nostr until the save button is clicked
   };
 
@@ -191,6 +196,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         };
         setDraft(updatedDraft);
         setHashtagInput(''); // Clear the input
+        setHasUnsavedChanges(true);
       } else {
         setHashtagInput(''); // Clear the input even if hashtag already exists
       }
@@ -209,6 +215,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         };
         setDraft(updatedDraft);
         setHashtagInput('');
+        setHasUnsavedChanges(true);
       } else {
         setHashtagInput('');
       }
@@ -223,9 +230,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       lastModified: new Date().toISOString(),
     };
     setDraft(updatedDraft);
+    setHasUnsavedChanges(true);
   };
 
   const handleSave = async (updatedDraft: Draft) => {
+    // Only allow saving drafts (kind 30024), not published posts
+    if (updatedDraft.kind !== 30024) {
+      console.log('Editor: Cannot save published post as draft');
+      return;
+    }
+
     // Check if this is a temporary draft
     const isTemporaryDraft = updatedDraft.id.startsWith('temp_');
     
@@ -289,6 +303,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           sources: ['nostr']
         };
         setDraft(savedDraft);
+        setHasUnsavedChanges(false);
         
         // Update the URL to reflect the new Nostr event ID
         router.replace(`/editor/${ndkEvent.id}`);
@@ -451,6 +466,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           contentLength: ndkEvent.content.length,
           draftContent: updatedDraft.content,
           draftContentLength: updatedDraft.content.length,
+          currentContent: updatedDraft.content,
+          currentContentLength: updatedDraft.content.length,
           tags: ndkEvent.tags,
           created_at: ndkEvent.created_at,
           isUpdatingPublishedPost,
@@ -463,11 +480,14 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         const savedDraft: Draft = {
           ...updatedDraft,
           id: ndkEvent.id,
+          content: updatedDraft.content, // Include the current content
           lastModified: new Date().toISOString(),
           sources: ['nostr'],
-          originalTags: ndkEvent.tags // Update with the new tags for future updates
+          originalTags: ndkEvent.tags, // Update with the new tags for future updates
+          kind: 30024 // Drafts are kind 30024
         };
         setDraft(savedDraft);
+        setHasUnsavedChanges(false);
         
         // Update the URL to reflect the new Nostr event ID
         router.replace(`/editor/${ndkEvent.id}`);
@@ -522,7 +542,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           lastModified: new Date().toISOString(),
         };
         setDraft(updatedDraft);
-        handleSave(updatedDraft);
+        setHasUnsavedChanges(true);
+        // Don't automatically save - let the user decide when to save
       } catch (error) {
         console.error('Editor: Error uploading image:', error);
         alert('Failed to upload image. Please try again.');
@@ -560,7 +581,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           lastModified: new Date().toISOString(),
         };
         setDraft(updatedDraft);
-        handleSave(updatedDraft);
+        setHasUnsavedChanges(true);
+        // Don't automatically save - let the user decide when to save
         toast.success('Cover image uploaded successfully!');
       } catch (error) {
         console.error('Editor: Error uploading cover image:', error);
@@ -580,6 +602,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     try {
       setIsPublishing(true);
 
+      // First, get the latest content from the editor
+      let currentContent = draft.content;
+      if (editorRef.current) {
+        // Get the current content directly from the editor
+        currentContent = editorRef.current.getContent();
+      }
+
       // Check if this is an update to an already published post
       // If the current draft ID is from a kind 30023 event, use it as the "d" tag
       const isUpdatingPublishedPost = draft.sources?.includes('nostr') && !draft.id.startsWith('temp_');
@@ -587,11 +616,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       // Create and publish the event using NDK's methods
       const ndkEvent = new NDKEvent(ndk);
       ndkEvent.kind = 30023;
-      ndkEvent.content = draft.content;
+      ndkEvent.content = currentContent;
       
       console.log('Editor: Setting content for publish:', {
-        draftContent: draft.content.substring(0, 100) + '...',
-        contentLength: draft.content.length,
+        draftContent: currentContent.substring(0, 100) + '...',
+        contentLength: currentContent.length,
         isUpdatingPublishedPost
       });
       
@@ -664,6 +693,37 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         }
         
         ndkEvent.tags = filteredTags;
+      } else if (isUpdatingPublishedPost) {
+        // Updating a published post but no original tags available
+        // We need to preserve the original published_at timestamp
+        const originalPublishedAt = draft.originalTags?.find(tag => tag[0] === 'published_at')?.[1];
+        
+        ndkEvent.tags = [
+          ['title', draft.title],
+          ['published_at', originalPublishedAt || Math.floor(Date.now() / 1000).toString()],
+          ['t', 'longform']
+        ];
+        
+        // Add the "d" tag to link to the original post
+        const dTagValue = draft.dTag || draft.id;
+        ndkEvent.tags.push(['d', dTagValue]);
+        
+        // Add hashtags as 't' tags
+        if (draft.hashtags) {
+          draft.hashtags.forEach(hashtag => {
+            ndkEvent.tags.push(['t', hashtag]);
+          });
+        }
+        
+        // Add summary tag if present
+        if (draft.summary) {
+          ndkEvent.tags.push(['summary', draft.summary]);
+        }
+        
+        // Add cover image tag if present
+        if (draft.coverImage) {
+          ndkEvent.tags.push(['image', draft.coverImage]);
+        }
       } else {
         // For new posts, use standard tags
         ndkEvent.tags = [
@@ -671,12 +731,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ['published_at', Math.floor(Date.now() / 1000).toString()],
           ['t', 'longform']
         ];
-        
-        // If updating a published post without original tags, add the "d" tag
-        if (isUpdatingPublishedPost) {
-          const dTagValue = draft.dTag || draft.id;
-          ndkEvent.tags.push(['d', dTagValue]);
-        }
         
         // Add hashtags as 't' tags
         if (draft.hashtags) {
@@ -704,6 +758,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         contentLength: ndkEvent.content.length,
         draftContent: draft.content,
         draftContentLength: draft.content.length,
+        currentContent: currentContent,
+        currentContentLength: currentContent.length,
         tags: ndkEvent.tags,
         created_at: ndkEvent.created_at,
         isUpdatingPublishedPost,
@@ -713,14 +769,17 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       await ndkEvent.publish();
       
       // Update the draft with the new Nostr ID and preserve the original tags
-      const updatedDraft: Draft = {
+      const savedDraft: Draft = {
         ...draft,
         id: ndkEvent.id,
+        content: currentContent, // Include the current content
         lastModified: new Date().toISOString(),
         sources: ['nostr'],
-        originalTags: ndkEvent.tags // Update with the new tags for future updates
+        originalTags: ndkEvent.tags, // Update with the new tags for future updates
+        kind: 30023 // Published posts are kind 30023
       };
-      setDraft(updatedDraft);
+      setDraft(savedDraft);
+      setHasUnsavedChanges(false);
       
       // Update the URL to reflect the new Nostr event ID
       router.replace(`/editor/${ndkEvent.id}`);
@@ -754,6 +813,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           <ArrowLeftIcon />
           Back to Posts
         </button>
+        
+        {/* Page Title */}
+        <h1 className="editor-title">
+          {draft.kind === 30023 ? 'Edit Post' : 'Edit Draft'}
+        </h1>
         
         {/* Cover Image Section */}
         <div className="cover-image-section">
@@ -861,33 +925,32 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             <PhotoIcon />
             Upload
           </button>
-          <button
-            onClick={() => {
-              if (editorRef.current) {
-                editorRef.current.save();
-              }
-            }}
-            className="action-button save-button"
-            title="Save Draft"
-            disabled={isPublishing || !isConnected}
-          >
-            {isPublishing ? 'Saving...' : !isConnected ? 'Connecting...' : 'Save'}
-          </button>
+          {/* Only show save button for drafts (kind 30024) */}
+          {draft.kind === 30024 && (
+            <button
+              onClick={() => {
+                if (editorRef.current) {
+                  editorRef.current.save();
+                }
+              }}
+              className="action-button save-button"
+              title={hasUnsavedChanges ? "Save Draft (unsaved changes)" : "Save Draft"}
+              disabled={isPublishing || !isConnected}
+            >
+              {isPublishing ? 'Saving...' : !isConnected ? 'Connecting...' : hasUnsavedChanges ? 'Save*' : 'Save'}
+            </button>
+          )}
           <button 
             onClick={async () => {
-              // First save the current content from the editor
-              if (editorRef.current) {
-                editorRef.current.save();
-              }
-              // Then publish
+              // Publish directly - handlePublish will get the latest content from the editor
               await handlePublish();
             }} 
             className="action-button publish-button"
-            title="Publish to Nostr"
+            title={draft.kind === 30023 ? "Update Published Post" : "Publish to Nostr"}
             disabled={isPublishing || !isConnected}
           >
             <ArrowUpTrayIcon />
-            {isPublishing ? 'Publishing...' : !isConnected ? 'Connecting...' : 'Publish'}
+            {isPublishing ? 'Publishing...' : !isConnected ? 'Connecting...' : draft.kind === 30023 ? 'Update' : 'Publish'}
           </button>
         </div>
       </div>

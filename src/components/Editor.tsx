@@ -12,6 +12,7 @@ interface EditorProps {
 
 export interface EditorRef {
   save: () => void;
+  getContent: () => string;
 }
 
 const Editor = forwardRef<EditorRef, EditorProps>(({ draft, onSave }, ref) => {
@@ -39,7 +40,8 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ draft, onSave }, ref) => {
 
   // Expose save function to parent
   useImperativeHandle(ref, () => ({
-    save: handleSave
+    save: handleSave,
+    getContent: () => localDraft.content
   }));
 
   return (
