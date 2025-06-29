@@ -134,44 +134,136 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
 PostCard.displayName = 'PostCard';
 
 export default function ReaderPage() {
-  const { ndk, isLoading } = useNostr();
+  const { ndk, isLoading, isAuthenticated } = useNostr();
   const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead } = useBlog();
-  const [subscriptions, setSubscriptions] = useState<string[]>([]);
+  const [follows, setFollows] = useState<string[]>([]);
   const processedEvents = useRef(new Set<string>());
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
   const hasClearedPosts = useRef(false);
   const subscriptionRef = useRef<NDKSubscription | null>(null);
 
+  // Fetch current user's follows (contact list)
   useEffect(() => {
-    // Load subscriptions from localStorage
-    const savedSubscriptions = localStorage.getItem('long_subscriptions');
-    if (savedSubscriptions) {
-      const subs = JSON.parse(savedSubscriptions);
-      setSubscriptions(subs);
-      // Clear posts when subscriptions change
+    const fetchFollows = async () => {
+      console.log('🔍 DEBUG: fetchFollows called', { ndk: !!ndk, isAuthenticated });
+      
+      if (!ndk || !isAuthenticated) {
+        console.log('❌ DEBUG: Missing NDK or not authenticated');
+        setFollows([]);
+        return;
+      }
+
+      try {
+        // Get current user
+        const user = await ndk.signer?.user();
+        console.log('👤 DEBUG: Current user:', user ? { pubkey: user.pubkey, npub: user.npub } : 'null');
+        
+        if (!user?.pubkey) {
+          console.log('❌ DEBUG: No authenticated user found');
+          setFollows([]);
+          return;
+        }
+
+        console.log('🔍 DEBUG: Fetching follows for user:', user.pubkey);
+
+        // Fetch the user's contact list (kind 3)
+        const contactList = await ndk.fetchEvent({
+          kinds: [3],
+          authors: [user.pubkey],
+          limit: 1
+        });
+
+        console.log('📋 DEBUG: Contact list event:', contactList ? {
+          id: contactList.id,
+          created_at: contactList.created_at,
+          tagsCount: contactList.tags.length,
+          firstFewTags: contactList.tags.slice(0, 3)
+        } : 'null');
+
+        if (contactList) {
+          // Extract pubkeys from contact list tags
+          const followPubkeys = contactList.tags
+            .filter(tag => tag[0] === 'p')
+            .map(tag => tag[1])
+            .filter(Boolean);
+
+          console.log('👥 DEBUG: Found follows:', {
+            count: followPubkeys.length,
+            firstFew: followPubkeys.slice(0, 5),
+            allFollows: followPubkeys
+          });
+          setFollows(followPubkeys);
+
+          // Test: Manually fetch some posts from follows to see if they exist
+          if (followPubkeys.length > 0) {
+            console.log('🧪 DEBUG: Testing manual fetch of posts from follows...');
+            try {
+              const testPosts = await ndk.fetchEvents({
+                kinds: [30023],
+                authors: followPubkeys.slice(0, 3), // Test first 3 follows
+                limit: 10
+              });
+              console.log('🧪 DEBUG: Manual fetch results:', {
+                foundPosts: testPosts.size,
+                posts: Array.from(testPosts).map(event => ({
+                  id: event.id,
+                  pubkey: event.pubkey,
+                  title: getTagValue(event.tags, 'title') || 'Untitled',
+                  created_at: event.created_at
+                }))
+              });
+            } catch (error) {
+              console.error('❌ DEBUG: Error in manual fetch test:', error);
+            }
+          }
+        } else {
+          console.log('❌ DEBUG: No contact list found');
+          setFollows([]);
+        }
+      } catch (error) {
+        console.error('❌ DEBUG: Error fetching follows:', error);
+        setFollows([]);
+      }
+    };
+
+    fetchFollows();
+  }, [ndk, isAuthenticated]);
+
+  useEffect(() => {
+    // Clear posts when follows change
+    if (follows.length === 0 && !hasClearedPosts.current) {
       clearPosts();
-      hasClearedPosts.current = false;
-    } else if (!hasClearedPosts.current) {
-      // Clear posts if no subscriptions exist and we haven't cleared them yet
-      clearPosts();
-      setSubscriptions([]);
       hasClearedPosts.current = true;
+    } else if (follows.length > 0) {
+      hasClearedPosts.current = false;
     }
-  }, [clearPosts]);
+  }, [follows, clearPosts]);
 
   useEffect(() => {
     const setupSubscription = async () => {
+      console.log('🔍 DEBUG: setupSubscription called', { 
+        ndk: !!ndk, 
+        followsCount: follows.length,
+        follows: follows.slice(0, 3) // First 3 follows for debugging
+      });
+      
       // Clean up any existing subscription
       if (subscriptionRef.current) {
+        console.log('🔄 DEBUG: Cleaning up existing subscription');
         subscriptionRef.current.stop();
         subscriptionRef.current = null;
       }
 
       // Clear processed events
       processedEvents.current.clear();
+      console.log('🧹 DEBUG: Cleared processed events');
 
-      // Only proceed if we have NDK and subscriptions
-      if (!ndk || subscriptions.length === 0) {
+      // Only proceed if we have NDK and follows
+      if (!ndk || follows.length === 0) {
+        console.log('❌ DEBUG: Cannot setup subscription', { 
+          hasNDK: !!ndk, 
+          followsCount: follows.length 
+        });
         return;
       }
 
@@ -179,8 +271,14 @@ export default function ReaderPage() {
         // Create filter object explicitly
         const filter = {
           kinds: [30023],
-          authors: subscriptions
+          authors: follows
         };
+
+        console.log('📡 DEBUG: Creating subscription with filter:', {
+          kinds: filter.kinds,
+          authorsCount: filter.authors.length,
+          firstFewAuthors: filter.authors.slice(0, 3)
+        });
 
         // Create new subscription with explicit filter and handlers
         subscriptionRef.current = ndk.subscribe(
@@ -191,8 +289,19 @@ export default function ReaderPage() {
           },
           {
             onEvent: async (event) => {
+              console.log('📨 DEBUG: Received event:', {
+                id: event.id,
+                pubkey: event.pubkey,
+                kind: event.kind,
+                created_at: event.created_at,
+                title: getTagValue(event.tags, 'title') || 'Untitled'
+              });
+              
               // Skip if we've already processed this event
-              if (processedEvents.current.has(event.id)) return;
+              if (processedEvents.current.has(event.id)) {
+                console.log('⏭️ DEBUG: Skipping already processed event:', event.id);
+                return;
+              }
               processedEvents.current.add(event.id);
 
               try {
@@ -214,28 +323,42 @@ export default function ReaderPage() {
                   tags
                 };
 
+                console.log('✅ DEBUG: Adding post:', {
+                  id: post.id,
+                  title: post.title,
+                  author: post.pubkey,
+                  created_at: post.created_at
+                });
+
                 addPost(post);
 
                 // Fetch profile if we haven't already
                 const user = ndk.getUser({ pubkey: event.pubkey });
                 const profile = await user.fetchProfile();
                 if (profile) {
+                  console.log('👤 DEBUG: Fetched profile for:', {
+                    pubkey: event.pubkey,
+                    name: profile.name,
+                    displayName: profile.displayName
+                  });
                   updateAuthorProfile(event.pubkey, {
                     name: profile.name,
                     displayName: profile.displayName
                   });
                 }
               } catch (error) {
-                console.error('Error processing blog post:', error);
+                console.error('❌ DEBUG: Error processing blog post:', error);
               }
             },
             onEose: (subscription) => {
-              console.log('Subscription reached EOSE:', subscription.internalId);
+              console.log('🏁 DEBUG: Subscription reached EOSE:', subscription.internalId);
             }
           }
         );
+        
+        console.log('✅ DEBUG: Subscription created successfully');
       } catch (error) {
-        console.error('Error setting up subscription:', error);
+        console.error('❌ DEBUG: Error setting up subscription:', error);
       }
     };
 
@@ -245,19 +368,37 @@ export default function ReaderPage() {
     // Cleanup subscription on unmount or when dependencies change
     return () => {
       if (subscriptionRef.current) {
+        console.log('🧹 DEBUG: Cleaning up subscription on unmount');
         subscriptionRef.current.stop();
         subscriptionRef.current = null;
       }
     };
-  }, [ndk, subscriptions, addPost, updateAuthorProfile]);
+  }, [ndk, follows, addPost, updateAuthorProfile]);
 
   if (isLoading) {
     return <div className={styles.loading}>Loading...</div>;
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.content}>
+          <div className={styles.emptyState}>
+            Please login with Nostr to read longform content from people you follow.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const sortedPosts = getSortedPosts();
+  console.log('📊 DEBUG: All posts from context:', {
+    totalPosts: sortedPosts.length,
+    posts: sortedPosts.map(p => ({ id: p.id, title: p.title, pubkey: p.pubkey }))
+  });
+  
   const filteredPosts = sortedPosts
-    .filter(post => subscriptions.includes(post.pubkey)) // Only show posts from current subscriptions
+    .filter(post => follows.includes(post.pubkey)) // Only show posts from follows
     .filter(post => {
       switch (filter) {
         case 'read':
@@ -268,6 +409,14 @@ export default function ReaderPage() {
           return true;
       }
     });
+
+  console.log('🔍 DEBUG: Filtered posts:', {
+    followsCount: follows.length,
+    filterType: filter,
+    postsFromFollows: sortedPosts.filter(post => follows.includes(post.pubkey)).length,
+    finalFilteredCount: filteredPosts.length,
+    filteredPosts: filteredPosts.map(p => ({ id: p.id, title: p.title, pubkey: p.pubkey }))
+  });
 
   return (
     <div className={styles.container}>
@@ -301,16 +450,12 @@ export default function ReaderPage() {
           ))}
           {filteredPosts.length === 0 && (
             <div className={styles.emptyState}>
-              {subscriptions.length === 0 ? (
+              {follows.length === 0 ? (
                 <>
-                  You don&apos;t have any reads. Add an npub in the{' '}
-                  <Link href="/subscriptions" className={styles.emptyStateLink}>
-                    subscriptions
-                  </Link>
-                  {' '}page!
+                  You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
                 </>
               ) : filter === 'all' ? (
-                "No blog posts found from your subscriptions."
+                "No blog posts found from people you follow."
               ) : filter === 'read' ? (
                 "No read posts found."
               ) : (

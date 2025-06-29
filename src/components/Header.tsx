@@ -47,9 +47,6 @@ const Header: React.FC = () => {
             <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
               Reader
             </Link>
-            <Link href="/subscriptions" className="menu-link" onClick={handleLinkClick}>
-              Subscriptions
-            </Link>
             {mounted && <div className="menu-version">v{APP_VERSION}</div>}
           </div>
         </div>
