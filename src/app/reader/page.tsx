@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo, useRef } from 'react';
+import { useState, useEffect, memo, useRef, useCallback } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useBlog, BlogPost } from '@/contexts/BlogContext';
 import Link from 'next/link';
@@ -134,103 +134,96 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
 PostCard.displayName = 'PostCard';
 
 export default function ReaderPage() {
-  const { ndk, isLoading, isAuthenticated } = useNostr();
+  const { ndk, isLoading, isAuthenticated, isConnected } = useNostr();
   const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead } = useBlog();
   const [follows, setFollows] = useState<string[]>([]);
   const processedEvents = useRef(new Set<string>());
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
   const hasClearedPosts = useRef(false);
   const subscriptionRef = useRef<NDKSubscription | null>(null);
+  const [isLoadingFollows, setIsLoadingFollows] = useState(false);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(false);
+  const setupSubscriptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch current user's follows (contact list)
-  useEffect(() => {
-    const fetchFollows = async () => {
-      console.log('🔍 DEBUG: fetchFollows called', { ndk: !!ndk, isAuthenticated });
+  const fetchFollows = useCallback(async () => {
+    console.log('🔍 DEBUG: fetchFollows called', { 
+      ndk: !!ndk, 
+      isAuthenticated, 
+      isConnected,
+      isLoading 
+    });
+    
+    if (!ndk || !isAuthenticated || !isConnected || isLoading) {
+      console.log('❌ DEBUG: Cannot fetch follows - missing requirements');
+      setFollows([]);
+      return;
+    }
+
+    setIsLoadingFollows(true);
+    
+    try {
+      // Get current user
+      const user = await ndk.signer?.user();
+      console.log('👤 DEBUG: Current user:', user ? { pubkey: user.pubkey, npub: user.npub } : 'null');
       
-      if (!ndk || !isAuthenticated) {
-        console.log('❌ DEBUG: Missing NDK or not authenticated');
+      if (!user?.pubkey) {
+        console.log('❌ DEBUG: No authenticated user found');
         setFollows([]);
         return;
       }
 
-      try {
-        // Get current user
-        const user = await ndk.signer?.user();
-        console.log('👤 DEBUG: Current user:', user ? { pubkey: user.pubkey, npub: user.npub } : 'null');
-        
-        if (!user?.pubkey) {
-          console.log('❌ DEBUG: No authenticated user found');
-          setFollows([]);
-          return;
-        }
+      console.log('🔍 DEBUG: Fetching follows for user:', user.pubkey);
 
-        console.log('🔍 DEBUG: Fetching follows for user:', user.pubkey);
+      // Fetch the user's contact list (kind 3)
+      const contactList = await ndk.fetchEvent({
+        kinds: [3],
+        authors: [user.pubkey],
+        limit: 1
+      });
 
-        // Fetch the user's contact list (kind 3)
-        const contactList = await ndk.fetchEvent({
-          kinds: [3],
-          authors: [user.pubkey],
-          limit: 1
+      console.log('📋 DEBUG: Contact list event:', contactList ? {
+        id: contactList.id,
+        created_at: contactList.created_at,
+        tagsCount: contactList.tags.length,
+        firstFewTags: contactList.tags.slice(0, 3)
+      } : 'null');
+
+      if (contactList) {
+        // Extract pubkeys from contact list tags
+        const followPubkeys = contactList.tags
+          .filter(tag => tag[0] === 'p')
+          .map(tag => tag[1])
+          .filter(Boolean);
+
+        console.log('👥 DEBUG: Found follows:', {
+          count: followPubkeys.length,
+          firstFew: followPubkeys.slice(0, 5)
         });
-
-        console.log('📋 DEBUG: Contact list event:', contactList ? {
-          id: contactList.id,
-          created_at: contactList.created_at,
-          tagsCount: contactList.tags.length,
-          firstFewTags: contactList.tags.slice(0, 3)
-        } : 'null');
-
-        if (contactList) {
-          // Extract pubkeys from contact list tags
-          const followPubkeys = contactList.tags
-            .filter(tag => tag[0] === 'p')
-            .map(tag => tag[1])
-            .filter(Boolean);
-
-          console.log('👥 DEBUG: Found follows:', {
-            count: followPubkeys.length,
-            firstFew: followPubkeys.slice(0, 5),
-            allFollows: followPubkeys
-          });
-          setFollows(followPubkeys);
-
-          // Test: Manually fetch some posts from follows to see if they exist
-          if (followPubkeys.length > 0) {
-            console.log('🧪 DEBUG: Testing manual fetch of posts from follows...');
-            try {
-              const testPosts = await ndk.fetchEvents({
-                kinds: [30023],
-                authors: followPubkeys.slice(0, 3), // Test first 3 follows
-                limit: 10
-              });
-              console.log('🧪 DEBUG: Manual fetch results:', {
-                foundPosts: testPosts.size,
-                posts: Array.from(testPosts).map(event => ({
-                  id: event.id,
-                  pubkey: event.pubkey,
-                  title: getTagValue(event.tags, 'title') || 'Untitled',
-                  created_at: event.created_at
-                }))
-              });
-            } catch (error) {
-              console.error('❌ DEBUG: Error in manual fetch test:', error);
-            }
-          }
-        } else {
-          console.log('❌ DEBUG: No contact list found');
-          setFollows([]);
-        }
-      } catch (error) {
-        console.error('❌ DEBUG: Error fetching follows:', error);
+        setFollows(followPubkeys);
+      } else {
+        console.log('❌ DEBUG: No contact list found');
         setFollows([]);
       }
-    };
+    } catch (error) {
+      console.error('❌ DEBUG: Error fetching follows:', error);
+      setFollows([]);
+    } finally {
+      setIsLoadingFollows(false);
+    }
+  }, [ndk, isAuthenticated, isConnected, isLoading]);
 
-    fetchFollows();
-  }, [ndk, isAuthenticated]);
-
+  // Fetch follows when authentication status changes
   useEffect(() => {
-    // Clear posts when follows change
+    if (isAuthenticated && isConnected && !isLoading) {
+      fetchFollows();
+    } else {
+      setFollows([]);
+    }
+  }, [isAuthenticated, isConnected, isLoading, fetchFollows]);
+
+  // Clear posts when follows change
+  useEffect(() => {
     if (follows.length === 0 && !hasClearedPosts.current) {
       clearPosts();
       hasClearedPosts.current = true;
@@ -239,143 +232,174 @@ export default function ReaderPage() {
     }
   }, [follows, clearPosts]);
 
-  useEffect(() => {
-    const setupSubscription = async () => {
-      console.log('🔍 DEBUG: setupSubscription called', { 
-        ndk: !!ndk, 
-        followsCount: follows.length,
-        follows: follows.slice(0, 3) // First 3 follows for debugging
-      });
-      
-      // Clean up any existing subscription
-      if (subscriptionRef.current) {
-        console.log('🔄 DEBUG: Cleaning up existing subscription');
-        subscriptionRef.current.stop();
-        subscriptionRef.current = null;
-      }
+  // Setup subscription for posts
+  const setupSubscription = useCallback(async () => {
+    console.log('🔍 DEBUG: setupSubscription called', { 
+      ndk: !!ndk, 
+      followsCount: follows.length,
+      isAuthenticated,
+      isConnected
+    });
+    
+    // Clean up any existing subscription
+    if (subscriptionRef.current) {
+      console.log('🔄 DEBUG: Cleaning up existing subscription');
+      subscriptionRef.current.stop();
+      subscriptionRef.current = null;
+    }
 
-      // Clear processed events
+    // Clear processed events (limit size to prevent memory leaks)
+    if (processedEvents.current.size > 1000) {
       processedEvents.current.clear();
-      console.log('🧹 DEBUG: Cleared processed events');
+    }
+    console.log('🧹 DEBUG: Cleared processed events');
 
-      // Only proceed if we have NDK and follows
-      if (!ndk || follows.length === 0) {
-        console.log('❌ DEBUG: Cannot setup subscription', { 
-          hasNDK: !!ndk, 
-          followsCount: follows.length 
-        });
-        return;
-      }
+    // Only proceed if we have all requirements
+    if (!ndk || follows.length === 0 || !isAuthenticated || !isConnected) {
+      console.log('❌ DEBUG: Cannot setup subscription', { 
+        hasNDK: !!ndk, 
+        followsCount: follows.length,
+        isAuthenticated,
+        isConnected
+      });
+      return;
+    }
 
-      try {
-        // Create filter object explicitly
-        const filter = {
-          kinds: [30023],
-          authors: follows
-        };
+    setIsLoadingPosts(true);
 
-        console.log('📡 DEBUG: Creating subscription with filter:', {
-          kinds: filter.kinds,
-          authorsCount: filter.authors.length,
-          firstFewAuthors: filter.authors.slice(0, 3)
-        });
+    try {
+      // Create filter object explicitly
+      const filter = {
+        kinds: [30023],
+        authors: follows
+      };
 
-        // Create new subscription with explicit filter and handlers
-        subscriptionRef.current = ndk.subscribe(
-          filter,
-          { 
-            closeOnEose: false,
-            groupable: false // Disable filter merging
-          },
-          {
-            onEvent: async (event) => {
-              console.log('📨 DEBUG: Received event:', {
+      console.log('📡 DEBUG: Creating subscription with filter:', {
+        kinds: filter.kinds,
+        authorsCount: filter.authors.length,
+        firstFewAuthors: filter.authors.slice(0, 3)
+      });
+
+      // Create new subscription with better configuration
+      subscriptionRef.current = ndk.subscribe(
+        filter,
+        { 
+          closeOnEose: true, // Changed to true for better reliability
+          groupable: true // Changed to true for better performance
+        },
+        {
+          onEvent: async (event) => {
+            console.log('📨 DEBUG: Received event:', {
+              id: event.id,
+              pubkey: event.pubkey,
+              kind: event.kind,
+              created_at: event.created_at,
+              title: getTagValue(event.tags, 'title') || 'Untitled'
+            });
+            
+            // Skip if we've already processed this event
+            if (processedEvents.current.has(event.id)) {
+              console.log('⏭️ DEBUG: Skipping already processed event:', event.id);
+              return;
+            }
+            processedEvents.current.add(event.id);
+
+            try {
+              const title = getTagValue(event.tags, 'title') || 'Untitled';
+              const summary = getTagValue(event.tags, 'summary') || '';
+              const published_at = parseInt(getTagValue(event.tags, 'published_at') || event.created_at.toString());
+              const image = getTagValue(event.tags, 'image');
+              const tags = getTagValues(event.tags, 't');
+
+              const post: BlogPost = {
                 id: event.id,
                 pubkey: event.pubkey,
-                kind: event.kind,
                 created_at: event.created_at,
-                title: getTagValue(event.tags, 'title') || 'Untitled'
+                content: event.content,
+                title,
+                summary,
+                published_at,
+                image,
+                tags
+              };
+
+              console.log('✅ DEBUG: Adding post:', {
+                id: post.id,
+                title: post.title,
+                author: post.pubkey,
+                created_at: post.created_at
               });
-              
-              // Skip if we've already processed this event
-              if (processedEvents.current.has(event.id)) {
-                console.log('⏭️ DEBUG: Skipping already processed event:', event.id);
-                return;
-              }
-              processedEvents.current.add(event.id);
 
-              try {
-                const title = getTagValue(event.tags, 'title') || 'Untitled';
-                const summary = getTagValue(event.tags, 'summary') || '';
-                const published_at = parseInt(getTagValue(event.tags, 'published_at') || event.created_at.toString());
-                const image = getTagValue(event.tags, 'image');
-                const tags = getTagValues(event.tags, 't');
+              addPost(post);
 
-                const post: BlogPost = {
-                  id: event.id,
+              // Fetch profile if we haven't already
+              const user = ndk.getUser({ pubkey: event.pubkey });
+              const profile = await user.fetchProfile();
+              if (profile) {
+                console.log('👤 DEBUG: Fetched profile for:', {
                   pubkey: event.pubkey,
-                  created_at: event.created_at,
-                  content: event.content,
-                  title,
-                  summary,
-                  published_at,
-                  image,
-                  tags
-                };
-
-                console.log('✅ DEBUG: Adding post:', {
-                  id: post.id,
-                  title: post.title,
-                  author: post.pubkey,
-                  created_at: post.created_at
+                  name: profile.name,
+                  displayName: profile.displayName
                 });
-
-                addPost(post);
-
-                // Fetch profile if we haven't already
-                const user = ndk.getUser({ pubkey: event.pubkey });
-                const profile = await user.fetchProfile();
-                if (profile) {
-                  console.log('👤 DEBUG: Fetched profile for:', {
-                    pubkey: event.pubkey,
-                    name: profile.name,
-                    displayName: profile.displayName
-                  });
-                  updateAuthorProfile(event.pubkey, {
-                    name: profile.name,
-                    displayName: profile.displayName
-                  });
-                }
-              } catch (error) {
-                console.error('❌ DEBUG: Error processing blog post:', error);
+                updateAuthorProfile(event.pubkey, {
+                  name: profile.name,
+                  displayName: profile.displayName
+                });
               }
-            },
-            onEose: (subscription) => {
-              console.log('🏁 DEBUG: Subscription reached EOSE:', subscription.internalId);
+            } catch (error) {
+              console.error('❌ DEBUG: Error processing blog post:', error);
             }
+          },
+          onEose: (subscription) => {
+            console.log('🏁 DEBUG: Subscription reached EOSE:', subscription.internalId);
+            setIsLoadingPosts(false);
           }
-        );
-        
-        console.log('✅ DEBUG: Subscription created successfully');
-      } catch (error) {
-        console.error('❌ DEBUG: Error setting up subscription:', error);
+        }
+      );
+      
+      console.log('✅ DEBUG: Subscription created successfully');
+    } catch (error) {
+      console.error('❌ DEBUG: Error setting up subscription:', error);
+      setIsLoadingPosts(false);
+    }
+  }, [ndk, follows, isAuthenticated, isConnected, addPost, updateAuthorProfile]);
+
+  // Set up the subscription when dependencies are ready
+  useEffect(() => {
+    if (follows.length > 0 && isAuthenticated && isConnected) {
+      // Clear any existing timeout
+      if (setupSubscriptionTimeoutRef.current) {
+        clearTimeout(setupSubscriptionTimeoutRef.current);
       }
-    };
+      
+      // Add a small delay to ensure everything is properly initialized and prevent rapid re-setups
+      setupSubscriptionTimeoutRef.current = setTimeout(() => {
+        setupSubscription();
+      }, 200);
 
-    // Set up the subscription
-    setupSubscription();
+      return () => {
+        if (setupSubscriptionTimeoutRef.current) {
+          clearTimeout(setupSubscriptionTimeoutRef.current);
+        }
+      };
+    }
+  }, [follows, isAuthenticated, isConnected, setupSubscription]);
 
-    // Cleanup subscription on unmount or when dependencies change
+  // Cleanup subscription on unmount
+  useEffect(() => {
     return () => {
       if (subscriptionRef.current) {
         console.log('🧹 DEBUG: Cleaning up subscription on unmount');
         subscriptionRef.current.stop();
         subscriptionRef.current = null;
       }
+      if (setupSubscriptionTimeoutRef.current) {
+        clearTimeout(setupSubscriptionTimeoutRef.current);
+      }
     };
-  }, [ndk, follows, addPost, updateAuthorProfile]);
+  }, []);
 
-  if (isLoading) {
+  if (isLoading || isLoadingFollows) {
     return <div className={styles.loading}>Loading...</div>;
   }
 
@@ -385,6 +409,18 @@ export default function ReaderPage() {
         <div className={styles.content}>
           <div className={styles.emptyState}>
             Please login with Nostr to read longform content from people you follow.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isConnected) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.content}>
+          <div className={styles.emptyState}>
+            Connecting to Nostr network... Please wait.
           </div>
         </div>
       </div>
@@ -415,7 +451,7 @@ export default function ReaderPage() {
     filterType: filter,
     postsFromFollows: sortedPosts.filter(post => follows.includes(post.pubkey)).length,
     finalFilteredCount: filteredPosts.length,
-    filteredPosts: filteredPosts.map(p => ({ id: p.id, title: p.title, pubkey: p.pubkey }))
+    isLoadingPosts
   });
 
   return (
@@ -445,10 +481,15 @@ export default function ReaderPage() {
           </div>
         </div>
         <div className={styles.postsGrid}>
+          {isLoadingPosts && follows.length > 0 && (
+            <div className={styles.loadingState}>
+              Loading posts from {follows.length} people you follow...
+            </div>
+          )}
           {filteredPosts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
-          {filteredPosts.length === 0 && (
+          {filteredPosts.length === 0 && !isLoadingPosts && (
             <div className={styles.emptyState}>
               {follows.length === 0 ? (
                 <>

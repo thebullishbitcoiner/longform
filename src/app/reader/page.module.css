@@ -339,10 +339,26 @@
 }
 
 .loading {
-  text-align: center;
-  padding: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
   color: rgb(161 161 170);
   font-size: 1rem;
+}
+
+.loadingState {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  color: rgb(161 161 170);
+  font-size: 0.875rem;
+  text-align: center;
+  background-color: rgb(24 24 27);
+  border-radius: 0.5rem;
+  margin: 1rem;
+  border: 1px solid rgb(39 39 42);
 }
 
 .swipeActionVisible {

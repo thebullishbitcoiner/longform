@@ -94,11 +94,11 @@ export function BlogProvider({ children }: BlogProviderProps) {
 
   const addPost = (post: BlogPost) => {
     setPosts(prev => {
-      // Find existing post with the same published_at
-      const existingPostIndex = prev.findIndex(p => p.published_at === post.published_at);
+      // Find existing post with the same id
+      const existingPostIndex = prev.findIndex(p => p.id === post.id);
       
       if (existingPostIndex !== -1) {
-        // If we found a post with the same published_at, only update if the new post is more recent
+        // If we found a post with the same id, only update if the new post is more recent
         if (post.created_at > prev[existingPostIndex].created_at) {
           const newPosts = [...prev];
           newPosts[existingPostIndex] = post;
@@ -107,7 +107,7 @@ export function BlogProvider({ children }: BlogProviderProps) {
         return prev;
       }
       
-      // If no post with the same published_at exists, add the new post
+      // If no post with the same id exists, add the new post
       return [post, ...prev];
     });
   };
