@@ -7,7 +7,7 @@ import { Draft } from '@/utils/storage';
 import { use } from 'react';
 import Editor, { EditorRef } from '@/components/Editor';
 import { NostrBuildUploader } from '@nostrify/nostrify/uploaders';
-import type { NostrSigner, NostrEvent } from '@nostrify/types';
+import type { NostrSigner } from '@nostrify/types';
 import { useNostr } from '@/contexts/NostrContext';
 import toast from 'react-hot-toast';
 import './page.css';
@@ -133,7 +133,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         throw new Error('Nostr extension not found. Please log in with nostr-login.');
       }
       const pubkey = await nostr.getPublicKey();
-      const signedEvent = await nostr.signEvent({
+      const { sig } = await nostr.signEvent({
         ...event,
         pubkey,
         id: '', // This will be computed by the uploader
@@ -142,9 +142,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       return {
         ...event,
         pubkey,
-        id: signedEvent.id || '', // This will be computed by the uploader
-        sig: signedEvent.sig || ''
-      } as NostrEvent;
+        id: '', // This will be computed by the uploader
+        sig
+      };
     }
   };
 
