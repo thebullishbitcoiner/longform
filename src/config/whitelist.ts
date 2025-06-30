@@ -27,6 +27,7 @@ export const ALPHA_WHITELIST: string[] = [
   'npub10zsum2w6qv39w34fa83ttk8js793adly5g6u0ngt5e2qt6qqavtq6fken2', //FreebornFarm
   'npub19yw8tkfh530kdgfqn782vcga7azgckdn2fjjp3nv5txu6dl3h7lqhv322j', //Jared Logan
   'npub166hl5x2mkuv55uzcxt6nt7n9h2ca3hx6mf4j2s8lxjehpygsk9msxj0thf', //purrs_for_her
+  'npub18ams6ewn5aj2n3wt2qawzglx9mr4nzksxhvrdc4gzrecw7n5tvjqctp424', //Derek Ross
 ];
 
 // Enable/disable whitelist checking
