@@ -1,16 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Longform from '@/components/Longform';
 import { useNostr } from '@/contexts/NostrContext';
 import toast from 'react-hot-toast';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
-  const { isAuthenticated, isWhitelisted, checkAuthentication } = useNostr();
+  const [needsReauth, setNeedsReauth] = useState(false);
+  const { isLoading: contextLoading, isAuthenticated, isWhitelisted, checkAuthentication } = useNostr();
+
+  // Check if user needs to re-authenticate with extension
+  useEffect(() => {
+    const checkExtensionAuth = async () => {
+      if (isAuthenticated && !contextLoading) {
+        try {
+          const nostr = window.nostr;
+          if (nostr) {
+            // Try to get public key to verify extension is still available
+            await nostr.getPublicKey();
+            setNeedsReauth(false);
+          } else {
+            setNeedsReauth(true);
+          }
+        } catch (error) {
+          console.log('Extension authentication check failed:', error);
+          setNeedsReauth(true);
+        }
+      }
+    };
+
+    checkExtensionAuth();
+  }, [isAuthenticated, contextLoading]);
 
   const handleLogin = async () => {
     setIsLoading(true);
+    setNeedsReauth(false);
     try {
       const nostr = window.nostr;
       if (!nostr) {
@@ -38,7 +63,23 @@ export default function Home() {
     }
   };
 
-  if (!isAuthenticated) {
+  // Show loading state while context is initializing
+  if (contextLoading) {
+    return (
+      <main className="container">
+        <div className="welcome-section">
+          <div className="welcome-content">
+            <h1 className="welcome-title">A focused space for Nostr longform.</h1>
+            <p className="welcome-description">
+              Loading...
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated || needsReauth) {
     return (
       <main className="container">
         <div className="welcome-section">
@@ -47,12 +88,17 @@ export default function Home() {
             <p className="welcome-description">
               Create, edit, and read longform content in a clean, distraction-free environment.
             </p>
+            {needsReauth && (
+              <div className="reauth-notice">
+                <p>🔐 Please re-authenticate with your Nostr extension to continue.</p>
+              </div>
+            )}
             <button 
               onClick={handleLogin}
               disabled={isLoading}
               className="login-button"
             >
-              {isLoading ? 'Connecting...' : 'Login with Nostr'}
+              {isLoading ? 'Connecting...' : needsReauth ? 'Re-authenticate' : 'Login with Nostr'}
             </button>
             {isAuthenticated === false && !isWhitelisted && (
               <div className="whitelist-notice">

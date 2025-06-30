@@ -3,6 +3,8 @@
 import NDK, { NDKNip07Signer } from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { isWhitelisted as checkWhitelist, ALPHA_WHITELIST } from '@/config/whitelist';
+import { getAuthState, setAuthState, clearAuthState } from '@/utils/storage';
+import { normalizePublicKey } from '@/utils/nostr';
 
 // Create a singleton NDK instance without signer initially
 const ndkInstance = new NDK({
@@ -36,9 +38,9 @@ const initializeNDK = async () => {
     try {
       console.log('NDK: Attempting to connect to relays...');
       
-      // Create a promise that rejects after timeout
+      // Create a promise that rejects after timeout (increased to 20 seconds)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+        setTimeout(() => reject(new Error('Connection timeout')), 20000);
       });
 
       // Race between connection and timeout
@@ -54,20 +56,15 @@ const initializeNDK = async () => {
       console.log('NDK: Connected relays:', connectedRelays.map(r => r.url).join(', '));
       
       if (connectedRelays.length === 0) {
-        console.error('NDK: No relays connected after initialization');
-        throw new Error('No relays connected');
+        console.warn('NDK: No relays connected after initialization - will retry later');
+        // Don't throw error, just log warning - connection can be retried
+      } else {
+        console.log(`NDK: Successfully connected to ${connectedRelays.length} relays`);
       }
-
-      console.log(`NDK: Successfully connected to ${connectedRelays.length} relays`);
     } catch (error) {
-      console.error('NDK: Failed to initialize:', error);
-      // Log more details about the error
-      if (error instanceof Error) {
-        console.error('NDK: Error name:', error.name);
-        console.error('NDK: Error message:', error.message);
-        console.error('NDK: Error stack:', error.stack);
-      }
-      throw error;
+      console.warn('NDK: Failed to initialize relay connections:', error);
+      // Don't throw error - authentication can still work without relays
+      // Relays are only needed for fetching/publishing content
     } finally {
       isConnecting = false;
     }
@@ -88,6 +85,7 @@ interface NostrContextType {
   isAuthenticated: boolean;
   isWhitelisted: boolean;
   checkAuthentication: () => Promise<boolean>;
+  logout: () => void;
 }
 
 const NostrContext = createContext<NostrContextType>({
@@ -96,7 +94,8 @@ const NostrContext = createContext<NostrContextType>({
   isConnected: false,
   isAuthenticated: false,
   isWhitelisted: false,
-  checkAuthentication: async () => false
+  checkAuthentication: async () => false,
+  logout: () => {}
 });
 
 export const useNostr = () => useContext(NostrContext);
@@ -133,8 +132,12 @@ export function NostrProvider({ children }: NostrProviderProps) {
             whitelistEnabled: true,
             whitelistKeys: ALPHA_WHITELIST.length
           });
+          // Clear any stored auth state if user is not whitelisted
+          clearAuthState();
         } else {
           console.log('✅ Access granted - User is whitelisted');
+          // Store authentication state for persistence (will be normalized to hex)
+          setAuthState(user.npub, true);
         }
         
         setIsWhitelisted(whitelisted);
@@ -144,46 +147,136 @@ export function NostrProvider({ children }: NostrProviderProps) {
         console.log('❌ No user found - Authentication failed');
         setIsAuthenticated(false);
         setIsWhitelisted(false);
+        clearAuthState();
         return false;
       }
     } catch (error) {
       console.error('NDK Provider: Error checking authentication:', error);
       setIsAuthenticated(false);
       setIsWhitelisted(false);
+      clearAuthState();
       return false;
     }
   };
 
+  // Combined initialization effect that handles both connection and authentication
   useEffect(() => {
-    const checkConnection = async () => {
+    const initializeApp = async () => {
       try {
+        console.log('🚀 Initializing app...');
+        
+        // First, check for stored authentication
+        const storedAuth = getAuthState();
+        
+        if (storedAuth && storedAuth.isWhitelisted) {
+          console.log('🔄 Found stored authentication state for:', storedAuth.pubkey);
+          
+          // Set the stored state immediately for better UX
+          setIsAuthenticated(true);
+          setIsWhitelisted(true);
+          
+          // Verify the authentication is still valid with the extension
+          try {
+            const nostr = window.nostr;
+            if (nostr) {
+              const currentPubKey = await nostr.getPublicKey();
+              console.log('🔍 Current extension pubkey:', currentPubKey);
+              console.log('🔍 Stored pubkey:', storedAuth.pubkey);
+              
+              // Normalize both keys to hex format for comparison
+              const normalizedCurrent = normalizePublicKey(currentPubKey);
+              const normalizedStored = normalizePublicKey(storedAuth.pubkey);
+              
+              console.log('🔍 Normalized current pubkey:', normalizedCurrent);
+              console.log('🔍 Normalized stored pubkey:', normalizedStored);
+              
+              if (normalizedCurrent && normalizedStored && normalizedCurrent === normalizedStored) {
+                console.log('✅ Stored authentication verified with extension');
+                // Authentication is valid, continue with connection
+              } else {
+                console.log('⚠️ Stored pubkey does not match current extension pubkey');
+                clearAuthState();
+                setIsAuthenticated(false);
+                setIsWhitelisted(false);
+              }
+            } else {
+              console.log('❌ No Nostr extension found');
+              clearAuthState();
+              setIsAuthenticated(false);
+              setIsWhitelisted(false);
+            }
+          } catch (error) {
+            console.log('❌ Could not verify stored authentication with extension:', error);
+            clearAuthState();
+            setIsAuthenticated(false);
+            setIsWhitelisted(false);
+          }
+        }
+        
+        // Set loading to false after authentication check (don't wait for relays)
+        setIsLoading(false);
+        
+        // Then check connection in the background
         console.log('NDK Provider: Checking connection...');
-        await initializeNDK();
-        const connectedRelays = ndkInstance.pool.connectedRelays();
-        console.log('NDK Provider: Connected relays:', connectedRelays.map(r => r.url).join(', '));
-        const hasConnectedRelays = connectedRelays.length > 0;
-        console.log('NDK Provider: Setting isConnected to:', hasConnectedRelays);
-        setIsConnected(hasConnectedRelays);
+        try {
+          await initializeNDK();
+          const connectedRelays = ndkInstance.pool.connectedRelays();
+          console.log('NDK Provider: Connected relays:', connectedRelays.map(r => r.url).join(', '));
+          const hasConnectedRelays = connectedRelays.length > 0;
+          console.log('NDK Provider: Setting isConnected to:', hasConnectedRelays);
+          setIsConnected(hasConnectedRelays);
+        } catch (error) {
+          console.warn('NDK Provider: Relay connection failed, but continuing with app initialization:', error);
+          setIsConnected(false);
+          // Don't fail the entire initialization - authentication can still work
+        }
+        
       } catch (error) {
-        console.error('NDK Provider: Error checking connection:', error);
+        console.error('NDK Provider: Error during initialization:', error);
         setIsConnected(false);
-      } finally {
         setIsLoading(false);
       }
     };
 
-    checkConnection();
+    initializeApp();
 
     // Set up an interval to periodically check connection status
-    const interval = setInterval(checkConnection, 30000);
+    const interval = setInterval(async () => {
+      try {
+        await initializeNDK();
+        const connectedRelays = ndkInstance.pool.connectedRelays();
+        const hasConnectedRelays = connectedRelays.length > 0;
+        setIsConnected(hasConnectedRelays);
+      } catch (error) {
+        console.error('NDK Provider: Error checking connection:', error);
+        setIsConnected(false);
+      }
+    }, 30000);
 
     return () => {
       clearInterval(interval);
     };
   }, []);
 
+  const logout = () => {
+    console.log('🚪 User logging out');
+    setIsAuthenticated(false);
+    setIsWhitelisted(false);
+    clearAuthState();
+    // Remove the signer from NDK instance
+    ndkInstance.signer = undefined;
+  };
+
   return (
-    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, isWhitelisted, checkAuthentication }}>
+    <NostrContext.Provider value={{ 
+      ndk: ndkInstance, 
+      isLoading, 
+      isConnected, 
+      isAuthenticated, 
+      isWhitelisted, 
+      checkAuthentication,
+      logout 
+    }}>
       {children}
     </NostrContext.Provider>
   );

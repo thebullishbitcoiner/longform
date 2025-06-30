@@ -3,18 +3,25 @@
 import { useState, useEffect } from 'react';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import { APP_VERSION } from '../config/version';
+import { useNostr } from '@/contexts/NostrContext';
 import Link from 'next/link';
 import './Header.css';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { isAuthenticated, logout } = useNostr();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const handleLinkClick = () => {
+    setIsMenuOpen(false);
+  };
+
+  const handleLogout = () => {
+    logout();
     setIsMenuOpen(false);
   };
 
@@ -47,6 +54,14 @@ const Header: React.FC = () => {
             <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
               Reader
             </Link>
+            {isAuthenticated && (
+              <button 
+                onClick={handleLogout}
+                className="menu-link"
+              >
+                Logout
+              </button>
+            )}
             {mounted && <div className="menu-version">v{APP_VERSION}</div>}
           </div>
         </div>
