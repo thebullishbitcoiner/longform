@@ -33,6 +33,7 @@ export default function Longform() {
   const [isLoadingPublished, setIsLoadingPublished] = useState(true);
   const eventsRef = useRef<NDKEvent[]>([]);
   const publishedEventsRef = useRef<NDKEvent[]>([]);
+  const deletionEventsRef = useRef<NDKEvent[]>([]); // Add reference for deletion events
   const router = useRouter();
   const { ndk, isAuthenticated } = useNostr();
 
@@ -42,6 +43,7 @@ export default function Longform() {
       setIsLoadingPublished(true);
       eventsRef.current = []; // Reset events
       publishedEventsRef.current = []; // Reset published events
+      deletionEventsRef.current = []; // Reset deletion events
       
       if (!ndk || !isAuthenticated) {
         setIsLoading(false);
@@ -73,6 +75,20 @@ export default function Longform() {
           }
         );
 
+        // Subscribe to deletion events (kind 5)
+        const deletionSubscription = ndk.subscribe(
+          { 
+            kinds: [5 as NDKKind], // Deletion events
+            authors: [pubkey] 
+          },
+          { closeOnEose: true },
+          {
+            onEvent: (event) => {
+              deletionEventsRef.current.push(event);
+            }
+          }
+        );
+
         // Subscribe to published longform events (kind 30023)
         const publishedSubscription = ndk.subscribe(
           { 
@@ -90,14 +106,39 @@ export default function Longform() {
         // Set a timeout to process all events after they're received
         setTimeout(() => {
           console.log('Longform: Processing draft events:', eventsRef.current.length);
+          console.log('Longform: Processing deletion events:', deletionEventsRef.current.length);
           console.log('Longform: Processing published events:', publishedEventsRef.current.length);
           
-          // Process drafts
+          // Get all deleted event IDs from deletion events
+          const deletedEventIds = new Set<string>();
+          deletionEventsRef.current.forEach(deletionEvent => {
+            deletionEvent.tags.forEach((tag: string[]) => {
+              if (tag[0] === 'e') {
+                deletedEventIds.add(tag[1]);
+              }
+            });
+          });
+          
+          console.log('Longform: Deleted event IDs:', Array.from(deletedEventIds));
+          
+          // Process drafts - filter out deleted ones
           const uniqueDraftEvents = eventsRef.current.filter((event, index, self) => 
             index === self.findIndex(e => e.id === event.id)
           );
           
-          const allDrafts: Draft[] = uniqueDraftEvents.map(event => {
+          // Filter out drafts that have been deleted
+          const nonDeletedDraftEvents = uniqueDraftEvents.filter(event => {
+            const isDeleted = deletedEventIds.has(event.id);
+            if (isDeleted) {
+              const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
+              console.log('Longform: Removing deleted draft:', event.id, 'with title:', title);
+            }
+            return !isDeleted;
+          });
+          
+          console.log('Longform: Draft events after filtering deletions:', nonDeletedDraftEvents.length);
+          
+          const allDrafts: Draft[] = nonDeletedDraftEvents.map(event => {
             const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
             const dTag = event.tags.find((tag: string[]) => tag[0] === 'd')?.[1];
             return {
@@ -128,12 +169,24 @@ export default function Longform() {
           setDrafts(finalDrafts);
           setIsLoading(false);
 
-          // Process published notes
+          // Process published notes - also filter out deleted ones
           const uniquePublishedEvents = publishedEventsRef.current.filter((event, index, self) => 
             index === self.findIndex(e => e.id === event.id)
           );
           
-          const allPublishedNotes: PublishedNote[] = uniquePublishedEvents.map(event => {
+          // Filter out published notes that have been deleted
+          const nonDeletedPublishedEvents = uniquePublishedEvents.filter(event => {
+            const isDeleted = deletedEventIds.has(event.id);
+            if (isDeleted) {
+              const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
+              console.log('Longform: Removing deleted published note:', event.id, 'with title:', title);
+            }
+            return !isDeleted;
+          });
+          
+          console.log('Longform: Published events after filtering deletions:', nonDeletedPublishedEvents.length);
+          
+          const allPublishedNotes: PublishedNote[] = nonDeletedPublishedEvents.map(event => {
             const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
             const publishedAtRaw = event.tags.find((tag: string[]) => tag[0] === 'published_at')?.[1] || event.created_at.toString();
             const summary = event.content.length > 200 ? event.content.substring(0, 200) + '...' : event.content;
@@ -238,6 +291,7 @@ export default function Longform() {
         return () => {
           draftSubscription.stop();
           publishedSubscription.stop();
+          deletionSubscription.stop();
         };
       } catch (error) {
         console.error('Longform: Error loading Nostr content:', error);
@@ -359,6 +413,11 @@ export default function Longform() {
                 </div>
               </div>
             ))}
+            {drafts.length === 0 && !isLoading && (
+              <div className="empty-state">
+                <p>No drafts yet. Click the + button to create your first draft.</p>
+              </div>
+            )}
           </div>
         )}
       </div>
