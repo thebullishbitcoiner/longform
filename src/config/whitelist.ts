@@ -22,10 +22,11 @@ export const ALPHA_WHITELIST: string[] = [
   'npub1wf0w8jcnhav6wu7umz2pg6hzrcvt3h874h5g7uq9p0r3m8taxsssfafcny', //Ryan Matta
   'npub1mgvmt553uphdpxa9gk79xejq3hyzh2xfa8uh6vh236nq78mvh74q8tr9yd', //n0>1
   'npub1ftkx02mg3u6l6ksfzv6r0nzed03cqcmy9me3vf75zkcjeca0alvq7lskzl', //Dave Plotz
-  'npub1uzt238htjzpq39dxmltlx60vxym9fetk9czz6kddq6fhvkf4z3usy9qtrh',  // Oshi
-  'npub164xgt7nysd3euvrdk0h6p7xxhulhnjnpmu0utzau86wf6859qn6srac0qx',  //Rotten
-  'npub10zsum2w6qv39w34fa83ttk8js793adly5g6u0ngt5e2qt6qqavtq6fken2',  //FreebornFarm
-  'npub19yw8tkfh530kdgfqn782vcga7azgckdn2fjjp3nv5txu6dl3h7lqhv322j',  //Jared Logan
+  'npub1uzt238htjzpq39dxmltlx60vxym9fetk9czz6kddq6fhvkf4z3usy9qtrh', // Oshi
+  'npub164xgt7nysd3euvrdk0h6p7xxhulhnjnpmu0utzau86wf6859qn6srac0qx', //Rotten
+  'npub10zsum2w6qv39w34fa83ttk8js793adly5g6u0ngt5e2qt6qqavtq6fken2', //FreebornFarm
+  'npub19yw8tkfh530kdgfqn782vcga7azgckdn2fjjp3nv5txu6dl3h7lqhv322j', //Jared Logan
+  'npub166hl5x2mkuv55uzcxt6nt7n9h2ca3hx6mf4j2s8lxjehpygsk9msxj0thf', //purrs_for_her
 ];
 
 // Enable/disable whitelist checking
