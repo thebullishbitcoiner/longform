@@ -9,6 +9,13 @@ import styles from './page.module.css';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { NDKSubscription } from '@nostr-dev-kit/ndk';
 
+// Configuration: Specify which relays to use for contact list queries
+// You can modify this list to use only the relays you trust
+const CONTACT_LIST_RELAYS = [
+  'wss://relay.nostr.band', 
+  'wss://purplepag.es'
+];
+
 function getTagValue(tags: string[][], tagName: string): string | undefined {
   return tags.find(tag => tag[0] === tagName)?.[1];
 }
@@ -175,34 +182,82 @@ export default function ReaderPage() {
 
       console.log('🔍 DEBUG: Fetching follows for user:', user.pubkey);
 
-      // Fetch the user's contact list (kind 3)
-      const contactList = await ndk.fetchEvent({
-        kinds: [3],
-        authors: [user.pubkey],
-        limit: 1
-      });
+      // Function to fetch contact list from a specific relay
+      const fetchFromRelay = async (relayUrl: string) => {
+        try {
+          console.log(`📡 DEBUG: Querying relay: ${relayUrl}`);
+          const events = await ndk.fetchEvents({
+            kinds: [3],
+            authors: [user.pubkey],
+            limit: 1
+          }, {
+            relayUrls: [relayUrl]
+          });
+          
+          if (events.size > 0) {
+            const event = Array.from(events)[0];
+            console.log(`✅ DEBUG: Found contact list on ${relayUrl}:`, {
+              id: event.id,
+              created_at: event.created_at,
+              timestamp: new Date(event.created_at * 1000).toISOString(),
+              tagsCount: event.tags.length
+            });
+            return event;
+          } else {
+            console.log(`❌ DEBUG: No contact list found on ${relayUrl}`);
+            return null;
+          }
+        } catch (error) {
+          console.log(`⚠️ DEBUG: Error querying ${relayUrl}:`, error);
+          return null;
+        }
+      };
 
-      console.log('📋 DEBUG: Contact list event:', contactList ? {
-        id: contactList.id,
-        created_at: contactList.created_at,
-        tagsCount: contactList.tags.length,
-        firstFewTags: contactList.tags.slice(0, 3)
-      } : 'null');
+      // Query from specific trusted relays
+      const trustedRelays = CONTACT_LIST_RELAYS;
 
-      if (contactList) {
+      console.log('📡 DEBUG: Querying trusted relays for contact list...');
+      
+      // Query each relay individually to see which has the most recent contact list
+      const relayResults = await Promise.all(
+        trustedRelays.map(async (relay) => {
+          const event = await fetchFromRelay(relay);
+          return { relay, event };
+        })
+      );
+
+      // Find the most recent contact list from all relays
+      const validResults = relayResults.filter(result => result.event !== null);
+      
+      if (validResults.length > 0) {
+        // Sort by created_at to find the most recent
+        validResults.sort((a, b) => b.event!.created_at - a.event!.created_at);
+        const mostRecent = validResults[0];
+        
+        console.log('🏆 DEBUG: Most recent contact list found on:', mostRecent.relay);
+        console.log('📋 DEBUG: Contact list details:', {
+          relay: mostRecent.relay,
+          id: mostRecent.event!.id,
+          created_at: mostRecent.event!.created_at,
+          timestamp: new Date(mostRecent.event!.created_at * 1000).toISOString(),
+          tagsCount: mostRecent.event!.tags.length
+        });
+
         // Extract pubkeys from contact list tags
-        const followPubkeys = contactList.tags
+        const followPubkeys = mostRecent.event!.tags
           .filter(tag => tag[0] === 'p')
           .map(tag => tag[1])
           .filter(Boolean);
 
         console.log('👥 DEBUG: Found follows:', {
           count: followPubkeys.length,
-          firstFew: followPubkeys.slice(0, 5)
+          firstFew: followPubkeys.slice(0, 5),
+          sourceRelay: mostRecent.relay,
+          mostRecentEventAge: Math.floor((Date.now() / 1000) - mostRecent.event!.created_at) + ' seconds ago'
         });
         setFollows(followPubkeys);
       } else {
-        console.log('❌ DEBUG: No contact list found');
+        console.log('❌ DEBUG: No contact list found on any relay');
         setFollows([]);
       }
     } catch (error) {
