@@ -370,28 +370,11 @@ export default function Longform() {
     const shareUrl = `${window.location.origin}/reader/${note.id}`;
     
     try {
-      if (navigator.share) {
-        // Use native sharing if available
-        await navigator.share({
-          title: note.title,
-          text: note.summary || note.title,
-          url: shareUrl,
-        });
-      } else {
-        // Fallback to clipboard
-        await navigator.clipboard.writeText(shareUrl);
-        toast.success('Link copied to clipboard!');
-      }
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success('Link copied to clipboard!');
     } catch (error) {
-      console.error('Error sharing:', error);
-      // Fallback to clipboard if sharing fails
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        toast.success('Link copied to clipboard!');
-      } catch (clipboardError) {
-        console.error('Error copying to clipboard:', clipboardError);
-        toast.error('Failed to copy link');
-      }
+      console.error('Error copying to clipboard:', error);
+      toast.error('Failed to copy link');
     }
   };
 

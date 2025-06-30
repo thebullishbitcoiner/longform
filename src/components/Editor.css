@@ -166,4 +166,16 @@
 
 .w-md-editor-preview .wmde-markdown li {
   margin: 0.5rem 0 !important;
+}
+
+/* Task list styling for editor preview */
+.w-md-editor-preview .wmde-markdown li input[type="checkbox"] {
+  margin: 0 0.5rem 0 0 !important;
+  width: 1rem !important;
+  height: 1rem !important;
+  accent-color: rgb(59 130 246) !important;
+}
+
+.w-md-editor-preview .wmde-markdown li input[type="checkbox"]:checked {
+  accent-color: rgb(34 197 94) !important;
 } 

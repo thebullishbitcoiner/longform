@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useBlog } from '@/contexts/BlogContext';
 import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
@@ -199,10 +200,12 @@ export default function BlogPost() {
         <div className={styles.mainContent}>
           <div className={styles.notFound}>
             <h1>Post not found</h1>
-            <Link href="/reader" className={styles.backLink}>
-              <ArrowLeftIcon className={styles.icon} />
-              Back to reader
-            </Link>
+            {isAuthenticated && (
+              <Link href="/reader" className={styles.backLink}>
+                <ArrowLeftIcon className={styles.icon} />
+                Back to reader
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -212,10 +215,12 @@ export default function BlogPost() {
   return (
     <div className={styles.container}>
       <div className={styles.mainContent}>
-        <Link href="/reader" className={styles.backLink}>
-          <ArrowLeftIcon className={styles.icon} />
-          Back to reader
-        </Link>
+        {isAuthenticated && (
+          <Link href="/reader" className={styles.backLink}>
+            <ArrowLeftIcon className={styles.icon} />
+            Back to reader
+          </Link>
+        )}
 
         <article className={styles.post}>
           {post.image && (
@@ -253,6 +258,7 @@ export default function BlogPost() {
 
           <div className={styles.postContent}>
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 a: ({ ...props }) => {
                   const isNostrLink = props.href?.includes('njump.me');
@@ -267,6 +273,32 @@ export default function BlogPost() {
                       rel="noopener noreferrer"
                     />
                   );
+                },
+                li: ({ children, ...props }) => {
+                  // Check if this is a task list item (checkbox)
+                  const child = children as any;
+                  if (child && typeof child === 'object' && child.props && child.props.checked !== undefined) {
+                    return (
+                      <li {...props} className={styles.taskListItem}>
+                        {children}
+                      </li>
+                    );
+                  }
+                  return <li {...props}>{children}</li>;
+                },
+                input: ({ checked, ...props }) => {
+                  if (props.type === 'checkbox') {
+                    return (
+                      <input
+                        {...props}
+                        type="checkbox"
+                        checked={checked}
+                        className={styles.taskCheckbox}
+                        readOnly
+                      />
+                    );
+                  }
+                  return <input {...props} />;
                 },
               }}
             >
