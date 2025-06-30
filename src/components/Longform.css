@@ -181,4 +181,33 @@
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+
+
+.share-button {
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 0.375rem;
+  margin-left: 1rem;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.share-button:hover {
+  background-color: var(--hover);
+}
+
+.share-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--text-secondary);
+}
+
+.share-button:hover svg {
+  color: #60a5fa;
 } 

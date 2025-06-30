@@ -12,25 +12,54 @@ import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
 import NDK from '@nostr-dev-kit/ndk';
 
+// Create a standalone NDK instance for public access
+const createStandaloneNDK = () => {
+  return new NDK({
+    explicitRelayUrls: [
+      'wss://relay.damus.io',
+      'wss://relay.nostr.band',
+      'wss://relay.primal.net',
+      'wss://nostr.bitcoiner.social',
+      'wss://relay.snort.social'
+    ]
+  });
+};
+
 export default function BlogPost() {
   const params = useParams();
   const { getPost, addPost, updateAuthorProfile, markPostAsRead } = useBlog();
-  const { ndk } = useNostr();
+  const { ndk: contextNdk, isAuthenticated } = useNostr();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [processedContent, setProcessedContent] = useState('');
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
+  const [standaloneNdk, setStandaloneNdk] = useState<NDK | null>(null);
   const endOfContentRef = useRef<HTMLDivElement>(null);
+
+  // Initialize standalone NDK if context NDK is not available
+  useEffect(() => {
+    if (!contextNdk && !standaloneNdk) {
+      const ndk = createStandaloneNDK();
+      ndk.connect().then(() => {
+        setStandaloneNdk(ndk);
+      }).catch(error => {
+        console.error('Failed to connect standalone NDK:', error);
+      });
+    }
+  }, [contextNdk, standaloneNdk]);
 
   useEffect(() => {
     const fetchPost = async () => {
       if (params.id) {
         let postData = getPost(params.id as string);
         
+        // Use context NDK if available, otherwise use standalone NDK
+        const ndkToUse = contextNdk || standaloneNdk;
+        
         // If post is not in context, fetch it directly from Nostr
-        if (!postData && ndk) {
+        if (!postData && ndkToUse) {
           try {
-            const event = await ndk.fetchEvent({ ids: [params.id as string] });
+            const event = await ndkToUse.fetchEvent({ ids: [params.id as string] });
             if (event) {
               const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
               const summary = event.tags.find(tag => tag[0] === 'summary')?.[1] || '';
@@ -50,17 +79,27 @@ export default function BlogPost() {
                 tags
               };
 
-              // Add post to context for future use
-              addPost(postData);
+              // Only add post to context if user is authenticated (to avoid polluting local storage)
+              if (isAuthenticated) {
+                addPost(postData);
+              }
 
               // Fetch author profile
-              const user = ndk.getUser({ pubkey: event.pubkey });
+              const user = ndkToUse.getUser({ pubkey: event.pubkey });
               const profile = await user.fetchProfile();
               if (profile) {
-                updateAuthorProfile(event.pubkey, {
+                const authorProfile = {
                   name: profile.name,
                   displayName: profile.displayName
-                });
+                };
+                
+                // Update post with author profile
+                postData = { ...postData, author: authorProfile };
+                
+                // Only update context if authenticated
+                if (isAuthenticated) {
+                  updateAuthorProfile(event.pubkey, authorProfile);
+                }
               }
             }
           } catch (error) {
@@ -71,8 +110,8 @@ export default function BlogPost() {
         if (postData) {
           setPost(postData);
           // Process content to replace npubs with usernames
-          if (ndk) {
-            const content = await processNpubs(postData.content, ndk);
+          if (ndkToUse) {
+            const content = await processNpubs(postData.content, ndkToUse);
             setProcessedContent(content);
           } else {
             setProcessedContent(postData.content);
@@ -83,11 +122,11 @@ export default function BlogPost() {
     };
 
     fetchPost();
-  }, [params.id, getPost, ndk, addPost, updateAuthorProfile]);
+  }, [params.id, getPost, contextNdk, standaloneNdk, isAuthenticated, addPost, updateAuthorProfile]);
 
-  // Mark post as read when end of content is reached
+  // Mark post as read when end of content is reached (only if authenticated)
   useEffect(() => {
-    if (!post || hasMarkedAsRead || !endOfContentRef.current) return;
+    if (!post || hasMarkedAsRead || !endOfContentRef.current || !isAuthenticated) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -105,7 +144,7 @@ export default function BlogPost() {
     return () => {
       observer.disconnect();
     };
-  }, [post, hasMarkedAsRead, markPostAsRead]);
+  }, [post, hasMarkedAsRead, markPostAsRead, isAuthenticated]);
 
   const processNpubs = async (content: string, ndk: NDK) => {
     let processedContent = content;

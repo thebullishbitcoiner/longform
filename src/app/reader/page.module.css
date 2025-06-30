@@ -273,13 +273,18 @@
   gap: 0.25rem;
 }
 
+
+
 .postCardTitle {
   font-size: 1rem;
   font-weight: 600;
   color: rgb(244 244 245);
   line-height: 1.4;
   margin: 0;
+  flex: 1;
 }
+
+
 
 .postCardMeta {
   display: flex;

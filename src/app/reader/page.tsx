@@ -9,6 +9,7 @@ import styles from './page.module.css';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { NDKSubscription } from '@nostr-dev-kit/ndk';
 
+
 // Configuration: Specify which relays to use for contact list queries
 // You can modify this list to use only the relays you trust
 const CONTACT_LIST_RELAYS = [
@@ -28,6 +29,8 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const { isPostRead, markPostAsRead, markPostAsUnread } = useBlog();
   const x = useMotionValue(0);
   const controls = useAnimation();
+
+
   
   // Transform x position to opacity for the action indicators
   const leftOpacity = useTransform(x, [-30, -15], [1, 0]);

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import './Longform.css';
@@ -363,6 +363,38 @@ export default function Longform() {
     router.push(`/editor/${id}`);
   };
 
+  const handleSharePublished = async (e: React.MouseEvent, note: PublishedNote) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const shareUrl = `${window.location.origin}/reader/${note.id}`;
+    
+    try {
+      if (navigator.share) {
+        // Use native sharing if available
+        await navigator.share({
+          title: note.title,
+          text: note.summary || note.title,
+          url: shareUrl,
+        });
+      } else {
+        // Fallback to clipboard
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success('Link copied to clipboard!');
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+      // Fallback to clipboard if sharing fails
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success('Link copied to clipboard!');
+      } catch (clipboardError) {
+        console.error('Error copying to clipboard:', clipboardError);
+        toast.error('Failed to copy link');
+      }
+    }
+  };
+
   return (
     <>
       <div className="action-bar">
@@ -467,6 +499,13 @@ export default function Longform() {
                       </div>
                     </div>
                   </div>
+                  <button
+                    onClick={(e) => handleSharePublished(e, note)}
+                    className="share-button"
+                    title="Share post"
+                  >
+                    <ShareIcon />
+                  </button>
                 </div>
               </div>
             ))}
