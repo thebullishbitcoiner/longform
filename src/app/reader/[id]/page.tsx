@@ -276,8 +276,8 @@ export default function BlogPost() {
                 },
                 li: ({ children, ...props }) => {
                   // Check if this is a task list item (checkbox)
-                  const child = children as any;
-                  if (child && typeof child === 'object' && child.props && child.props.checked !== undefined) {
+                  const child = children as React.ReactElement;
+                  if (child && typeof child === 'object' && child.props && typeof child.props === 'object' && 'checked' in child.props) {
                     return (
                       <li {...props} className={styles.taskListItem}>
                         {children}
