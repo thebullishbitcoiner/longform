@@ -1,7 +1,9 @@
+import type { NostrEvent } from '@nostrify/types';
+
 // Nostr extension interface
 export interface NostrExtension {
   getPublicKey(): Promise<string>;
-  signEvent(event: any): Promise<any>;
+  signEvent(event: NostrEvent): Promise<NostrEvent>;
   getRelays(): Promise<Record<string, { read: boolean; write: boolean }>>;
   nip04?: {
     encrypt(peer: string, plaintext: string): Promise<string>;
