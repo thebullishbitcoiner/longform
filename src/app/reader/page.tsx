@@ -153,7 +153,11 @@ export default function ReaderPage() {
   const subscriptionRef = useRef<NDKSubscription | null>(null);
   const [isLoadingFollows, setIsLoadingFollows] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [showDebugConsole, setShowDebugConsole] = useState(false);
   const setupSubscriptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const eventCountRef = useRef(0);
 
   // Fetch current user's follows (contact list)
   const fetchFollows = useCallback(async () => {
@@ -163,6 +167,8 @@ export default function ReaderPage() {
       isConnected,
       isLoading 
     });
+    
+    setDebugInfo('Fetching follows...');
     
     if (!ndk || !isAuthenticated || !isConnected || isLoading) {
       console.log('❌ DEBUG: Cannot fetch follows - missing requirements');
@@ -258,14 +264,28 @@ export default function ReaderPage() {
           sourceRelay: mostRecent.relay,
           mostRecentEventAge: Math.floor((Date.now() / 1000) - mostRecent.event!.created_at) + ' seconds ago'
         });
-        setFollows(followPubkeys);
+        
+        // Clean the follows list to remove invalid pubkeys
+        const cleanedFollows = followPubkeys.filter(pubkey => /^[0-9a-f]{64}$/i.test(pubkey));
+        const invalidFollows = followPubkeys.filter(pubkey => !/^[0-9a-f]{64}$/i.test(pubkey));
+        
+        if (invalidFollows.length > 0) {
+          console.log('⚠️ DEBUG: Found invalid follows:', invalidFollows);
+          setDebugInfo(`Cleaned follows: ${cleanedFollows.length} valid, ${invalidFollows.length} invalid removed`);
+        } else {
+          setDebugInfo(`Found ${cleanedFollows.length} follows from ${mostRecent.relay}`);
+        }
+        
+        setFollows(cleanedFollows);
       } else {
         console.log('❌ DEBUG: No contact list found on any relay');
         setFollows([]);
+        setDebugInfo('No contact list found on any relay');
       }
     } catch (error) {
       console.error('❌ DEBUG: Error fetching follows:', error);
       setFollows([]);
+      setDebugInfo(`Error fetching follows: ${error}`);
     } finally {
       setIsLoadingFollows(false);
     }
@@ -296,8 +316,11 @@ export default function ReaderPage() {
       ndk: !!ndk, 
       followsCount: follows.length,
       isAuthenticated,
-      isConnected
+      isConnected,
+      isLoading
     });
+    
+    setDebugInfo('Setting up subscription...');
     
     // Clean up any existing subscription
     if (subscriptionRef.current) {
@@ -305,12 +328,18 @@ export default function ReaderPage() {
       subscriptionRef.current.stop();
       subscriptionRef.current = null;
     }
+    
+    // Reset loading state to ensure we can proceed
+    setIsLoadingPosts(false);
 
     // Clear processed events (limit size to prevent memory leaks)
     if (processedEvents.current.size > 1000) {
       processedEvents.current.clear();
     }
     console.log('🧹 DEBUG: Cleared processed events');
+    
+    // Reset event counter
+    eventCountRef.current = 0;
 
     // Only proceed if we have all requirements
     if (!ndk || follows.length === 0 || !isAuthenticated || !isConnected) {
@@ -320,30 +349,55 @@ export default function ReaderPage() {
         isAuthenticated,
         isConnected
       });
+      setDebugInfo(`Cannot setup subscription: hasNDK=${!!ndk}, follows=${follows.length}, auth=${isAuthenticated}, connected=${isConnected}`);
       return;
     }
 
+    // Check if we already have posts from follows
+    const existingPosts = getSortedPosts().filter(post => follows.includes(post.pubkey));
+    console.log('🔍 DEBUG: Existing posts from follows:', {
+      existingCount: existingPosts.length,
+      followsCount: follows.length,
+      allPostsCount: getSortedPosts().length
+    });
+    
+    // Don't skip loading if we have existing posts - we want to keep the subscription open for new posts
+    // Note: Removed the isLoadingPosts check as it was preventing subscription creation
+
     setIsLoadingPosts(true);
 
+    // Set a fallback timeout to stop loading after 10 seconds
+    loadingTimeoutRef.current = setTimeout(() => {
+      console.log('⏰ DEBUG: Loading timeout reached, stopping loading state');
+      setIsLoadingPosts(false);
+      setDebugInfo('Loading timeout reached - no events received');
+    }, 10000);
+
     try {
-      // Create filter object explicitly
+      // Create filter object explicitly - support multiple longform kinds
       const filter = {
-        kinds: [30023],
+        kinds: [30023], // 30023 is the standard longform kind
         authors: follows
       };
 
       console.log('📡 DEBUG: Creating subscription with filter:', {
         kinds: filter.kinds,
         authorsCount: filter.authors.length,
-        firstFewAuthors: filter.authors.slice(0, 3)
+        firstFewAuthors: filter.authors.slice(0, 3),
+        allFollows: follows,
+        filterObject: filter
       });
+      
+      // Log the exact filter being sent to NDK
+      console.log('🔍 DEBUG: NDK subscription filter:', JSON.stringify(filter, null, 2));
 
       // Create new subscription with better configuration
+      console.log('📡 DEBUG: About to create subscription with NDK...');
       subscriptionRef.current = ndk.subscribe(
         filter,
         { 
-          closeOnEose: true, // Changed to true for better reliability
-          groupable: true // Changed to true for better performance
+          closeOnEose: false, // Changed to false to keep subscription open for new posts
+          groupable: false // Disable grouping to send subscription immediately
         },
         {
           onEvent: async (event) => {
@@ -352,7 +406,9 @@ export default function ReaderPage() {
               pubkey: event.pubkey,
               kind: event.kind,
               created_at: event.created_at,
-              title: getTagValue(event.tags, 'title') || 'Untitled'
+              title: getTagValue(event.tags, 'title') || 'Untitled',
+              isFromFollow: follows.includes(event.pubkey),
+              followIndex: follows.indexOf(event.pubkey)
             });
             
             // Skip if we've already processed this event
@@ -361,6 +417,22 @@ export default function ReaderPage() {
               return;
             }
             processedEvents.current.add(event.id);
+
+            // Increment event counter
+            eventCountRef.current++;
+            
+            // Clear the loading timeout since we received an event
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
+            }
+            
+            // If we've received some events, stop loading after a shorter timeout
+            if (eventCountRef.current >= 5) {
+              console.log('✅ DEBUG: Received sufficient events, stopping loading state');
+              setIsLoadingPosts(false);
+              setDebugInfo(`Received ${eventCountRef.current} events, stopped loading`);
+            }
 
             try {
               const title = getTagValue(event.tags, 'title') || 'Untitled';
@@ -410,20 +482,83 @@ export default function ReaderPage() {
           },
           onEose: (subscription) => {
             console.log('🏁 DEBUG: Subscription reached EOSE:', subscription.internalId);
+            // Clear the loading timeout
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
+            }
             setIsLoadingPosts(false);
           }
         }
       );
       
-      console.log('✅ DEBUG: Subscription created successfully');
+      console.log('✅ DEBUG: Subscription created successfully:', {
+        subscriptionId: subscriptionRef.current?.internalId,
+        hasSubscription: !!subscriptionRef.current
+      });
+      
+      // Also try to fetch some recent events from follows to debug
+      console.log('🔍 DEBUG: Testing fetchEvents for debugging...');
+      
+      // Test 1: Fetch any recent longform posts (not just from follows)
+      ndk.fetchEvents({
+        kinds: [30023],
+        limit: 5
+      }).then(events => {
+        console.log('🔍 DEBUG: Any longform posts test:', {
+          eventsCount: events.size,
+          events: Array.from(events).map(e => ({
+            id: e.id,
+            kind: e.kind,
+            pubkey: e.pubkey,
+            created_at: e.created_at,
+            title: getTagValue(e.tags, 'title') || 'No title'
+          }))
+        });
+      }).catch(error => {
+        console.error('❌ DEBUG: Any longform posts test failed:', error);
+      });
+      
+      // Test 2: Fetch events from follows (including regular notes)
+      ndk.fetchEvents({
+        kinds: [30023, 1], // Include regular notes too for debugging
+        authors: follows.slice(0, 5), // Test with first 5 follows
+        limit: 10
+      }).then(events => {
+        console.log('🔍 DEBUG: Follows events test result:', {
+          eventsCount: events.size,
+          events: Array.from(events).map(e => ({
+            id: e.id,
+            kind: e.kind,
+            pubkey: e.pubkey,
+            created_at: e.created_at,
+            title: getTagValue(e.tags, 'title') || 'No title'
+          }))
+        });
+      }).catch(error => {
+        console.error('❌ DEBUG: Follows events test failed:', error);
+      });
+      
     } catch (error) {
       console.error('❌ DEBUG: Error setting up subscription:', error);
+      // Clear the loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       setIsLoadingPosts(false);
     }
-  }, [ndk, follows, isAuthenticated, isConnected, addPost, updateAuthorProfile]);
+  }, [ndk, follows, isAuthenticated, isConnected, addPost, updateAuthorProfile, getSortedPosts, isLoading]);
 
   // Set up the subscription when dependencies are ready
   useEffect(() => {
+    console.log('🔄 DEBUG: Subscription useEffect triggered:', {
+      followsLength: follows.length,
+      isAuthenticated,
+      isConnected,
+      isLoadingPosts
+    });
+    
     if (follows.length > 0 && isAuthenticated && isConnected) {
       // Clear any existing timeout
       if (setupSubscriptionTimeoutRef.current) {
@@ -432,6 +567,7 @@ export default function ReaderPage() {
       
       // Add a small delay to ensure everything is properly initialized and prevent rapid re-setups
       setupSubscriptionTimeoutRef.current = setTimeout(() => {
+        console.log('⏰ DEBUG: Setting up subscription after timeout');
         setupSubscription();
       }, 200);
 
@@ -440,8 +576,14 @@ export default function ReaderPage() {
           clearTimeout(setupSubscriptionTimeoutRef.current);
         }
       };
+    } else {
+      console.log('❌ DEBUG: Cannot setup subscription - missing requirements:', {
+        hasFollows: follows.length > 0,
+        isAuthenticated,
+        isConnected
+      });
     }
-  }, [follows, isAuthenticated, isConnected, setupSubscription]);
+  }, [follows, isAuthenticated, isConnected, setupSubscription, isLoadingPosts]);
 
   // Cleanup subscription on unmount
   useEffect(() => {
@@ -453,6 +595,9 @@ export default function ReaderPage() {
       }
       if (setupSubscriptionTimeoutRef.current) {
         clearTimeout(setupSubscriptionTimeoutRef.current);
+      }
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
       }
     };
   }, []);
@@ -519,6 +664,22 @@ export default function ReaderPage() {
           <h1 className={styles.title}>Reads</h1>
           <div className={styles.filterButtons}>
             <button
+              onClick={() => setShowDebugConsole(!showDebugConsole)}
+              style={{
+                padding: '4px 8px',
+                background: 'rgba(0, 0, 0, 0.1)',
+                color: '#666',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '10px',
+                marginRight: '10px'
+              }}
+              title="Toggle Debug Console"
+            >
+              🔧
+            </button>
+            <button
               onClick={() => setFilter('all')}
               className={`${styles.filterButton} ${filter === 'all' ? styles.filterButtonActive : ''}`}
             >
@@ -538,6 +699,723 @@ export default function ReaderPage() {
             </button>
           </div>
         </div>
+        {showDebugConsole && (
+          <div style={{ 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            padding: '20px', 
+            margin: '20px 0', 
+            borderRadius: '12px', 
+            fontSize: '14px',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              marginBottom: '15px',
+              fontSize: '16px',
+              fontWeight: '600'
+            }}>
+              <span style={{ 
+                background: 'rgba(255, 255, 255, 0.2)', 
+                padding: '4px 8px', 
+                borderRadius: '6px',
+                marginRight: '10px',
+                fontSize: '12px'
+              }}>
+                🔍
+              </span>
+              Debug Console
+            </div>
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.2)', 
+              padding: '12px', 
+              borderRadius: '8px',
+              marginBottom: '15px',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              {debugInfo}
+            </div>
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '10px'
+            }}>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Manual test triggered...');
+                  // Test fetching any longform posts
+                  ndk.fetchEvents({
+                    kinds: [30023],
+                    limit: 5
+                  }).then(events => {
+                    const eventArray = Array.from(events);
+                    const authorsInFollows = eventArray.filter(e => follows.includes(e.pubkey));
+                    setDebugInfo(`Manual test: Found ${events.size} longform posts, ${authorsInFollows.length} from your follows`);
+                    console.log('Manual test events:', eventArray.map(e => ({
+                      id: e.id,
+                      kind: e.kind,
+                      pubkey: e.pubkey,
+                      title: getTagValue(e.tags, 'title') || 'No title',
+                      isFollow: follows.includes(e.pubkey)
+                    })));
+                    console.log('Follows list:', follows);
+                    console.log('Authors in follows:', authorsInFollows.map(e => e.pubkey));
+                  }).catch(error => {
+                    setDebugInfo(`Manual test failed: ${error}`);
+                  });
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🔍 Test Any Longform
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing follows specifically...');
+                  // Test fetching posts from your follows
+                  if (follows.length === 0) {
+                    setDebugInfo('No follows found');
+                    return;
+                  }
+                  ndk.fetchEvents({
+                    kinds: [30023],
+                    authors: follows.slice(0, 3), // Test with first 3 follows
+                    limit: 10
+                  }).then(events => {
+                    const eventArray = Array.from(events);
+                    const longformEvents = eventArray.filter(e => e.kind === 30023);
+                    const kindCounts = eventArray.reduce((acc, e) => {
+                      acc[e.kind] = (acc[e.kind] || 0) + 1;
+                      return acc;
+                    }, {} as Record<number, number>);
+                    
+                    setDebugInfo(`Follows test: ${events.size} total events, ${longformEvents.length} longform. Kinds: ${JSON.stringify(kindCounts)}`);
+                    console.log('Follows test events:', eventArray.map(e => ({
+                      id: e.id,
+                      kind: e.kind,
+                      pubkey: e.pubkey,
+                      title: getTagValue(e.tags, 'title') || 'No title'
+                    })));
+                    console.log('Event kind distribution:', kindCounts);
+                  }).catch(error => {
+                    setDebugInfo(`Follows test failed: ${error}`);
+                  });
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                👥 Test From Follows
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing any events from follows...');
+                  // Test fetching any events from your follows
+                  if (follows.length === 0) {
+                    setDebugInfo('No follows found');
+                    return;
+                  }
+                  ndk.fetchEvents({
+                    authors: follows.slice(0, 3), // Test with first 3 follows
+                    limit: 10
+                  }).then(events => {
+                    setDebugInfo(`Any events test: Found ${events.size} events from your follows`);
+                    console.log('Any events test:', Array.from(events).map(e => ({
+                      id: e.id,
+                      kind: e.kind,
+                      pubkey: e.pubkey,
+                      content: e.content.substring(0, 50) + '...'
+                    })));
+                  }).catch(error => {
+                    setDebugInfo(`Any events test failed: ${error}`);
+                  });
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)',
+                  color: 'black',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                📝 Test Any Events
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing longform from all follows with broader search...');
+                  // Test fetching longform posts from all follows with no time limit
+                  if (follows.length === 0) {
+                    setDebugInfo('No follows found');
+                    return;
+                  }
+                  ndk.fetchEvents({
+                    kinds: [30023],
+                    authors: follows,
+                    limit: 50 // Higher limit to find more posts
+                  }).then(events => {
+                    const eventArray = Array.from(events);
+                    setDebugInfo(`Broad longform test: Found ${events.size} longform posts from your follows`);
+                    console.log('Broad longform test:', eventArray.map(e => ({
+                      id: e.id,
+                      kind: e.kind,
+                      pubkey: e.pubkey,
+                      created_at: e.created_at,
+                      title: getTagValue(e.tags, 'title') || 'No title',
+                      date: new Date(e.created_at * 1000).toISOString(),
+                      isInFollows: follows.includes(e.pubkey)
+                    })));
+                    
+                    if (eventArray.length === 0) {
+                      console.log('❌ No longform posts found from any of your follows');
+                      console.log('Follows list (first 10):', follows.slice(0, 10));
+                    }
+                  }).catch(error => {
+                    setDebugInfo(`Broad longform test failed: ${error}`);
+                  });
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🔍 Deep Longform Search
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing with different relays...');
+                  // Test with different relays that are known to have good longform content
+                  const testRelays = [
+                    'wss://relay.nostr.band',
+                    'wss://purplepag.es',
+                    'wss://relay.damus.io',
+                    'wss://relay.primal.net'
+                  ];
+                  
+                  Promise.all(testRelays.map(relay => 
+                    ndk.fetchEvents({
+                      kinds: [30023],
+                      authors: follows.slice(0, 3),
+                      limit: 5
+                    }, {
+                      relayUrls: [relay]
+                    }).then(events => ({ relay, count: events.size }))
+                    .catch(error => ({ relay, count: 0, error: error.message }))
+                  )).then(results => {
+                    const summary = results.map(r => `${r.relay}: ${r.count} posts`).join(', ');
+                    setDebugInfo(`Relay test: ${summary}`);
+                    console.log('Relay test results:', results);
+                  }).catch(error => {
+                    setDebugInfo(`Relay test failed: ${error}`);
+                  });
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🌐 Test Different Relays
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Checking follows list...');
+                  console.log('📋 Current follows list:', {
+                    count: follows.length,
+                    first10: follows.slice(0, 10),
+                    last10: follows.slice(-10),
+                    allFollows: follows
+                  });
+                  setDebugInfo(`Follows count: ${follows.length}. First 3: ${follows.slice(0, 3).join(', ')}`);
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #e83e8c 0%, #d63384 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                📋 Check Follows
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing first few follows for any activity...');
+                  if (follows.length === 0) {
+                    setDebugInfo('No follows found');
+                    return;
+                  }
+                  
+                  // Test the first 5 follows for any activity
+                  const testFollows = follows.slice(0, 5);
+                  console.log('🧪 Testing follows for activity:', testFollows);
+                  
+                  ndk.fetchEvents({
+                    authors: testFollows,
+                    limit: 20
+                  }).then(events => {
+                    const eventArray = Array.from(events);
+                    const kindCounts = eventArray.reduce((acc, e) => {
+                      acc[e.kind] = (acc[e.kind] || 0) + 1;
+                      return acc;
+                    }, {} as Record<number, number>);
+                    
+                    setDebugInfo(`Activity test: ${events.size} events from first 5 follows. Kinds: ${JSON.stringify(kindCounts)}`);
+                    console.log('Activity test events:', eventArray.map(e => ({
+                      id: e.id,
+                      kind: e.kind,
+                      pubkey: e.pubkey,
+                      created_at: e.created_at,
+                      content: e.content.substring(0, 50) + '...'
+                    })));
+                  }).catch(error => {
+                    setDebugInfo(`Activity test failed: ${error}`);
+                  });
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🧪 Test Activity
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing simple subscription...');
+                  console.log('🧪 Testing simple subscription without grouping');
+                  
+                  // Create a simple test subscription for any longform posts
+                  const testSub = ndk.subscribe(
+                    { kinds: [30023], limit: 5 },
+                    { groupable: false },
+                    {
+                      onEvent: (event) => {
+                        const isInFollows = follows.includes(event.pubkey);
+                        console.log('✅ Simple test subscription received event:', {
+                          id: event.id,
+                          kind: event.kind,
+                          pubkey: event.pubkey,
+                          title: getTagValue(event.tags, 'title') || 'No title',
+                          isInFollows,
+                          followIndex: isInFollows ? follows.indexOf(event.pubkey) : -1
+                        });
+                        setDebugInfo(`Simple test: Received event from ${event.pubkey} (in follows: ${isInFollows})`);
+                      },
+                      onEose: () => {
+                        console.log('🏁 Simple test subscription EOSE');
+                        setDebugInfo('Simple test: Subscription completed');
+                      }
+                    }
+                  );
+                  
+                  console.log('🧪 Simple test subscription created:', testSub.internalId);
+                  
+                  // Stop the test subscription after 5 seconds
+                  setTimeout(() => {
+                    testSub.stop();
+                    console.log('🧪 Simple test subscription stopped');
+                  }, 5000);
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🧪 Test Simple Sub
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing subscription with small follows list...');
+                  if (follows.length === 0) {
+                    setDebugInfo('No follows found');
+                    return;
+                  }
+                  
+                  // Test with just the first 3 follows
+                  const smallFollowsList = follows.slice(0, 3);
+                  console.log('🧪 Testing subscription with small follows list:', smallFollowsList);
+                  
+                  const testSub = ndk.subscribe(
+                    { kinds: [30023], authors: smallFollowsList, limit: 10 },
+                    { groupable: false },
+                    {
+                      onEvent: (event) => {
+                        console.log('✅ Small follows test received event:', {
+                          id: event.id,
+                          kind: event.kind,
+                          pubkey: event.pubkey,
+                          title: getTagValue(event.tags, 'title') || 'No title',
+                          isInSmallList: smallFollowsList.includes(event.pubkey)
+                        });
+                        setDebugInfo(`Small follows test: Received event from ${event.pubkey}`);
+                      },
+                      onEose: () => {
+                        console.log('🏁 Small follows test EOSE');
+                        setDebugInfo('Small follows test: Subscription completed');
+                      }
+                    }
+                  );
+                  
+                  console.log('🧪 Small follows test subscription created:', testSub.internalId);
+                  
+                  // Stop the test subscription after 5 seconds
+                  setTimeout(() => {
+                    testSub.stop();
+                    console.log('🧪 Small follows test subscription stopped');
+                  }, 5000);
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #20c997 0%, #17a2b8 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🧪 Test Small Follows
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Cleaning follows list...');
+                  
+                  // Clean the current follows list
+                  const cleanedFollows = follows.filter(pubkey => /^[0-9a-f]{64}$/i.test(pubkey));
+                  const invalidFollows = follows.filter(pubkey => !/^[0-9a-f]{64}$/i.test(pubkey));
+                  
+                  console.log('🧹 Cleaning follows list:', {
+                    original: follows.length,
+                    valid: cleanedFollows.length,
+                    invalid: invalidFollows.length,
+                    invalidList: invalidFollows
+                  });
+                  
+                  setFollows(cleanedFollows);
+                  setDebugInfo(`Cleaned follows: ${cleanedFollows.length} valid, ${invalidFollows.length} invalid removed`);
+                  
+                  // Test subscription with cleaned list
+                  setTimeout(() => {
+                    console.log('🧪 Testing subscription with cleaned follows list...');
+                    setupSubscription();
+                  }, 1000);
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🧹 Clean & Test
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Testing context with manual post...');
+                  // Test if the context is working by manually adding a test post
+                  const testPost: BlogPost = {
+                    id: 'test-post-' + Date.now(),
+                    pubkey: follows[0] || 'test-pubkey',
+                    created_at: Math.floor(Date.now() / 1000),
+                    content: 'This is a test post to verify the context is working.',
+                    title: 'Test Post',
+                    summary: 'A test post for debugging',
+                    published_at: Math.floor(Date.now() / 1000),
+                    image: '',
+                    tags: []
+                  };
+                  
+                  addPost(testPost);
+                  setDebugInfo(`Added test post. Total posts now: ${getSortedPosts().length}`);
+                  console.log('Test post added:', testPost);
+                  console.log('All posts in context:', getSortedPosts());
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🧪 Test Context
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Checking subscription status...');
+                  const status = {
+                    hasSubscription: !!subscriptionRef.current,
+                    subscriptionId: subscriptionRef.current?.internalId,
+                    isLoadingPosts,
+                    eventCount: eventCountRef.current,
+                    processedEventsCount: processedEvents.current.size,
+                    followsCount: follows.length,
+                    isAuthenticated,
+                    isConnected
+                  };
+                  setDebugInfo(`Subscription status: ${JSON.stringify(status, null, 2)}`);
+                  console.log('Subscription status:', status);
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                📊 Check Status
+              </button>
+              <button 
+                onClick={() => {
+                  setDebugInfo('Forcing subscription setup...');
+                  console.log('🔧 DEBUG: Manually forcing subscription setup');
+                  setupSubscription();
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #20c997 0%, #17a2b8 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                🔧 Force Subscription
+              </button>
+              <button 
+                onClick={() => setShowDebugConsole(false)}
+                style={{
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.2s ease',
+                  minWidth: '120px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                }}
+              >
+                ❌ Hide Debug
+              </button>
+            </div>
+          </div>
+        )}
         <div className={styles.postsGrid}>
           {isLoadingPosts && follows.length > 0 && (
             <div className={styles.loadingState}>
