@@ -803,88 +803,92 @@ export default function ReaderPage() {
             <div className={styles.header}>
               <h1 className={styles.title}>Reads</h1>
               <div className={styles.filterButtons}>
-                <button
-                  onClick={() => setShowDebugConsole(!showDebugConsole)}
-                  style={{
-                    padding: '4px 8px',
-                    background: 'rgba(0, 0, 0, 0.1)',
-                    color: '#666',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '10px',
-                    marginRight: '10px'
-                  }}
-                  title="Toggle Debug Console"
-                >
-                  🔧
-                </button>
-                {/* Quick Debug Buttons */}
-                <button
-                  onClick={() => {
-                    const allPosts = getSortedPosts();
-                    const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
-                    setDebugInfo(`Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`);
-                    console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    background: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '10px',
-                    marginRight: '10px'
-                  }}
-                  title="Count Posts"
-                >
-                  📊
-                </button>
-                <button
-                  onClick={() => {
-                    console.log('🔍 DEBUG: Current state:', {
-                      filteredPostsLength: filteredPosts.length,
-                      postsToShow,
-                      firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
-                    });
-                    setDebugInfo(`Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`);
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    background: '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '10px',
-                    marginRight: '10px'
-                  }}
-                  title="Check Rendering"
-                >
-                  🎨
-                </button>
-                <button
-                  onClick={() => {
-                    const allPosts = getSortedPosts();
-                    const uniqueIds = new Set(allPosts.map(p => p.id));
-                    setDebugInfo(`Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`);
-                    console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    background: '#fd7e14',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '10px',
-                    marginRight: '10px'
-                  }}
-                  title="Check Duplicates"
-                >
-                  🔍
-                </button>
+                {process.env.NODE_ENV !== 'production' && (
+                  <>
+                    <button
+                      onClick={() => setShowDebugConsole(!showDebugConsole)}
+                      style={{
+                        padding: '4px 8px',
+                        background: 'rgba(0, 0, 0, 0.1)',
+                        color: '#666',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        marginRight: '10px'
+                      }}
+                      title="Toggle Debug Console"
+                    >
+                      🔧
+                    </button>
+                    {/* Quick Debug Buttons */}
+                    <button
+                      onClick={() => {
+                        const allPosts = getSortedPosts();
+                        const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
+                        setDebugInfo(`Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`);
+                        console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        background: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        marginRight: '10px'
+                      }}
+                      title="Count Posts"
+                    >
+                      📊
+                    </button>
+                    <button
+                      onClick={() => {
+                        console.log('🔍 DEBUG: Current state:', {
+                          filteredPostsLength: filteredPosts.length,
+                          postsToShow,
+                          firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
+                        });
+                        setDebugInfo(`Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`);
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        background: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        marginRight: '10px'
+                      }}
+                      title="Check Rendering"
+                    >
+                      🎨
+                    </button>
+                    <button
+                      onClick={() => {
+                        const allPosts = getSortedPosts();
+                        const uniqueIds = new Set(allPosts.map(p => p.id));
+                        setDebugInfo(`Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`);
+                        console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        background: '#fd7e14',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        marginRight: '10px'
+                      }}
+                      title="Check Duplicates"
+                    >
+                      🔍
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => setFilter('all')}
                   className={`${styles.filterButton} ${filter === 'all' ? styles.filterButtonActive : ''}`}
@@ -905,118 +909,120 @@ export default function ReaderPage() {
                 </button>
               </div>
             </div>
-            {/* Debug Buttons - Always Visible */}
-            <div style={{ 
-              background: '#f8f9fa',
-              padding: '15px', 
-              margin: '15px 0', 
-              borderRadius: '8px', 
-              border: '2px solid #dee2e6',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}>
+            {/* Debug Buttons - Only Visible in Development */}
+            {process.env.NODE_ENV !== 'production' && (
               <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                marginBottom: '10px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                color: '#495057'
+                background: '#f8f9fa',
+                padding: '15px', 
+                margin: '15px 0', 
+                borderRadius: '8px', 
+                border: '2px solid #dee2e6',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
               }}>
-                <span style={{ marginRight: '10px' }}>🔍</span>
-                Debug Tools
-              </div>
-              <div style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: '10px'
-              }}>
-                <button 
-                  onClick={() => {
-                    const allPosts = getSortedPosts();
-                    const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
-                    const info = `Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`;
-                    setDebugInfo(info);
-                    console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
-                    alert(info); // Force display
-                  }}
-                  style={{
-                    padding: '10px 15px',
-                    background: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  📊 Count Posts
-                </button>
-                <button 
-                  onClick={() => {
-                    const info = `Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`;
-                    console.log('🔍 DEBUG: Current state:', {
-                      filteredPostsLength: filteredPosts.length,
-                      postsToShow,
-                      firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
-                    });
-                    setDebugInfo(info);
-                    alert(info); // Force display
-                  }}
-                  style={{
-                    padding: '10px 15px',
-                    background: '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  🎨 Check Rendering
-                </button>
-                <button 
-                  onClick={() => {
-                    const allPosts = getSortedPosts();
-                    const uniqueIds = new Set(allPosts.map(p => p.id));
-                    const info = `Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`;
-                    setDebugInfo(info);
-                    console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
-                    alert(info); // Force display
-                  }}
-                  style={{
-                    padding: '10px 15px',
-                    background: '#fd7e14',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  🔍 Check Duplicates
-                </button>
-              </div>
-              {debugInfo && (
                 <div style={{ 
-                  background: '#e9ecef', 
-                  padding: '10px', 
-                  borderRadius: '6px',
-                  marginTop: '10px',
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  color: '#495057',
-                  border: '1px solid #ced4da'
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  marginBottom: '10px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  color: '#495057'
                 }}>
-                  <strong>Debug Info:</strong> {debugInfo}
+                  <span style={{ marginRight: '10px' }}>🔍</span>
+                  Debug Tools
                 </div>
-              )}
-            </div>
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '10px'
+                }}>
+                  <button 
+                    onClick={() => {
+                      const allPosts = getSortedPosts();
+                      const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
+                      const info = `Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`;
+                      setDebugInfo(info);
+                      console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
+                      alert(info); // Force display
+                    }}
+                    style={{
+                      padding: '10px 15px',
+                      background: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    📊 Count Posts
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const info = `Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`;
+                      console.log('🔍 DEBUG: Current state:', {
+                        filteredPostsLength: filteredPosts.length,
+                        postsToShow,
+                        firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
+                      });
+                      setDebugInfo(info);
+                      alert(info); // Force display
+                    }}
+                    style={{
+                      padding: '10px 15px',
+                      background: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    🎨 Check Rendering
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const allPosts = getSortedPosts();
+                      const uniqueIds = new Set(allPosts.map(p => p.id));
+                      const info = `Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`;
+                      setDebugInfo(info);
+                      console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
+                      alert(info); // Force display
+                    }}
+                    style={{
+                      padding: '10px 15px',
+                      background: '#fd7e14',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    🔍 Check Duplicates
+                  </button>
+                </div>
+                {debugInfo && (
+                  <div style={{ 
+                    background: '#e9ecef', 
+                    padding: '10px', 
+                    borderRadius: '6px',
+                    marginTop: '10px',
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    color: '#495057',
+                    border: '1px solid #ced4da'
+                  }}>
+                    <strong>Debug Info:</strong> {debugInfo}
+                  </div>
+                )}
+              </div>
+            )}
             {showDebugConsole && (
               <div style={{ 
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -1276,15 +1282,15 @@ export default function ReaderPage() {
               {filteredPosts.length === postsToShow && (
                 <div style={{
                   padding: '10px',
-                  background: '#f8f9fa',
-                  border: '1px solid #dee2e6',
+                  background: 'rgba(161, 161, 170, 0.1)',
+                  border: '1px solid rgb(39, 39, 42)',
                   borderRadius: '4px',
                   margin: '10px 0',
                   fontSize: '14px',
-                  color: '#6c757d',
+                  color: 'rgb(161, 161, 170)',
                   textAlign: 'center'
                 }}>
-                  Showing first {postsToShow} posts for better performance
+                  Showing {postsToShow} / {totalAvailablePosts.length} articles
                 </div>
               )}
               {/* Load More Button */}
@@ -1300,27 +1306,26 @@ export default function ReaderPage() {
                       <button
                         onClick={() => setPostsToShow(prev => prev + 21)}
                         style={{
-                          padding: '12px 24px',
-                          background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
-                          color: 'white',
+                          padding: '0.625rem 1.25rem',
+                          background: '#ffffff',
+                          color: '#000000',
                           border: 'none',
-                          borderRadius: '8px',
+                          borderRadius: '0.375rem',
                           cursor: 'pointer',
-                          fontSize: '16px',
+                          fontSize: '0.875rem',
                           fontWeight: '500',
-                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
                           transition: 'all 0.2s ease'
                         }}
                         onMouseOver={(e) => {
+                          e.currentTarget.style.background = '#f4f4f5';
                           e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
                         }}
                         onMouseOut={(e) => {
+                          e.currentTarget.style.background = '#ffffff';
                           e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
                         }}
                       >
-                        Load More Posts ({totalAvailablePosts.length - postsToShow} remaining)
+                        Load More
                       </button>
                     </div>
                   );
