@@ -147,7 +147,7 @@ export default function ReaderPage() {
   const { ndk, isLoading, isAuthenticated, isConnected } = useNostr();
   const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead } = useBlog();
   const [follows, setFollows] = useState<string[]>([]);
-  const processedEvents = useRef(new Set<string>());
+  const processedEvents = useRef(new Map<string, number>()); // Map of eventId -> timestamp
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
   const hasClearedPosts = useRef(false);
   const subscriptionRef = useRef<NDKSubscription | null>(null);
@@ -158,6 +158,8 @@ export default function ReaderPage() {
   const setupSubscriptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const eventCountRef = useRef(0);
+  const lastSetupTimeRef = useRef(0);
+  const subscriptionStateRef = useRef<'idle' | 'setting_up' | 'active' | 'stopping'>('idle');
 
   // Fetch current user's follows (contact list)
   const fetchFollows = useCallback(async () => {
@@ -300,7 +302,7 @@ export default function ReaderPage() {
     }
   }, [isAuthenticated, isConnected, isLoading, fetchFollows]);
 
-  // Clear posts when follows change
+  // Clear posts and processed events when follows change
   useEffect(() => {
     if (follows.length === 0 && !hasClearedPosts.current) {
       clearPosts();
@@ -308,6 +310,10 @@ export default function ReaderPage() {
     } else if (follows.length > 0) {
       hasClearedPosts.current = false;
     }
+    
+    // Clear processed events when follows change to avoid processing old events
+    processedEvents.current.clear();
+    console.log('🧹 DEBUG: Cleared processed events due to follows change');
   }, [follows, clearPosts]);
 
   // Setup subscription for posts
@@ -317,26 +323,42 @@ export default function ReaderPage() {
       followsCount: follows.length,
       isAuthenticated,
       isConnected,
-      isLoading
+      isLoading,
+      subscriptionState: subscriptionStateRef.current
     });
     
+    // Prevent multiple simultaneous subscription setups
+    if (subscriptionStateRef.current === 'setting_up' || subscriptionStateRef.current === 'active') {
+      console.log('⏸️ DEBUG: Skipping subscription setup - already in progress or active');
+      return;
+    }
+    
+    // Debounce rapid subscription setups
+    const now = Date.now();
+    const timeSinceLastSetup = now - lastSetupTimeRef.current;
+    if (timeSinceLastSetup < 1000) { // Minimum 1 second between setups
+      console.log('⏰ DEBUG: Skipping subscription setup - too soon since last setup:', timeSinceLastSetup + 'ms');
+      return;
+    }
+    lastSetupTimeRef.current = now;
+    
+    subscriptionStateRef.current = 'setting_up';
     setDebugInfo('Setting up subscription...');
     
     // Clean up any existing subscription
     if (subscriptionRef.current) {
-      console.log('🔄 DEBUG: Cleaning up existing subscription');
+      console.log('🔄 DEBUG: Cleaning up existing subscription:', subscriptionRef.current.internalId);
+      subscriptionStateRef.current = 'stopping';
       subscriptionRef.current.stop();
       subscriptionRef.current = null;
+      subscriptionStateRef.current = 'idle';
     }
     
     // Reset loading state to ensure we can proceed
     setIsLoadingPosts(false);
 
-    // Clear processed events (limit size to prevent memory leaks)
-    if (processedEvents.current.size > 1000) {
-      processedEvents.current.clear();
-    }
-    console.log('🧹 DEBUG: Cleared processed events');
+      // Don't clear processed events here - only clear when follows change
+  console.log('🧹 DEBUG: Setup subscription - processed events count:', processedEvents.current.size);
     
     // Reset event counter
     eventCountRef.current = 0;
@@ -350,6 +372,7 @@ export default function ReaderPage() {
         isConnected
       });
       setDebugInfo(`Cannot setup subscription: hasNDK=${!!ndk}, follows=${follows.length}, auth=${isAuthenticated}, connected=${isConnected}`);
+      subscriptionStateRef.current = 'idle';
       return;
     }
 
@@ -413,10 +436,16 @@ export default function ReaderPage() {
             
             // Skip if we've already processed this event
             if (processedEvents.current.has(event.id)) {
-              console.log('⏭️ DEBUG: Skipping already processed event:', event.id);
+              const lastProcessed = processedEvents.current.get(event.id);
+              const timeSinceLastProcessed = Date.now() - (lastProcessed || 0);
+              console.log('⏭️ DEBUG: Skipping already processed event:', {
+                id: event.id,
+                timeSinceLastProcessed: timeSinceLastProcessed + 'ms',
+                processedEventsCount: processedEvents.current.size
+              });
               return;
             }
-            processedEvents.current.add(event.id);
+            processedEvents.current.set(event.id, Date.now());
 
             // Increment event counter
             eventCountRef.current++;
@@ -497,6 +526,10 @@ export default function ReaderPage() {
         hasSubscription: !!subscriptionRef.current
       });
       
+      // Log subscription creation for debugging
+      console.log('🔄 DEBUG: Subscription created:', subscriptionRef.current?.internalId);
+      subscriptionStateRef.current = 'active';
+      
       // Also try to fetch some recent events from follows to debug
       console.log('🔍 DEBUG: Testing fetchEvents for debugging...');
       
@@ -541,6 +574,7 @@ export default function ReaderPage() {
       
     } catch (error) {
       console.error('❌ DEBUG: Error setting up subscription:', error);
+      subscriptionStateRef.current = 'idle';
       // Clear the loading timeout
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
@@ -555,8 +589,7 @@ export default function ReaderPage() {
     console.log('🔄 DEBUG: Subscription useEffect triggered:', {
       followsLength: follows.length,
       isAuthenticated,
-      isConnected,
-      isLoadingPosts
+      isConnected
     });
     
     if (follows.length > 0 && isAuthenticated && isConnected) {
@@ -583,15 +616,17 @@ export default function ReaderPage() {
         isConnected
       });
     }
-  }, [follows, isAuthenticated, isConnected, setupSubscription, isLoadingPosts]);
+  }, [follows, isAuthenticated, isConnected, setupSubscription]);
 
   // Cleanup subscription on unmount
   useEffect(() => {
     return () => {
       if (subscriptionRef.current) {
-        console.log('🧹 DEBUG: Cleaning up subscription on unmount');
+        console.log('🧹 DEBUG: Cleaning up subscription on unmount:', subscriptionRef.current.internalId);
+        subscriptionStateRef.current = 'stopping';
         subscriptionRef.current.stop();
         subscriptionRef.current = null;
+        subscriptionStateRef.current = 'idle';
       }
       if (setupSubscriptionTimeoutRef.current) {
         clearTimeout(setupSubscriptionTimeoutRef.current);
@@ -1323,6 +1358,7 @@ export default function ReaderPage() {
                   const status = {
                     hasSubscription: !!subscriptionRef.current,
                     subscriptionId: subscriptionRef.current?.internalId,
+                    subscriptionState: subscriptionStateRef.current,
                     isLoadingPosts,
                     eventCount: eventCountRef.current,
                     processedEventsCount: processedEvents.current.size,
