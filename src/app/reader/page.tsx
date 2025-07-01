@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo, useRef, useCallback } from 'react';
+import { useState, useEffect, memo, useRef, useCallback, useMemo } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useBlog, BlogPost } from '@/contexts/BlogContext';
 import Link from 'next/link';
@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { NDKSubscription } from '@nostr-dev-kit/ndk';
-
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 // Configuration: Specify which relays to use for contact list queries
 // You can modify this list to use only the relays you trust
@@ -30,8 +30,9 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
 
+  // Debug log to track rendering
+  console.log('🎯 DEBUG: PostCard rendering:', { id: post.id, title: post.title });
 
-  
   // Transform x position to opacity for the action indicators
   const leftOpacity = useTransform(x, [-30, -15], [1, 0]);
   const rightOpacity = useTransform(x, [15, 30], [0, 1]);
@@ -143,18 +144,123 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
 
 PostCard.displayName = 'PostCard';
 
+// Error logging utility for mobile debugging
+const logError = (error: Error, context: string) => {
+  const errorInfo = {
+    message: error.message,
+    stack: error.stack,
+    context,
+    timestamp: new Date().toISOString(),
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+    url: typeof window !== 'undefined' ? window.location.href : 'unknown'
+  };
+  
+  // Log to console if available
+  console.error('🚨 MOBILE ERROR:', errorInfo);
+  
+  // Store in localStorage for debugging
+  try {
+    const existingErrors = JSON.parse(localStorage.getItem('mobile-errors') || '[]');
+    existingErrors.push(errorInfo);
+    // Keep only last 10 errors
+    if (existingErrors.length > 10) {
+      existingErrors.splice(0, existingErrors.length - 10);
+    }
+    localStorage.setItem('mobile-errors', JSON.stringify(existingErrors));
+  } catch (e) {
+    console.error('Failed to save error to localStorage:', e);
+  }
+  
+  // Show error in UI if possible
+  if (typeof toast !== 'undefined') {
+    toast.error(`Error: ${error.message}`);
+  }
+};
+
 export default function ReaderPage() {
+  // Add error boundary for the entire component
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      logError(new Error(event.message), 'Global error handler');
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      logError(new Error(event.reason?.message || 'Unhandled promise rejection'), 'Unhandled promise rejection');
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   const { ndk, isLoading, isAuthenticated, isConnected } = useNostr();
   const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead } = useBlog();
+  
+  // Declare all state variables first
   const [follows, setFollows] = useState<string[]>([]);
-  const processedEvents = useRef(new Map<string, number>()); // Map of eventId -> timestamp
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
-  const hasClearedPosts = useRef(false);
-  const subscriptionRef = useRef<NDKSubscription | null>(null);
   const [isLoadingFollows, setIsLoadingFollows] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [showDebugConsole, setShowDebugConsole] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [postsToShow, setPostsToShow] = useState(21); // Track how many posts to display
+  
+  // Now we can use the state variables in useMemo
+  const sortedPosts = getSortedPosts();
+  
+  // Direct filtering and limiting - only process what we need
+  const filteredPosts = useMemo(() => {
+    const postsFromFollows = sortedPosts.filter(post => follows.includes(post.pubkey));
+    
+    const filteredByReadStatus = postsFromFollows.filter(post => {
+      switch (filter) {
+        case 'read':
+          return isPostRead(post.id);
+        case 'unread':
+          return !isPostRead(post.id);
+        default:
+          return true;
+      }
+    });
+    
+    // Only take the first postsToShow posts
+    const limited = filteredByReadStatus.slice(0, postsToShow);
+    
+    console.log('🔍 DEBUG: Filtered posts calculation:', {
+      totalPosts: sortedPosts.length,
+      fromFollows: postsFromFollows.length,
+      afterFilter: filteredByReadStatus.length,
+      postsToShow,
+      actualRendered: limited.length,
+      firstFewIds: limited.slice(0, 3).map(p => p.id)
+    });
+    
+    return limited;
+  }, [sortedPosts, follows, filter, isPostRead, postsToShow]);
+  
+  // Calculate total available for load more button (separate from rendering)
+  const totalAvailablePosts = useMemo(() => {
+    const postsFromFollows = sortedPosts.filter(post => follows.includes(post.pubkey));
+    return postsFromFollows.filter(post => {
+      switch (filter) {
+        case 'read':
+          return isPostRead(post.id);
+        case 'unread':
+          return !isPostRead(post.id);
+        default:
+          return true;
+      }
+    });
+  }, [sortedPosts, follows, filter, isPostRead]);
+
+  const processedEvents = useRef(new Map<string, number>()); // Map of eventId -> timestamp
+  const hasClearedPosts = useRef(false);
+  const subscriptionRef = useRef<NDKSubscription | null>(null);
   const setupSubscriptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const eventCountRef = useRef(0);
@@ -315,6 +421,11 @@ export default function ReaderPage() {
     processedEvents.current.clear();
     console.log('🧹 DEBUG: Cleared processed events due to follows change');
   }, [follows, clearPosts]);
+
+  // Reset postsToShow when filter changes
+  useEffect(() => {
+    setPostsToShow(21);
+  }, [filter]);
 
   // Setup subscription for posts
   const setupSubscription = useCallback(async () => {
@@ -637,6 +748,16 @@ export default function ReaderPage() {
     };
   }, []);
 
+  // Monitor filteredPosts to ensure it's properly limited
+  useEffect(() => {
+    console.log('📊 DEBUG: filteredPosts changed:', {
+      length: filteredPosts.length,
+      postsToShow,
+      isLimited: filteredPosts.length <= postsToShow,
+      firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
+    });
+  }, [filteredPosts, postsToShow]);
+
   if (isLoading || isLoadingFollows) {
     return <div className={styles.loading}>Loading...</div>;
   }
@@ -665,819 +786,603 @@ export default function ReaderPage() {
     );
   }
 
-  const sortedPosts = getSortedPosts();
-  console.log('📊 DEBUG: All posts from context:', {
-    totalPosts: sortedPosts.length,
-    posts: sortedPosts.map(p => ({ id: p.id, title: p.title, pubkey: p.pubkey }))
-  });
-  
-  const filteredPosts = sortedPosts
-    .filter(post => follows.includes(post.pubkey)) // Only show posts from follows
-    .filter(post => {
-      switch (filter) {
-        case 'read':
-          return isPostRead(post.id);
-        case 'unread':
-          return !isPostRead(post.id);
-        default:
-          return true;
-      }
+  // Add error handling for the main render logic
+  try {
+    console.log('🔍 DEBUG: Filtered posts:', {
+      followsCount: follows.length,
+      filterType: filter,
+      postsFromFollows: sortedPosts.filter(post => follows.includes(post.pubkey)).length,
+      finalFilteredCount: filteredPosts.length,
+      isLoadingPosts
     });
 
-  console.log('🔍 DEBUG: Filtered posts:', {
-    followsCount: follows.length,
-    filterType: filter,
-    postsFromFollows: sortedPosts.filter(post => follows.includes(post.pubkey)).length,
-    finalFilteredCount: filteredPosts.length,
-    isLoadingPosts
-  });
-
-  return (
-    <div className={styles.container}>
-      <div className={styles.content}>
-        <div className={styles.header}>
-          <h1 className={styles.title}>Reads</h1>
-          <div className={styles.filterButtons}>
-            <button
-              onClick={() => setShowDebugConsole(!showDebugConsole)}
-              style={{
-                padding: '4px 8px',
-                background: 'rgba(0, 0, 0, 0.1)',
-                color: '#666',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '10px',
-                marginRight: '10px'
-              }}
-              title="Toggle Debug Console"
-            >
-              🔧
-            </button>
-            <button
-              onClick={() => setFilter('all')}
-              className={`${styles.filterButton} ${filter === 'all' ? styles.filterButtonActive : ''}`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setFilter('unread')}
-              className={`${styles.filterButton} ${filter === 'unread' ? styles.filterButtonActive : ''}`}
-            >
-              Unread
-            </button>
-            <button
-              onClick={() => setFilter('read')}
-              className={`${styles.filterButton} ${filter === 'read' ? styles.filterButtonActive : ''}`}
-            >
-              Read
-            </button>
-          </div>
-        </div>
-        {showDebugConsole && (
-          <div style={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            padding: '20px', 
-            margin: '20px 0', 
-            borderRadius: '12px', 
-            fontSize: '14px',
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.2)'
-          }}>
+    return (
+      <ErrorBoundary>
+        <div className={styles.container}>
+          <div className={styles.content}>
+            <div className={styles.header}>
+              <h1 className={styles.title}>Reads</h1>
+              <div className={styles.filterButtons}>
+                <button
+                  onClick={() => setShowDebugConsole(!showDebugConsole)}
+                  style={{
+                    padding: '4px 8px',
+                    background: 'rgba(0, 0, 0, 0.1)',
+                    color: '#666',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    marginRight: '10px'
+                  }}
+                  title="Toggle Debug Console"
+                >
+                  🔧
+                </button>
+                {/* Quick Debug Buttons */}
+                <button
+                  onClick={() => {
+                    const allPosts = getSortedPosts();
+                    const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
+                    setDebugInfo(`Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`);
+                    console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    background: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    marginRight: '10px'
+                  }}
+                  title="Count Posts"
+                >
+                  📊
+                </button>
+                <button
+                  onClick={() => {
+                    console.log('🔍 DEBUG: Current state:', {
+                      filteredPostsLength: filteredPosts.length,
+                      postsToShow,
+                      firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
+                    });
+                    setDebugInfo(`Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    background: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    marginRight: '10px'
+                  }}
+                  title="Check Rendering"
+                >
+                  🎨
+                </button>
+                <button
+                  onClick={() => {
+                    const allPosts = getSortedPosts();
+                    const uniqueIds = new Set(allPosts.map(p => p.id));
+                    setDebugInfo(`Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`);
+                    console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    background: '#fd7e14',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    marginRight: '10px'
+                  }}
+                  title="Check Duplicates"
+                >
+                  🔍
+                </button>
+                <button
+                  onClick={() => setFilter('all')}
+                  className={`${styles.filterButton} ${filter === 'all' ? styles.filterButtonActive : ''}`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setFilter('unread')}
+                  className={`${styles.filterButton} ${filter === 'unread' ? styles.filterButtonActive : ''}`}
+                >
+                  Unread
+                </button>
+                <button
+                  onClick={() => setFilter('read')}
+                  className={`${styles.filterButton} ${filter === 'read' ? styles.filterButtonActive : ''}`}
+                >
+                  Read
+                </button>
+              </div>
+            </div>
+            {/* Debug Buttons - Always Visible */}
             <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              marginBottom: '15px',
-              fontSize: '16px',
-              fontWeight: '600'
+              background: '#f8f9fa',
+              padding: '15px', 
+              margin: '15px 0', 
+              borderRadius: '8px', 
+              border: '2px solid #dee2e6',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}>
-              <span style={{ 
-                background: 'rgba(255, 255, 255, 0.2)', 
-                padding: '4px 8px', 
-                borderRadius: '6px',
-                marginRight: '10px',
-                fontSize: '12px'
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                marginBottom: '10px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                color: '#495057'
               }}>
-                🔍
-              </span>
-              Debug Console
-            </div>
-            <div style={{ 
-              background: 'rgba(0, 0, 0, 0.2)', 
-              padding: '12px', 
-              borderRadius: '8px',
-              marginBottom: '15px',
-              fontFamily: 'monospace',
-              fontSize: '13px',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
-            }}>
-              {debugInfo}
-            </div>
-            <div style={{ 
-              display: 'flex', 
-              flexWrap: 'wrap', 
-              gap: '10px'
-            }}>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Manual test triggered...');
-                  // Test fetching any longform posts
-                  ndk.fetchEvents({
-                    kinds: [30023],
-                    limit: 5
-                  }).then(events => {
-                    const eventArray = Array.from(events);
-                    const authorsInFollows = eventArray.filter(e => follows.includes(e.pubkey));
-                    setDebugInfo(`Manual test: Found ${events.size} longform posts, ${authorsInFollows.length} from your follows`);
-                    console.log('Manual test events:', eventArray.map(e => ({
-                      id: e.id,
-                      kind: e.kind,
-                      pubkey: e.pubkey,
-                      title: getTagValue(e.tags, 'title') || 'No title',
-                      isFollow: follows.includes(e.pubkey)
-                    })));
-                    console.log('Follows list:', follows);
-                    console.log('Authors in follows:', authorsInFollows.map(e => e.pubkey));
-                  }).catch(error => {
-                    setDebugInfo(`Manual test failed: ${error}`);
-                  });
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
+                <span style={{ marginRight: '10px' }}>🔍</span>
+                Debug Tools
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: '10px'
+              }}>
+                <button 
+                  onClick={() => {
+                    const allPosts = getSortedPosts();
+                    const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
+                    const info = `Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`;
+                    setDebugInfo(info);
+                    console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
+                    alert(info); // Force display
+                  }}
+                  style={{
+                    padding: '10px 15px',
+                    background: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}
+                >
+                  📊 Count Posts
+                </button>
+                <button 
+                  onClick={() => {
+                    const info = `Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`;
+                    console.log('🔍 DEBUG: Current state:', {
+                      filteredPostsLength: filteredPosts.length,
+                      postsToShow,
+                      firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
+                    });
+                    setDebugInfo(info);
+                    alert(info); // Force display
+                  }}
+                  style={{
+                    padding: '10px 15px',
+                    background: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}
+                >
+                  🎨 Check Rendering
+                </button>
+                <button 
+                  onClick={() => {
+                    const allPosts = getSortedPosts();
+                    const uniqueIds = new Set(allPosts.map(p => p.id));
+                    const info = `Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`;
+                    setDebugInfo(info);
+                    console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
+                    alert(info); // Force display
+                  }}
+                  style={{
+                    padding: '10px 15px',
+                    background: '#fd7e14',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}
+                >
+                  🔍 Check Duplicates
+                </button>
+              </div>
+              {debugInfo && (
+                <div style={{ 
+                  background: '#e9ecef', 
+                  padding: '10px', 
+                  borderRadius: '6px',
+                  marginTop: '10px',
+                  fontFamily: 'monospace',
                   fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🔍 Test Any Longform
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing follows specifically...');
-                  // Test fetching posts from your follows
-                  if (follows.length === 0) {
-                    setDebugInfo('No follows found');
-                    return;
-                  }
-                  ndk.fetchEvents({
-                    kinds: [30023],
-                    authors: follows.slice(0, 3), // Test with first 3 follows
-                    limit: 10
-                  }).then(events => {
-                    const eventArray = Array.from(events);
-                    const longformEvents = eventArray.filter(e => e.kind === 30023);
-                    const kindCounts = eventArray.reduce((acc, e) => {
-                      acc[e.kind] = (acc[e.kind] || 0) + 1;
-                      return acc;
-                    }, {} as Record<number, number>);
-                    
-                    setDebugInfo(`Follows test: ${events.size} total events, ${longformEvents.length} longform. Kinds: ${JSON.stringify(kindCounts)}`);
-                    console.log('Follows test events:', eventArray.map(e => ({
-                      id: e.id,
-                      kind: e.kind,
-                      pubkey: e.pubkey,
-                      title: getTagValue(e.tags, 'title') || 'No title'
-                    })));
-                    console.log('Event kind distribution:', kindCounts);
-                  }).catch(error => {
-                    setDebugInfo(`Follows test failed: ${error}`);
-                  });
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                👥 Test From Follows
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing any events from follows...');
-                  // Test fetching any events from your follows
-                  if (follows.length === 0) {
-                    setDebugInfo('No follows found');
-                    return;
-                  }
-                  ndk.fetchEvents({
-                    authors: follows.slice(0, 3), // Test with first 3 follows
-                    limit: 10
-                  }).then(events => {
-                    setDebugInfo(`Any events test: Found ${events.size} events from your follows`);
-                    console.log('Any events test:', Array.from(events).map(e => ({
-                      id: e.id,
-                      kind: e.kind,
-                      pubkey: e.pubkey,
-                      content: e.content.substring(0, 50) + '...'
-                    })));
-                  }).catch(error => {
-                    setDebugInfo(`Any events test failed: ${error}`);
-                  });
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)',
-                  color: 'black',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                📝 Test Any Events
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing longform from all follows with broader search...');
-                  // Test fetching longform posts from all follows with no time limit
-                  if (follows.length === 0) {
-                    setDebugInfo('No follows found');
-                    return;
-                  }
-                  ndk.fetchEvents({
-                    kinds: [30023],
-                    authors: follows,
-                    limit: 50 // Higher limit to find more posts
-                  }).then(events => {
-                    const eventArray = Array.from(events);
-                    setDebugInfo(`Broad longform test: Found ${events.size} longform posts from your follows`);
-                    console.log('Broad longform test:', eventArray.map(e => ({
-                      id: e.id,
-                      kind: e.kind,
-                      pubkey: e.pubkey,
-                      created_at: e.created_at,
-                      title: getTagValue(e.tags, 'title') || 'No title',
-                      date: new Date(e.created_at * 1000).toISOString(),
-                      isInFollows: follows.includes(e.pubkey)
-                    })));
-                    
-                    if (eventArray.length === 0) {
-                      console.log('❌ No longform posts found from any of your follows');
-                      console.log('Follows list (first 10):', follows.slice(0, 10));
-                    }
-                  }).catch(error => {
-                    setDebugInfo(`Broad longform test failed: ${error}`);
-                  });
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🔍 Deep Longform Search
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing with different relays...');
-                  // Test with different relays that are known to have good longform content
-                  const testRelays = [
-                    'wss://relay.nostr.band',
-                    'wss://purplepag.es',
-                    'wss://relay.damus.io',
-                    'wss://relay.primal.net'
-                  ];
-                  
-                  Promise.all(testRelays.map(relay => 
-                    ndk.fetchEvents({
-                      kinds: [30023],
-                      authors: follows.slice(0, 3),
-                      limit: 5
-                    }, {
-                      relayUrls: [relay]
-                    }).then(events => ({ relay, count: events.size }))
-                    .catch(error => ({ relay, count: 0, error: error.message }))
-                  )).then(results => {
-                    const summary = results.map(r => `${r.relay}: ${r.count} posts`).join(', ');
-                    setDebugInfo(`Relay test: ${summary}`);
-                    console.log('Relay test results:', results);
-                  }).catch(error => {
-                    setDebugInfo(`Relay test failed: ${error}`);
-                  });
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🌐 Test Different Relays
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Checking follows list...');
-                  console.log('📋 Current follows list:', {
-                    count: follows.length,
-                    first10: follows.slice(0, 10),
-                    last10: follows.slice(-10),
-                    allFollows: follows
-                  });
-                  setDebugInfo(`Follows count: ${follows.length}. First 3: ${follows.slice(0, 3).join(', ')}`);
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #e83e8c 0%, #d63384 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                📋 Check Follows
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing first few follows for any activity...');
-                  if (follows.length === 0) {
-                    setDebugInfo('No follows found');
-                    return;
-                  }
-                  
-                  // Test the first 5 follows for any activity
-                  const testFollows = follows.slice(0, 5);
-                  console.log('🧪 Testing follows for activity:', testFollows);
-                  
-                  ndk.fetchEvents({
-                    authors: testFollows,
-                    limit: 20
-                  }).then(events => {
-                    const eventArray = Array.from(events);
-                    const kindCounts = eventArray.reduce((acc, e) => {
-                      acc[e.kind] = (acc[e.kind] || 0) + 1;
-                      return acc;
-                    }, {} as Record<number, number>);
-                    
-                    setDebugInfo(`Activity test: ${events.size} events from first 5 follows. Kinds: ${JSON.stringify(kindCounts)}`);
-                    console.log('Activity test events:', eventArray.map(e => ({
-                      id: e.id,
-                      kind: e.kind,
-                      pubkey: e.pubkey,
-                      created_at: e.created_at,
-                      content: e.content.substring(0, 50) + '...'
-                    })));
-                  }).catch(error => {
-                    setDebugInfo(`Activity test failed: ${error}`);
-                  });
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🧪 Test Activity
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing simple subscription...');
-                  console.log('🧪 Testing simple subscription without grouping');
-                  
-                  // Create a simple test subscription for any longform posts
-                  const testSub = ndk.subscribe(
-                    { kinds: [30023], limit: 5 },
-                    { groupable: false },
-                    {
-                      onEvent: (event) => {
-                        const isInFollows = follows.includes(event.pubkey);
-                        console.log('✅ Simple test subscription received event:', {
-                          id: event.id,
-                          kind: event.kind,
-                          pubkey: event.pubkey,
-                          title: getTagValue(event.tags, 'title') || 'No title',
-                          isInFollows,
-                          followIndex: isInFollows ? follows.indexOf(event.pubkey) : -1
-                        });
-                        setDebugInfo(`Simple test: Received event from ${event.pubkey} (in follows: ${isInFollows})`);
-                      },
-                      onEose: () => {
-                        console.log('🏁 Simple test subscription EOSE');
-                        setDebugInfo('Simple test: Subscription completed');
-                      }
-                    }
-                  );
-                  
-                  console.log('🧪 Simple test subscription created:', testSub.internalId);
-                  
-                  // Stop the test subscription after 5 seconds
-                  setTimeout(() => {
-                    testSub.stop();
-                    console.log('🧪 Simple test subscription stopped');
-                  }, 5000);
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🧪 Test Simple Sub
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing subscription with small follows list...');
-                  if (follows.length === 0) {
-                    setDebugInfo('No follows found');
-                    return;
-                  }
-                  
-                  // Test with just the first 3 follows
-                  const smallFollowsList = follows.slice(0, 3);
-                  console.log('🧪 Testing subscription with small follows list:', smallFollowsList);
-                  
-                  const testSub = ndk.subscribe(
-                    { kinds: [30023], authors: smallFollowsList, limit: 10 },
-                    { groupable: false },
-                    {
-                      onEvent: (event) => {
-                        console.log('✅ Small follows test received event:', {
-                          id: event.id,
-                          kind: event.kind,
-                          pubkey: event.pubkey,
-                          title: getTagValue(event.tags, 'title') || 'No title',
-                          isInSmallList: smallFollowsList.includes(event.pubkey)
-                        });
-                        setDebugInfo(`Small follows test: Received event from ${event.pubkey}`);
-                      },
-                      onEose: () => {
-                        console.log('🏁 Small follows test EOSE');
-                        setDebugInfo('Small follows test: Subscription completed');
-                      }
-                    }
-                  );
-                  
-                  console.log('🧪 Small follows test subscription created:', testSub.internalId);
-                  
-                  // Stop the test subscription after 5 seconds
-                  setTimeout(() => {
-                    testSub.stop();
-                    console.log('🧪 Small follows test subscription stopped');
-                  }, 5000);
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #20c997 0%, #17a2b8 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🧪 Test Small Follows
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Cleaning follows list...');
-                  
-                  // Clean the current follows list
-                  const cleanedFollows = follows.filter(pubkey => /^[0-9a-f]{64}$/i.test(pubkey));
-                  const invalidFollows = follows.filter(pubkey => !/^[0-9a-f]{64}$/i.test(pubkey));
-                  
-                  console.log('🧹 Cleaning follows list:', {
-                    original: follows.length,
-                    valid: cleanedFollows.length,
-                    invalid: invalidFollows.length,
-                    invalidList: invalidFollows
-                  });
-                  
-                  setFollows(cleanedFollows);
-                  setDebugInfo(`Cleaned follows: ${cleanedFollows.length} valid, ${invalidFollows.length} invalid removed`);
-                  
-                  // Test subscription with cleaned list
-                  setTimeout(() => {
-                    console.log('🧪 Testing subscription with cleaned follows list...');
-                    setupSubscription();
-                  }, 1000);
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🧹 Clean & Test
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Testing context with manual post...');
-                  // Test if the context is working by manually adding a test post
-                  const testPost: BlogPost = {
-                    id: 'test-post-' + Date.now(),
-                    pubkey: follows[0] || 'test-pubkey',
-                    created_at: Math.floor(Date.now() / 1000),
-                    content: 'This is a test post to verify the context is working.',
-                    title: 'Test Post',
-                    summary: 'A test post for debugging',
-                    published_at: Math.floor(Date.now() / 1000),
-                    image: '',
-                    tags: []
-                  };
-                  
-                  addPost(testPost);
-                  setDebugInfo(`Added test post. Total posts now: ${getSortedPosts().length}`);
-                  console.log('Test post added:', testPost);
-                  console.log('All posts in context:', getSortedPosts());
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🧪 Test Context
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Checking subscription status...');
-                  const status = {
-                    hasSubscription: !!subscriptionRef.current,
-                    subscriptionId: subscriptionRef.current?.internalId,
-                    subscriptionState: subscriptionStateRef.current,
-                    isLoadingPosts,
-                    eventCount: eventCountRef.current,
-                    processedEventsCount: processedEvents.current.size,
-                    followsCount: follows.length,
-                    isAuthenticated,
-                    isConnected
-                  };
-                  setDebugInfo(`Subscription status: ${JSON.stringify(status, null, 2)}`);
-                  console.log('Subscription status:', status);
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                📊 Check Status
-              </button>
-              <button 
-                onClick={() => {
-                  setDebugInfo('Forcing subscription setup...');
-                  console.log('🔧 DEBUG: Manually forcing subscription setup');
-                  setupSubscription();
-                }}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #20c997 0%, #17a2b8 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                🔧 Force Subscription
-              </button>
-              <button 
-                onClick={() => setShowDebugConsole(false)}
-                style={{
-                  padding: '10px 16px',
-                  background: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.2s ease',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                }}
-              >
-                ❌ Hide Debug
-              </button>
-            </div>
-          </div>
-        )}
-        <div className={styles.postsGrid}>
-          {isLoadingPosts && follows.length > 0 && (
-            <div className={styles.loadingState}>
-              Loading posts from {follows.length} people you follow...
-            </div>
-          )}
-          {filteredPosts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-          {filteredPosts.length === 0 && !isLoadingPosts && (
-            <div className={styles.emptyState}>
-              {follows.length === 0 ? (
-                <>
-                  You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
-                </>
-              ) : filter === 'all' ? (
-                "No blog posts found from people you follow."
-              ) : filter === 'read' ? (
-                "No read posts found."
-              ) : (
-                "No unread posts found."
+                  color: '#495057',
+                  border: '1px solid #ced4da'
+                }}>
+                  <strong>Debug Info:</strong> {debugInfo}
+                </div>
               )}
             </div>
-          )}
+            {showDebugConsole && (
+              <div style={{ 
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                padding: '20px', 
+                margin: '20px 0', 
+                borderRadius: '12px', 
+                fontSize: '14px',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  marginBottom: '15px',
+                  fontSize: '16px',
+                  fontWeight: '600'
+                }}>
+                  <span style={{ 
+                    background: 'rgba(255, 255, 255, 0.2)', 
+                    padding: '4px 8px', 
+                    borderRadius: '6px',
+                    marginRight: '10px',
+                    fontSize: '12px'
+                  }}>
+                    🔍
+                  </span>
+                  Debug Console
+                </div>
+                <div style={{ 
+                  background: 'rgba(0, 0, 0, 0.2)', 
+                  padding: '12px', 
+                  borderRadius: '8px',
+                  marginBottom: '15px',
+                  fontFamily: 'monospace',
+                  fontSize: '13px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  {debugInfo}
+                </div>
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '10px'
+                }}>
+                  <button 
+                    onClick={() => {
+                      setDebugInfo('Checking subscription status...');
+                      const status = {
+                        hasSubscription: !!subscriptionRef.current,
+                        subscriptionId: subscriptionRef.current?.internalId,
+                        subscriptionState: subscriptionStateRef.current,
+                        isLoadingPosts,
+                        eventCount: eventCountRef.current,
+                        processedEventsCount: processedEvents.current.size,
+                        followsCount: follows.length,
+                        isAuthenticated,
+                        isConnected
+                      };
+                      setDebugInfo(`Subscription status: ${JSON.stringify(status, null, 2)}`);
+                      console.log('Subscription status:', status);
+                    }}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                      transition: 'all 0.2s ease',
+                      minWidth: '120px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
+                  >
+                    📊 Check Status
+                  </button>
+                  <button 
+                                          onClick={() => {
+                        const allPosts = getSortedPosts();
+                        const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
+                        
+                        setDebugInfo(`Post counts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length} (limited to ${postsToShow})`);
+                        console.log('Post count info:', {
+                          total: allPosts.length,
+                          fromFollows: postsFromFollows.length,
+                          filtered: totalAvailablePosts.length,
+                          displayed: filteredPosts.length,
+                          limit: postsToShow
+                        });
+                      }}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                      transition: 'all 0.2s ease',
+                      minWidth: '120px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
+                  >
+                    📊 Post Counts
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const hasMorePosts = totalAvailablePosts.length > postsToShow;
+                      
+                      setDebugInfo(`Load More Status: Showing ${postsToShow}/${totalAvailablePosts.length} posts. Has more: ${hasMorePosts}. Filter: ${filter}`);
+                      console.log('Load more status:', {
+                        showing: postsToShow,
+                        total: totalAvailablePosts.length,
+                        hasMore: hasMorePosts,
+                        filter
+                      });
+                    }}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                      transition: 'all 0.2s ease',
+                      minWidth: '120px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
+                  >
+                    📄 Load More Status
+                  </button>
+                  <button 
+                    onClick={() => {
+                      console.log('🔍 DEBUG: Current posts state:', {
+                        allPosts: getSortedPosts().length,
+                        totalAvailable: totalAvailablePosts.length,
+                        filteredPosts: filteredPosts.length,
+                        postsToShow,
+                        firstFewFiltered: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
+                      });
+                      setDebugInfo(`Current state: All=${getSortedPosts().length}, Available=${totalAvailablePosts.length}, Filtered=${filteredPosts.length}, Showing=${postsToShow}`);
+                    }}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                      transition: 'all 0.2s ease',
+                      minWidth: '120px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
+                  >
+                    🔍 Debug Posts
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const allPosts = getSortedPosts();
+                      const uniqueIds = new Set(allPosts.map(p => p.id));
+                      const duplicateIds = allPosts.filter(p => {
+                        const count = allPosts.filter(pp => pp.id === p.id).length;
+                        return count > 1;
+                      });
+                      
+                      console.log('🔍 DEBUG: Raw posts analysis:', {
+                        totalPosts: allPosts.length,
+                        uniqueIds: uniqueIds.size,
+                        duplicateIds: duplicateIds.length,
+                        firstFewPosts: allPosts.slice(0, 5).map(p => ({ id: p.id, title: p.title, pubkey: p.pubkey }))
+                      });
+                      setDebugInfo(`Raw posts: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${duplicateIds.length}`);
+                    }}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                      transition: 'all 0.2s ease',
+                      minWidth: '120px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                    }}
+                  >
+                    🔍 Raw Posts
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className={styles.postsGrid}>
+              {isLoadingPosts && follows.length > 0 && (
+                <div className={styles.loadingState}>
+                  Loading posts from {follows.length} people you follow...
+                </div>
+              )}
+              {(() => {
+                console.log('🎨 DEBUG: Rendering posts:', {
+                  filteredPostsLength: filteredPosts.length,
+                  postsToShow,
+                  firstFewIds: filteredPosts.slice(0, 3).map(p => p.id)
+                });
+                return filteredPosts.map((post, index) => (
+                  <PostCard key={`${post.id}-${index}`} post={post} />
+                ));
+              })()}
+              {filteredPosts.length === postsToShow && (
+                <div style={{
+                  padding: '10px',
+                  background: '#f8f9fa',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '4px',
+                  margin: '10px 0',
+                  fontSize: '14px',
+                  color: '#6c757d',
+                  textAlign: 'center'
+                }}>
+                  Showing first {postsToShow} posts for better performance
+                </div>
+              )}
+              {/* Load More Button */}
+              {(() => {
+                const hasMorePosts = totalAvailablePosts.length > postsToShow;
+                
+                if (hasMorePosts) {
+                  return (
+                    <div style={{
+                      padding: '20px',
+                      textAlign: 'center'
+                    }}>
+                      <button
+                        onClick={() => setPostsToShow(prev => prev + 21)}
+                        style={{
+                          padding: '12px 24px',
+                          background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '16px',
+                          fontWeight: '500',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                        }}
+                      >
+                        Load More Posts ({totalAvailablePosts.length - postsToShow} remaining)
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              {filteredPosts.length === 0 && !isLoadingPosts && (
+                <div className={styles.emptyState}>
+                  {follows.length === 0 ? (
+                    <>
+                      You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
+                    </>
+                  ) : filter === 'all' ? (
+                    "No blog posts found from people you follow."
+                  ) : filter === 'read' ? (
+                    "No read posts found."
+                  ) : (
+                    "No unread posts found."
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  );
+      </ErrorBoundary>
+    );
+  } catch (error) {
+    // Log the error and show a user-friendly error message
+    logError(error as Error, 'Render error');
+    setRenderError((error as Error).message);
+    
+    return (
+      <ErrorBoundary>
+        <div className={styles.container}>
+          <div className={styles.content}>
+            <div style={{ 
+              padding: '20px', 
+              background: '#fee', 
+              border: '1px solid #fcc', 
+              borderRadius: '8px',
+              margin: '20px 0'
+            }}>
+              <h2>Something went wrong</h2>
+              <p>An error occurred while loading the page. Please try refreshing.</p>
+              <p><strong>Error:</strong> {renderError}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                style={{
+                  padding: '10px 20px',
+                  background: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Refresh Page
+              </button>
+            </div>
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
 } 
