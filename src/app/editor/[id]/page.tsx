@@ -3,13 +3,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
-import { Draft } from '@/utils/storage';
+import { Draft, saveLastDraft, getLastDraft, clearLastDraft, hasUnsavedDraft } from '@/utils/storage';
 import { use } from 'react';
 import Editor, { EditorRef } from '@/components/Editor';
 import { NostrBuildUploader } from '@nostrify/nostrify/uploaders';
 import type { NostrSigner } from '@nostrify/types';
 import { useNostr } from '@/contexts/NostrContext';
 import toast from 'react-hot-toast';
+import ConfirmModal from '@/components/ConfirmModal';
 import './page.css';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 
@@ -18,11 +19,41 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [isPublishing, setIsPublishing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [lastDraft, setLastDraft] = useState<Draft | null>(null);
   const router = useRouter();
   const { id } = use(params);
   const { ndk, isConnected, isAuthenticated } = useNostr();
   const editorRef = useRef<EditorRef | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Auto-save function
+  const autoSaveDraft = (currentDraft: Draft) => {
+    // Only auto-save temporary drafts (not saved to Nostr yet)
+    if (currentDraft.id.startsWith('temp_')) {
+      saveLastDraft(currentDraft);
+    }
+  };
+
+  // Debounced auto-save
+  const debouncedAutoSave = (currentDraft: Draft) => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      autoSaveDraft(currentDraft);
+    }, 2000); // Auto-save after 2 seconds of inactivity
+  };
+
+  // Cleanup auto-save timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const loadDraft = async () => {
       console.log('Editor: Loading draft with ID:', id);
@@ -31,6 +62,28 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         // Check if this is a temporary draft (new draft)
         if (id.startsWith('temp_')) {
           console.log('Editor: Creating new temporary draft');
+          
+          // Check if there's an unsaved draft in localStorage
+          if (hasUnsavedDraft()) {
+            const savedDraft = getLastDraft();
+            if (savedDraft) {
+              setLastDraft(savedDraft);
+              setShowRestoreModal(true);
+              // Create a temporary draft so the component can render while showing the modal
+              const tempDraft: Draft = {
+                id: id,
+                title: 'Untitled Draft',
+                content: '',
+                lastModified: new Date().toISOString(),
+                sources: ['local'],
+                kind: 30024
+              };
+              setDraft(tempDraft);
+              setIsLoading(false);
+              return;
+            }
+          }
+          
           const tempDraft: Draft = {
             id: id,
             title: 'Untitled Draft',
@@ -113,6 +166,40 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     loadDraft();
   }, [id, router, ndk, isAuthenticated]);
 
+  // Handle restore modal actions
+  const handleRestoreDraft = () => {
+    if (lastDraft) {
+      // Update the draft ID to match the current URL
+      const restoredDraft: Draft = {
+        ...lastDraft,
+        id: id,
+        lastModified: new Date().toISOString(),
+      };
+      setDraft(restoredDraft);
+      setHasUnsavedChanges(true);
+      setShowRestoreModal(false);
+      setLastDraft(null);
+      toast.success('Draft restored from local storage');
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    clearLastDraft();
+    setShowRestoreModal(false);
+    setLastDraft(null);
+    
+    // Create a fresh temporary draft
+    const tempDraft: Draft = {
+      id: id,
+      title: 'Untitled Draft',
+      content: '',
+      lastModified: new Date().toISOString(),
+      sources: ['local'],
+      kind: 30024
+    };
+    setDraft(tempDraft);
+  };
+
   const signer: NostrSigner = {
     getPublicKey: async () => {
       if (!isAuthenticated) {
@@ -164,7 +251,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     };
     setDraft(updatedDraft);
     setHasUnsavedChanges(true);
-    // For temporary drafts, we don't save to Nostr until the save button is clicked
+    debouncedAutoSave(updatedDraft);
   };
 
   const handleSummaryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -176,7 +263,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     };
     setDraft(updatedDraft);
     setHasUnsavedChanges(true);
-    // For temporary drafts, we don't save to Nostr until the save button is clicked
+    debouncedAutoSave(updatedDraft);
   };
 
   const [hashtagInput, setHashtagInput] = useState('');
@@ -197,6 +284,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         setDraft(updatedDraft);
         setHashtagInput(''); // Clear the input
         setHasUnsavedChanges(true);
+        debouncedAutoSave(updatedDraft);
       } else {
         setHashtagInput(''); // Clear the input even if hashtag already exists
       }
@@ -216,6 +304,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         setDraft(updatedDraft);
         setHashtagInput('');
         setHasUnsavedChanges(true);
+        debouncedAutoSave(updatedDraft);
       } else {
         setHashtagInput('');
       }
@@ -231,6 +320,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     };
     setDraft(updatedDraft);
     setHasUnsavedChanges(true);
+    debouncedAutoSave(updatedDraft);
   };
 
   const handleSave = async (updatedDraft: Draft) => {
@@ -304,6 +394,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         };
         setDraft(savedDraft);
         setHasUnsavedChanges(false);
+        
+        // Clear the auto-saved draft since it's now saved to Nostr
+        clearLastDraft();
         
         // Update the URL to reflect the new Nostr event ID
         router.replace(`/editor/${ndkEvent.id}`);
@@ -489,6 +582,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         setDraft(savedDraft);
         setHasUnsavedChanges(false);
         
+        // Clear the auto-saved draft since it's now saved to Nostr
+        clearLastDraft();
+        
         // Update the URL to reflect the new Nostr event ID
         router.replace(`/editor/${ndkEvent.id}`);
         
@@ -543,6 +639,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         };
         setDraft(updatedDraft);
         setHasUnsavedChanges(true);
+        debouncedAutoSave(updatedDraft);
         // Don't automatically save - let the user decide when to save
       } catch (error) {
         console.error('Editor: Error uploading image:', error);
@@ -582,6 +679,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         };
         setDraft(updatedDraft);
         setHasUnsavedChanges(true);
+        debouncedAutoSave(updatedDraft);
         // Don't automatically save - let the user decide when to save
         toast.success('Cover image uploaded successfully!');
       } catch (error) {
@@ -781,6 +879,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       setDraft(savedDraft);
       setHasUnsavedChanges(false);
       
+      // Clear the auto-saved draft since it's now published to Nostr
+      clearLastDraft();
+      
       // Update the URL to reflect the new Nostr event ID
       router.replace(`/editor/${ndkEvent.id}`);
       
@@ -914,7 +1015,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           </div>
         </div>
       </div>
-      <Editor draft={draft} onSave={handleSave} ref={editorRef} />
+      <Editor 
+        draft={draft} 
+        onSave={handleSave} 
+        onContentChange={debouncedAutoSave}
+        ref={editorRef} 
+      />
       <div className="editor-footer">
         <div className="editor-actions">
           <button 
@@ -954,6 +1060,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           </button>
         </div>
       </div>
+      
+      {/* Restore Draft Modal */}
+      <ConfirmModal
+        isOpen={showRestoreModal}
+        onClose={handleDiscardDraft}
+        onConfirm={handleRestoreDraft}
+        title="Restore Unsaved Draft"
+        message={`You have an unsaved draft from ${lastDraft ? new Date(lastDraft.lastModified).toLocaleString() : ''}. Would you like to restore it?`}
+      />
     </main>
   );
 } 

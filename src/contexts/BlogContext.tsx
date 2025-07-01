@@ -57,7 +57,7 @@ interface BlogProviderProps {
 export function BlogProvider({ children }: BlogProviderProps) {
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     if (typeof window !== 'undefined') {
-      const cachedPosts = localStorage.getItem('long_posts');
+      const cachedPosts = localStorage.getItem('longform_posts');
       return cachedPosts ? JSON.parse(cachedPosts) : [];
     }
     return [];
@@ -65,7 +65,7 @@ export function BlogProvider({ children }: BlogProviderProps) {
 
   const [readPosts, setReadPosts] = useState<Set<string>>(() => {
     if (typeof window !== 'undefined') {
-      const cachedReadPosts = localStorage.getItem('long_read_posts');
+      const cachedReadPosts = localStorage.getItem('longform_readPosts');
       return new Set(cachedReadPosts ? JSON.parse(cachedReadPosts) : []);
     }
     return new Set();
@@ -74,21 +74,21 @@ export function BlogProvider({ children }: BlogProviderProps) {
   const clearPostsRef = useRef(() => {
     setPosts([]);
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('long_posts');
+      localStorage.removeItem('longform_posts');
     }
   });
 
   // Save to localStorage when posts change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('long_posts', JSON.stringify(posts));
+      localStorage.setItem('longform_posts', JSON.stringify(posts));
     }
   }, [posts]);
 
   // Save to localStorage when readPosts change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('long_read_posts', JSON.stringify([...readPosts]));
+      localStorage.setItem('longform_readPosts', JSON.stringify([...readPosts]));
     }
   }, [readPosts]);
 

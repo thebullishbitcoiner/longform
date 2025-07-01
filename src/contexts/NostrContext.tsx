@@ -9,9 +9,7 @@ const ndkInstance = new NDK({
   explicitRelayUrls: [
     'wss://relay.damus.io',
     'wss://relay.nostr.band',
-    'wss://relay.primal.net',
-    'wss://nostr.bitcoiner.social',
-    'wss://relay.snort.social'
+    'wss://relay.primal.net'
   ]
 });
 

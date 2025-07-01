@@ -12,28 +12,24 @@ export interface Draft {
   kind?: number; // 30024 for drafts, 30023 for published posts
 }
 
-export function getDrafts(): Draft[] {
-  if (typeof window === 'undefined') return [];
-  const drafts = localStorage.getItem('drafts');
-  return drafts ? JSON.parse(drafts) : [];
+// Auto-save functionality for unsaved drafts
+export function saveLastDraft(draft: Draft): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('longform_lastDraft', JSON.stringify(draft));
 }
 
-export function getDraft(id: string): Draft | null {
-  const drafts = getDrafts();
-  return drafts.find(draft => draft.id === id) || null;
+export function getLastDraft(): Draft | null {
+  if (typeof window === 'undefined') return null;
+  const lastDraft = localStorage.getItem('longform_lastDraft');
+  return lastDraft ? JSON.parse(lastDraft) : null;
 }
 
-export function updateDraft(updatedDraft: Draft): void {
-  const drafts = getDrafts();
-  const index = drafts.findIndex(draft => draft.id === updatedDraft.id);
-  if (index !== -1) {
-    drafts[index] = updatedDraft;
-    localStorage.setItem('drafts', JSON.stringify(drafts));
-  }
+export function clearLastDraft(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('longform_lastDraft');
 }
 
-export function deleteDraft(id: string): void {
-  const drafts = getDrafts();
-  const updatedDrafts = drafts.filter(draft => draft.id !== id);
-  localStorage.setItem('drafts', JSON.stringify(updatedDrafts));
+export function hasUnsavedDraft(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('longform_lastDraft') !== null;
 } 
