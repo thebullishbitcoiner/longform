@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlusIcon, TrashIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
+import { hexToNote1 } from '@/utils/nostr';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 
@@ -31,6 +32,16 @@ export default function Longform() {
   const [publishedNotes, setPublishedNotes] = useState<PublishedNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingPublished, setIsLoadingPublished] = useState(true);
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; noteId: string | null }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    noteId: null
+  });
+  const [jsonModal, setJsonModal] = useState<{ visible: boolean; data: Record<string, unknown> | null }>({
+    visible: false,
+    data: null
+  });
   const eventsRef = useRef<NDKEvent[]>([]);
   const publishedEventsRef = useRef<NDKEvent[]>([]);
   const deletionEventsRef = useRef<NDKEvent[]>([]); // Add reference for deletion events
@@ -363,10 +374,7 @@ export default function Longform() {
     router.push(`/editor/${id}`);
   };
 
-  const handleSharePublished = async (e: React.MouseEvent, note: PublishedNote) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const handleSharePublished = async (note: PublishedNote) => {
     const shareUrl = `${window.location.origin}/reader/${note.id}`;
     
     try {
@@ -377,6 +385,113 @@ export default function Longform() {
       toast.error('Failed to copy link');
     }
   };
+
+  const handleCopyNoteId = async (note: PublishedNote) => {
+    try {
+      // Convert hex event ID to note1 format according to NIP-19
+      const note1 = hexToNote1(note.id);
+      if (note1) {
+        await navigator.clipboard.writeText(note1);
+        toast.success('Note ID copied to clipboard!');
+      } else {
+        // Fallback to hex if conversion fails
+        await navigator.clipboard.writeText(note.id);
+        toast.success('Note ID copied to clipboard!');
+      }
+    } catch (error) {
+      console.error('Error copying note ID:', error);
+      toast.error('Failed to copy note ID');
+    }
+  };
+
+  const handleViewJson = (note: PublishedNote) => {
+    // Find the original event data
+    const originalEvent = publishedEventsRef.current.find(event => event.id === note.id);
+    if (originalEvent) {
+      setJsonModal({
+        visible: true,
+        data: {
+          id: originalEvent.id,
+          pubkey: originalEvent.pubkey,
+          created_at: originalEvent.created_at,
+          kind: originalEvent.kind,
+          tags: originalEvent.tags,
+          content: originalEvent.content,
+          sig: originalEvent.sig
+        }
+      });
+    }
+    setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, noteId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Estimate menu dimensions
+    const estimatedMenuWidth = 160;
+    const estimatedMenuHeight = 150;
+    
+    // Get the button element to position menu relative to it
+    const buttonElement = e.currentTarget as HTMLElement;
+    const buttonRect = buttonElement.getBoundingClientRect();
+    
+    // Position menu below the button
+    let x = buttonRect.left;
+    let y = buttonRect.bottom + 5; // 5px gap below button
+    
+    // Adjust horizontal position if menu would go off-screen
+    if (x + estimatedMenuWidth > viewportWidth) {
+      x = viewportWidth - estimatedMenuWidth - 10; // 10px margin from right edge
+    }
+    
+    // If menu would go below viewport, position it above the button instead
+    if (y + estimatedMenuHeight > viewportHeight) {
+      y = buttonRect.top - estimatedMenuHeight - 5; // 5px gap above button
+    }
+    
+    // Ensure minimum position
+    x = Math.max(10, x);
+    y = Math.max(10, y);
+    
+    setContextMenu({
+      visible: true,
+      x,
+      y,
+      noteId
+    });
+  };
+
+  const handleContextMenuAction = (action: 'share' | 'json' | 'copyId') => {
+    const note = publishedNotes.find(n => n.id === contextMenu.noteId);
+    if (!note) return;
+
+    if (action === 'share') {
+      handleSharePublished(note);
+    } else if (action === 'json') {
+      handleViewJson(note);
+    } else if (action === 'copyId') {
+      handleCopyNoteId(note);
+    }
+    
+    setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
+  };
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu.visible) {
+        setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [contextMenu.visible]);
 
   return (
     <>
@@ -483,11 +598,11 @@ export default function Longform() {
                     </div>
                   </div>
                   <button
-                    onClick={(e) => handleSharePublished(e, note)}
-                    className="share-button"
-                    title="Share post"
+                    onClick={(e) => handleContextMenu(e, note.id)}
+                    className="menu-button"
+                    title="More options"
                   >
-                    <ShareIcon />
+                    <EllipsisHorizontalIcon />
                   </button>
                 </div>
               </div>
@@ -500,6 +615,60 @@ export default function Longform() {
           </div>
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div 
+          className="context-menu"
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x,
+            zIndex: 1000
+          }}
+        >
+          <button 
+            className="context-menu-item"
+            onClick={() => handleContextMenuAction('share')}
+          >
+            Share
+          </button>
+          <button 
+            className="context-menu-item"
+            onClick={() => handleContextMenuAction('json')}
+          >
+            View JSON
+          </button>
+          <button 
+            className="context-menu-item"
+            onClick={() => handleContextMenuAction('copyId')}
+          >
+            Copy Note ID
+          </button>
+        </div>
+      )}
+
+      {/* JSON Modal */}
+      {jsonModal.visible && (
+        <div className="modal-overlay" onClick={() => setJsonModal({ visible: false, data: null })}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Raw Event Data</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setJsonModal({ visible: false, data: null })}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <pre className="json-display">
+                {JSON.stringify(jsonModal.data, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 } 

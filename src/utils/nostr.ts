@@ -1,4 +1,5 @@
 import { bech32 } from 'bech32';
+import { nip19 } from 'nostr-tools';
 
 /**
  * Convert npub to hex public key
@@ -27,6 +28,34 @@ export const hexToNpub = (hex: string): string | null => {
     return npub;
   } catch (error) {
     console.error('Error converting hex to npub:', error);
+    return null;
+  }
+};
+
+/**
+ * Convert hex event ID to note1 format using NIP-19
+ */
+export const hexToNote1 = (hex: string): string | null => {
+  try {
+    return nip19.noteEncode(hex);
+  } catch (error) {
+    console.error('Error converting hex to note1:', error);
+    return null;
+  }
+};
+
+/**
+ * Convert note1 to hex event ID
+ */
+export const note1ToHex = (note1: string): string | null => {
+  try {
+    const decoded = nip19.decode(note1);
+    if (decoded.type === 'note') {
+      return decoded.data;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error converting note1 to hex:', error);
     return null;
   }
 };
