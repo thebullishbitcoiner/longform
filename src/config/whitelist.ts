@@ -29,6 +29,8 @@ export const ALPHA_WHITELIST: string[] = [
   'npub166hl5x2mkuv55uzcxt6nt7n9h2ca3hx6mf4j2s8lxjehpygsk9msxj0thf', //purrs_for_her
   'npub18ams6ewn5aj2n3wt2qawzglx9mr4nzksxhvrdc4gzrecw7n5tvjqctp424', //Derek Ross
   'npub1dk5pn7gad897tywq3vcl24wx6z4ejpge0663tptwxwgynsqccxhsn65sgk', //1_3_7
+  'npub172y2yf9xrdekr25acsdfp2ag5t0lg4zdkz7rseegucuty8dp0ykq2ug6ef', //ButtercupRoberts
+  'npub1g80pwudqxx9rmxu6l8l35rpu0wgxse72d4896se44zlevzcaxfpsetc8cv', //Jim Smij
 ];
 
 // Enable/disable whitelist checking
