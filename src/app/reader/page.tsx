@@ -3,12 +3,12 @@
 import { useState, useEffect, memo, useRef, useCallback, useMemo } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useBlog, BlogPost } from '@/contexts/BlogContext';
-import Link from 'next/link';
 import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { NDKSubscription } from '@nostr-dev-kit/ndk';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useRouter } from 'next/navigation';
 
 // Configuration: Specify which relays to use for contact list queries
 // You can modify this list to use only the relays you trust
@@ -25,13 +25,18 @@ function getTagValues(tags: string[][], tagName: string): string[] {
   return tags.filter(tag => tag[0] === tagName).map(tag => tag[1]);
 }
 
-const PostCard = memo(({ post }: { post: BlogPost }) => {
+const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (post: BlogPost) => void; onHover: (post: BlogPost) => void }) => {
   const { isPostRead, markPostAsRead, markPostAsUnread } = useBlog();
   const x = useMotionValue(0);
   const controls = useAnimation();
 
-  // Debug log to track rendering
-  console.log('🎯 DEBUG: PostCard rendering:', { id: post.id, title: post.title });
+  // Debug log to track rendering - only log once per render cycle
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
+  
+  if (renderCountRef.current === 1) {
+    console.log('🎯 DEBUG: PostCard rendering:', { id: post.id, title: post.title, renderCount: renderCountRef.current });
+  }
 
   // Transform x position to opacity for the action indicators
   const leftOpacity = useTransform(x, [-30, -15], [1, 0]);
@@ -41,13 +46,13 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
   const scale = useTransform(x, [-100, 0, 100], [0.98, 1, 0.98]);
 
   // Add haptic feedback if available
-  const vibrate = (pattern: number | number[]) => {
+  const vibrate = useCallback((pattern: number | number[]) => {
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate(pattern);
     }
-  };
+  }, []);
 
-  const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+  const handleDragEnd = useCallback(async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 150; // Reduced threshold for easier triggering
     const velocity = info.velocity.x;
     
@@ -89,7 +94,20 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
         }
       });
     }
-  };
+  }, [controls, isPostRead, markPostAsRead, markPostAsUnread, post.id, vibrate]);
+
+  // Memoize the read status to prevent unnecessary re-renders
+  const isRead = useMemo(() => isPostRead(post.id), [isPostRead, post.id]);
+  
+  // Memoize the author display name
+  const authorDisplay = useMemo(() => {
+    return post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...';
+  }, [post.author?.displayName, post.author?.name, post.pubkey]);
+  
+  // Memoize the formatted date
+  const formattedDate = useMemo(() => {
+    return new Date(post.created_at * 1000).toLocaleDateString();
+  }, [post.created_at]);
 
   return (
     <div className={styles.swipeContainer}>
@@ -116,19 +134,19 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
         onDragEnd={handleDragEnd}
         animate={controls}
         style={{ x, scale }}
-        className={`${styles.postCard} ${isPostRead(post.id) ? styles.read : ''}`}
+        className={`${styles.postCard} ${isRead ? styles.read : ''}`}
       >
-        <Link href={`/reader/${post.id}`} className={styles.postCardLink}>
+        <div onClick={(e) => { e.preventDefault(); onClick(post); }} onMouseEnter={(e) => { e.preventDefault(); onHover(post); }} className={styles.postCardLink}>
           <div className={styles.readIndicator} />
           <div className={styles.postCardContent}>
             <div className={styles.postCardHeader}>
               <h2 className={styles.postCardTitle}>{post.title}</h2>
               <div className={styles.postCardMeta}>
                 <span className={styles.postCardAuthor}>
-                  {post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...'}
+                  {authorDisplay}
                 </span>
                 <div className={styles.postCardDate}>
-                  <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
+                  <time>{formattedDate}</time>
                 </div>
               </div>
             </div>
@@ -136,9 +154,21 @@ const PostCard = memo(({ post }: { post: BlogPost }) => {
               <p className={styles.postCardSummary}>{post.summary}</p>
             )}
           </div>
-        </Link>
+        </div>
       </motion.div>
     </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison function for React.memo
+  return (
+    prevProps.post.id === nextProps.post.id &&
+    prevProps.post.title === nextProps.post.title &&
+    prevProps.post.summary === nextProps.post.summary &&
+    prevProps.post.created_at === nextProps.post.created_at &&
+    prevProps.post.author?.displayName === nextProps.post.author?.displayName &&
+    prevProps.post.author?.name === nextProps.post.author?.name &&
+    prevProps.onClick === nextProps.onClick &&
+    prevProps.onHover === nextProps.onHover
   );
 });
 
@@ -198,7 +228,8 @@ export default function ReaderPage() {
   }, []);
 
   const { ndk, isLoading, isAuthenticated, isConnected } = useNostr();
-  const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead } = useBlog();
+  const { getSortedPosts, addPost, updateAuthorProfile, clearPosts, isPostRead, fetchProfileOnce } = useBlog();
+  const router = useRouter();
   
   // Declare all state variables first
   const [follows, setFollows] = useState<string[]>([]);
@@ -209,12 +240,19 @@ export default function ReaderPage() {
   const [showDebugConsole, setShowDebugConsole] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [postsToShow, setPostsToShow] = useState(21); // Track how many posts to display
+  const [isNavigating, setIsNavigating] = useState(false); // Track navigation state
+  const [debouncedFilteredPosts, setDebouncedFilteredPosts] = useState<BlogPost[]>([]);
   
   // Now we can use the state variables in useMemo
   const sortedPosts = getSortedPosts();
   
   // Direct filtering and limiting - only process what we need
   const filteredPosts = useMemo(() => {
+    // Only recalculate if we have posts and follows
+    if (sortedPosts.length === 0 || follows.length === 0) {
+      return [];
+    }
+    
     const postsFromFollows = sortedPosts.filter(post => follows.includes(post.pubkey));
     
     const filteredByReadStatus = postsFromFollows.filter(post => {
@@ -231,6 +269,7 @@ export default function ReaderPage() {
     // Only take the first postsToShow posts
     const limited = filteredByReadStatus.slice(0, postsToShow);
     
+    // Only log if the result actually changed
     console.log('🔍 DEBUG: Filtered posts calculation:', {
       totalPosts: sortedPosts.length,
       fromFollows: postsFromFollows.length,
@@ -273,8 +312,15 @@ export default function ReaderPage() {
       ndk: !!ndk, 
       isAuthenticated, 
       isConnected,
-      isLoading 
+      isLoading,
+      isNavigating
     });
+    
+    // Stop if we're navigating away
+    if (isNavigating) {
+      console.log('⏹️ DEBUG: Stopping fetchFollows - navigating away');
+      return;
+    }
     
     setDebugInfo('Fetching follows...');
     
@@ -289,6 +335,13 @@ export default function ReaderPage() {
     try {
       // Get current user
       const user = await ndk.signer?.user();
+      
+      // Check navigation state again after async operation
+      if (isNavigating) {
+        console.log('⏹️ DEBUG: Stopping fetchFollows - navigating away after user fetch');
+        return;
+      }
+      
       console.log('👤 DEBUG: Current user:', user ? { pubkey: user.pubkey, npub: user.npub } : 'null');
       
       if (!user?.pubkey) {
@@ -301,6 +354,12 @@ export default function ReaderPage() {
 
       // Function to fetch contact list from a specific relay
       const fetchFromRelay = async (relayUrl: string) => {
+        // Check navigation state before each relay query
+        if (isNavigating) {
+          console.log('⏹️ DEBUG: Stopping relay query - navigating away');
+          return null;
+        }
+        
         try {
           console.log(`📡 DEBUG: Querying relay: ${relayUrl}`);
           const events = await ndk.fetchEvents({
@@ -310,6 +369,12 @@ export default function ReaderPage() {
           }, {
             relayUrls: [relayUrl]
           });
+          
+          // Check navigation state after async operation
+          if (isNavigating) {
+            console.log('⏹️ DEBUG: Stopping relay query - navigating away after fetch');
+            return null;
+          }
           
           if (events.size > 0) {
             const event = Array.from(events)[0];
@@ -342,6 +407,12 @@ export default function ReaderPage() {
           return { relay, event };
         })
       );
+
+      // Check navigation state before processing results
+      if (isNavigating) {
+        console.log('⏹️ DEBUG: Stopping fetchFollows - navigating away before processing results');
+        return;
+      }
 
       // Find the most recent contact list from all relays
       const validResults = relayResults.filter(result => result.event !== null);
@@ -397,12 +468,17 @@ export default function ReaderPage() {
     } finally {
       setIsLoadingFollows(false);
     }
-  }, [ndk, isAuthenticated, isConnected, isLoading]);
+  }, [ndk, isAuthenticated, isConnected, isLoading, isNavigating]);
 
   // Fetch follows when authentication status changes
   useEffect(() => {
     if (isAuthenticated && isConnected && !isLoading) {
-      fetchFollows();
+      // Defer follows fetching to prevent blocking navigation
+      const timeoutId = setTimeout(() => {
+        fetchFollows();
+      }, 50); // Small delay to prioritize navigation
+      
+      return () => clearTimeout(timeoutId);
     } else {
       setFollows([]);
     }
@@ -427,6 +503,15 @@ export default function ReaderPage() {
     setPostsToShow(21);
   }, [filter]);
 
+  // Debounce filteredPosts to prevent rapid re-renders
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedFilteredPosts(filteredPosts);
+    }, 100); // 100ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [filteredPosts]);
+
   // Setup subscription for posts
   const setupSubscription = useCallback(async () => {
     console.log('🔍 DEBUG: setupSubscription called', { 
@@ -435,8 +520,15 @@ export default function ReaderPage() {
       isAuthenticated,
       isConnected,
       isLoading,
-      subscriptionState: subscriptionStateRef.current
+      subscriptionState: subscriptionStateRef.current,
+      isNavigating
     });
+    
+    // Stop if we're navigating away
+    if (isNavigating) {
+      console.log('⏹️ DEBUG: Stopping setupSubscription - navigating away');
+      return;
+    }
     
     // Prevent multiple simultaneous subscription setups
     if (subscriptionStateRef.current === 'setting_up' || subscriptionStateRef.current === 'active') {
@@ -468,8 +560,8 @@ export default function ReaderPage() {
     // Reset loading state to ensure we can proceed
     setIsLoadingPosts(false);
 
-      // Don't clear processed events here - only clear when follows change
-  console.log('🧹 DEBUG: Setup subscription - processed events count:', processedEvents.current.size);
+    // Don't clear processed events here - only clear when follows change
+    console.log('🧹 DEBUG: Setup subscription - processed events count:', processedEvents.current.size);
     
     // Reset event counter
     eventCountRef.current = 0;
@@ -535,6 +627,12 @@ export default function ReaderPage() {
         },
         {
           onEvent: async (event) => {
+            // Check navigation state before processing each event
+            if (isNavigating) {
+              console.log('⏹️ DEBUG: Skipping event processing - navigating away');
+              return;
+            }
+            
             console.log('📨 DEBUG: Received event:', {
               id: event.id,
               pubkey: event.pubkey,
@@ -602,18 +700,24 @@ export default function ReaderPage() {
 
               addPost(post);
 
-              // Fetch profile if we haven't already
-              const user = ndk.getUser({ pubkey: event.pubkey });
-              const profile = await user.fetchProfile();
-              if (profile) {
-                console.log('👤 DEBUG: Fetched profile for:', {
-                  pubkey: event.pubkey,
-                  name: profile.name,
-                  displayName: profile.displayName
-                });
-                updateAuthorProfile(event.pubkey, {
-                  name: profile.name,
-                  displayName: profile.displayName
+              // Fetch profile if we haven't already - but check navigation state first
+              if (!isNavigating) {
+                // Use the centralized profile fetching to prevent duplicates
+                fetchProfileOnce(event.pubkey, async () => {
+                  const user = ndk.getUser({ pubkey: event.pubkey });
+                  const profile = await user.fetchProfile();
+                  if (profile) {
+                    console.log('👤 DEBUG: Fetched profile for:', {
+                      pubkey: event.pubkey,
+                      name: profile.name,
+                      displayName: profile.displayName
+                    });
+                    return {
+                      name: profile.name,
+                      displayName: profile.displayName
+                    };
+                  }
+                  return null;
                 });
               }
             } catch (error) {
@@ -649,16 +753,18 @@ export default function ReaderPage() {
         kinds: [30023],
         limit: 5
       }).then(events => {
-        console.log('🔍 DEBUG: Any longform posts test:', {
-          eventsCount: events.size,
-          events: Array.from(events).map(e => ({
-            id: e.id,
-            kind: e.kind,
-            pubkey: e.pubkey,
-            created_at: e.created_at,
-            title: getTagValue(e.tags, 'title') || 'No title'
-          }))
-        });
+        if (!isNavigating) {
+          console.log('🔍 DEBUG: Any longform posts test:', {
+            eventsCount: events.size,
+            events: Array.from(events).map(e => ({
+              id: e.id,
+              kind: e.kind,
+              pubkey: e.pubkey,
+              created_at: e.created_at,
+              title: getTagValue(e.tags, 'title') || 'No title'
+            }))
+          });
+        }
       }).catch(error => {
         console.error('❌ DEBUG: Any longform posts test failed:', error);
       });
@@ -669,16 +775,18 @@ export default function ReaderPage() {
         authors: follows.slice(0, 5), // Test with first 5 follows
         limit: 10
       }).then(events => {
-        console.log('🔍 DEBUG: Follows events test result:', {
-          eventsCount: events.size,
-          events: Array.from(events).map(e => ({
-            id: e.id,
-            kind: e.kind,
-            pubkey: e.pubkey,
-            created_at: e.created_at,
-            title: getTagValue(e.tags, 'title') || 'No title'
-          }))
-        });
+        if (!isNavigating) {
+          console.log('🔍 DEBUG: Follows events test result:', {
+            eventsCount: events.size,
+            events: Array.from(events).map(e => ({
+              id: e.id,
+              kind: e.kind,
+              pubkey: e.pubkey,
+              created_at: e.created_at,
+              title: getTagValue(e.tags, 'title') || 'No title'
+            }))
+          });
+        }
       }).catch(error => {
         console.error('❌ DEBUG: Follows events test failed:', error);
       });
@@ -693,41 +801,19 @@ export default function ReaderPage() {
       }
       setIsLoadingPosts(false);
     }
-  }, [ndk, follows, isAuthenticated, isConnected, addPost, updateAuthorProfile, getSortedPosts, isLoading]);
+  }, [ndk, follows, isAuthenticated, isConnected, addPost, updateAuthorProfile, getSortedPosts, isLoading, isNavigating]);
 
   // Set up the subscription when dependencies are ready
   useEffect(() => {
-    console.log('🔄 DEBUG: Subscription useEffect triggered:', {
-      followsLength: follows.length,
-      isAuthenticated,
-      isConnected
-    });
-    
-    if (follows.length > 0 && isAuthenticated && isConnected) {
-      // Clear any existing timeout
-      if (setupSubscriptionTimeoutRef.current) {
-        clearTimeout(setupSubscriptionTimeoutRef.current);
-      }
-      
-      // Add a small delay to ensure everything is properly initialized and prevent rapid re-setups
-      setupSubscriptionTimeoutRef.current = setTimeout(() => {
-        console.log('⏰ DEBUG: Setting up subscription after timeout');
+    // Defer subscription setup to prevent blocking navigation
+    const timeoutId = setTimeout(() => {
+      if (follows.length > 0 && isAuthenticated && isConnected && !isLoading) {
         setupSubscription();
-      }, 200);
+      }
+    }, 100); // Small delay to prioritize navigation
 
-      return () => {
-        if (setupSubscriptionTimeoutRef.current) {
-          clearTimeout(setupSubscriptionTimeoutRef.current);
-        }
-      };
-    } else {
-      console.log('❌ DEBUG: Cannot setup subscription - missing requirements:', {
-        hasFollows: follows.length > 0,
-        isAuthenticated,
-        isConnected
-      });
-    }
-  }, [follows, isAuthenticated, isConnected, setupSubscription]);
+    return () => clearTimeout(timeoutId);
+  }, [follows, isAuthenticated, isConnected, isLoading, setupSubscription]);
 
   // Cleanup subscription on unmount
   useEffect(() => {
@@ -748,6 +834,26 @@ export default function ReaderPage() {
     };
   }, []);
 
+  // Reset navigation state when returning to reader page
+  useEffect(() => {
+    const handleRouteChange = () => {
+      if (window.location.pathname === '/reader') {
+        console.log('🔄 DEBUG: Returning to reader page, resetting navigation state');
+        setIsNavigating(false);
+      }
+    };
+
+    // Check current route on mount
+    handleRouteChange();
+
+    // Listen for route changes
+    window.addEventListener('popstate', handleRouteChange);
+    
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+    };
+  }, []);
+
   // Monitor filteredPosts to ensure it's properly limited
   useEffect(() => {
     console.log('📊 DEBUG: filteredPosts changed:', {
@@ -757,6 +863,15 @@ export default function ReaderPage() {
       firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
     });
   }, [filteredPosts, postsToShow]);
+
+  const handleCardClick = useCallback((post: BlogPost) => {
+    setIsNavigating(true);
+    router.push(`/reader/${post.id}`);
+  }, [router, setIsNavigating]);
+
+  const handleCardHover = useCallback((post: BlogPost) => {
+    router.prefetch(`/reader/${post.id}`);
+  }, [router]);
 
   if (isLoading || isLoadingFollows) {
     return <div className={styles.loading}>Loading...</div>;
@@ -1270,16 +1385,16 @@ export default function ReaderPage() {
                 </div>
               )}
               {(() => {
-                console.log('🎨 DEBUG: Rendering posts:', {
-                  filteredPostsLength: filteredPosts.length,
+                console.log('🎨 DEBUG: Rendering posts grid:', {
+                  filteredPostsLength: debouncedFilteredPosts.length,
                   postsToShow,
-                  firstFewIds: filteredPosts.slice(0, 3).map(p => p.id)
+                  firstFew: debouncedFilteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
                 });
-                return filteredPosts.map((post, index) => (
-                  <PostCard key={`${post.id}-${index}`} post={post} />
+                return debouncedFilteredPosts.map((post) => (
+                  <PostCard key={post.id} post={post} onClick={handleCardClick} onHover={handleCardHover} />
                 ));
               })()}
-              {filteredPosts.length === postsToShow && (
+              {debouncedFilteredPosts.length === postsToShow && (
                 <div style={{
                   padding: '10px',
                   background: 'rgba(161, 161, 170, 0.1)',
@@ -1332,7 +1447,7 @@ export default function ReaderPage() {
                 }
                 return null;
               })()}
-              {filteredPosts.length === 0 && !isLoadingPosts && (
+              {debouncedFilteredPosts.length === 0 && !isLoadingPosts && (
                 <div className={styles.emptyState}>
                   {follows.length === 0 ? (
                     <>

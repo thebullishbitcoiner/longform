@@ -32,6 +32,9 @@ export type BlogContextType = {
   markPostAsRead: (id: string) => void;
   markPostAsUnread: (id: string) => void;
   clearPosts: () => void;
+  getAuthorProfile: (pubkey: string) => AuthorProfile | undefined;
+  isProfileFetched: (pubkey: string) => boolean;
+  fetchProfileOnce: (pubkey: string, fetchFn: () => Promise<AuthorProfile | null>) => Promise<AuthorProfile | null>;
 };
 
 const BlogContext = createContext<BlogContextType>({
@@ -46,6 +49,9 @@ const BlogContext = createContext<BlogContextType>({
   markPostAsRead: () => {},
   markPostAsUnread: () => {},
   clearPosts: () => {},
+  getAuthorProfile: () => undefined,
+  isProfileFetched: () => false,
+  fetchProfileOnce: async () => null,
 });
 
 export const useBlog = () => useContext(BlogContext);
@@ -71,6 +77,18 @@ export function BlogProvider({ children }: BlogProviderProps) {
     return new Set();
   });
 
+  const [authorProfiles, setAuthorProfiles] = useState<Record<string, AuthorProfile>>(() => {
+    if (typeof window !== 'undefined') {
+      const cachedProfiles = localStorage.getItem('longform_authorProfiles');
+      return cachedProfiles ? JSON.parse(cachedProfiles) : {};
+    }
+    return {};
+  });
+
+  // Track which profiles are currently being fetched to prevent duplicates
+  const fetchingProfiles = useRef<Set<string>>(new Set());
+  const profileFetchPromises = useRef<Map<string, Promise<AuthorProfile | null>>>(new Map());
+
   const clearPostsRef = useRef(() => {
     setPosts([]);
     if (typeof window !== 'undefined') {
@@ -91,6 +109,13 @@ export function BlogProvider({ children }: BlogProviderProps) {
       localStorage.setItem('longform_readPosts', JSON.stringify([...readPosts]));
     }
   }, [readPosts]);
+
+  // Save to localStorage when authorProfiles change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('longform_authorProfiles', JSON.stringify(authorProfiles));
+    }
+  }, [authorProfiles]);
 
   const addPost = (post: BlogPost) => {
     setPosts(prev => {
@@ -121,12 +146,58 @@ export function BlogProvider({ children }: BlogProviderProps) {
   };
 
   const updateAuthorProfile = (pubkey: string, profile: AuthorProfile) => {
+    // Update the centralized author profiles cache
+    setAuthorProfiles(prev => ({
+      ...prev,
+      [pubkey]: profile
+    }));
+
+    // Also update any posts that have this author
     setPosts(prev => prev.map(post => {
       if (post.pubkey === pubkey) {
         return { ...post, author: profile };
       }
       return post;
     }));
+  };
+
+  const getAuthorProfile = (pubkey: string) => {
+    return authorProfiles[pubkey];
+  };
+
+  const isProfileFetched = (pubkey: string) => {
+    return pubkey in authorProfiles || fetchingProfiles.current.has(pubkey);
+  };
+
+  const fetchProfileOnce = async (pubkey: string, fetchFn: () => Promise<AuthorProfile | null>) => {
+    // If already cached, return immediately
+    if (pubkey in authorProfiles) {
+      return authorProfiles[pubkey];
+    }
+
+    // If already being fetched, wait for the existing promise
+    if (profileFetchPromises.current.has(pubkey)) {
+      return await profileFetchPromises.current.get(pubkey)!;
+    }
+
+    // If not being fetched, start a new fetch
+    fetchingProfiles.current.add(pubkey);
+    const fetchPromise = fetchFn().then(profile => {
+      if (profile) {
+        updateAuthorProfile(pubkey, profile);
+      }
+      fetchingProfiles.current.delete(pubkey);
+      profileFetchPromises.current.delete(pubkey);
+      return profile;
+    }).catch(error => {
+      console.error('Error fetching profile for:', pubkey, error);
+      fetchingProfiles.current.delete(pubkey);
+      profileFetchPromises.current.delete(pubkey);
+      return null;
+    });
+
+    profileFetchPromises.current.set(pubkey, fetchPromise);
+    return await fetchPromise;
   };
 
   const markPostAsRead = (id: string) => {
@@ -151,7 +222,7 @@ export function BlogProvider({ children }: BlogProviderProps) {
   return (
     <BlogContext.Provider value={{
       posts,
-      authorProfiles: {},
+      authorProfiles,
       readPosts,
       addPost,
       updateAuthorProfile,
@@ -160,7 +231,10 @@ export function BlogProvider({ children }: BlogProviderProps) {
       isPostRead,
       markPostAsRead,
       markPostAsUnread,
-      clearPosts: clearPostsRef.current
+      clearPosts: clearPostsRef.current,
+      getAuthorProfile,
+      isProfileFetched,
+      fetchProfileOnce,
     }}>
       {children}
     </BlogContext.Provider>
