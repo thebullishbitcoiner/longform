@@ -31,6 +31,7 @@ export const ALPHA_WHITELIST: string[] = [
   'npub1dk5pn7gad897tywq3vcl24wx6z4ejpge0663tptwxwgynsqccxhsn65sgk', //1_3_7
   'npub172y2yf9xrdekr25acsdfp2ag5t0lg4zdkz7rseegucuty8dp0ykq2ug6ef', //ButtercupRoberts
   'npub1g80pwudqxx9rmxu6l8l35rpu0wgxse72d4896se44zlevzcaxfpsetc8cv', //Jim Smij
+  'npub16e2s0g9kxmadpchm45uuhltn885awpf30dm8tc8tusd7juy3tsgqyhlxxe', //zv1689
 ];
 
 // Enable/disable whitelist checking
