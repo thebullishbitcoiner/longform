@@ -44,6 +44,11 @@ export default function Longform() {
     visible: false,
     data: null
   });
+  const [copyModal, setCopyModal] = useState<{ visible: boolean; text: string; title: string }>({
+    visible: false,
+    text: '',
+    title: ''
+  });
   const eventsRef = useRef<NDKEvent[]>([]);
   const publishedEventsRef = useRef<NDKEvent[]>([]);
   const deletionEventsRef = useRef<NDKEvent[]>([]); // Add reference for deletion events
@@ -398,7 +403,12 @@ export default function Longform() {
         toast.success('Link copied to clipboard!');
       } catch (fallbackError) {
         console.error('Error copying to clipboard:', fallbackError);
-        toast.error('Failed to copy link');
+        // Show manual copy modal as last resort
+        setCopyModal({
+          visible: true,
+          text: fallbackUrl,
+          title: 'Copy Link'
+        });
       }
     }
   };
@@ -417,7 +427,13 @@ export default function Longform() {
       }
     } catch (error) {
       console.error('Error copying note ID:', error);
-      toast.error('Failed to copy note ID');
+      // Show manual copy modal as last resort
+      const textToCopy = hexToNote1(note.id) || note.id;
+      setCopyModal({
+        visible: true,
+        text: textToCopy,
+        title: 'Copy Note ID'
+      });
     }
   };
 
@@ -682,6 +698,45 @@ export default function Longform() {
               <pre className="json-display">
                 {JSON.stringify(jsonModal.data, null, 2)}
               </pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Copy Modal */}
+      {copyModal.visible && (
+        <div className="modal-overlay" onClick={() => setCopyModal({ visible: false, text: '', title: '' })}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{copyModal.title}</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setCopyModal({ visible: false, text: '', title: '' })}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Copy the text below manually:
+              </p>
+              <textarea
+                value={copyModal.text}
+                readOnly
+                style={{
+                  width: '100%',
+                  minHeight: '100px',
+                  padding: '0.75rem',
+                  border: '1px solid var(--border)',
+                  borderRadius: '0.375rem',
+                  backgroundColor: 'var(--background)',
+                  color: 'var(--text)',
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                  resize: 'vertical'
+                }}
+                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+              />
             </div>
           </div>
         </div>
