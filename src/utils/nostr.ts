@@ -167,10 +167,10 @@ export const resolveNip05 = async (ndk: NDK, identifier: string): Promise<string
       }
       
       try {
-        const url = `https://${domain}/.well-known/nostr.json`;
+        const url = `https://${domain}/.well-known/nostr.json?name=${username}`;
         console.log('🔍 DEBUG: Fetching NIP-05 data from:', url);
         
-        // Fetch the NIP-05 JSON from the domain
+        // Fetch the NIP-05 JSON from the domain with name parameter
         const response = await fetch(url);
         
         console.log('🔍 DEBUG: NIP-05 response status:', response.status);

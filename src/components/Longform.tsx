@@ -725,7 +725,7 @@ export default function Longform() {
                   value={copyModal.text}
                   readOnly
                   className="copy-url-input"
-                  rows={2}
+                  rows={3}
                   style={{ resize: 'none' }}
                   onClick={(e) => (e.target as HTMLTextAreaElement).select()}
                 />
