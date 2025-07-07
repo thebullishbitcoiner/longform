@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { PlusIcon, TrashIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
-import { hexToNote1, generateNip05Url, getUserIdentifier } from '@/utils/nostr';
+import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { copyToClipboard } from '@/utils/clipboard';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
@@ -53,7 +53,7 @@ export default function Longform() {
   const publishedEventsRef = useRef<NDKEvent[]>([]);
   const deletionEventsRef = useRef<NDKEvent[]>([]); // Add reference for deletion events
   const router = useRouter();
-  const { ndk, isAuthenticated } = useNostr();
+  const { ndk, isAuthenticated, currentUser } = useNostr();
 
   useEffect(() => {
     const loadNostrContent = async () => {
@@ -384,8 +384,10 @@ export default function Longform() {
 
   const handleSharePublished = async (note: PublishedNote) => {
     try {
-      // Get the best identifier for the author
-      const authorIdentifier = await getUserIdentifier(ndk, note.pubkey);
+      // Use cached user profile for current user's posts, fetch for others
+      const authorIdentifier = note.pubkey === currentUser?.pubkey 
+        ? getCurrentUserIdentifier(currentUser)
+        : await getUserIdentifier(ndk, note.pubkey);
       
       // Use the d tag from the note if available, otherwise fallback to event ID
       const dTag = note.dTag || note.id.slice(0, 8);
@@ -394,19 +396,25 @@ export default function Longform() {
       
       await copyToClipboard(shareUrl);
       toast.success('Link copied to clipboard!');
-    } catch (error) {
-      console.error('Error generating share URL:', error);
-      // Fallback to old format if we can't generate the new URL
-      const fallbackUrl = `${window.location.origin}/reader/${note.id}`;
+    } catch {
+      // Show manual copy modal for mobile or when clipboard fails
       try {
-        await copyToClipboard(fallbackUrl);
-        toast.success('Link copied to clipboard!');
-      } catch (fallbackError) {
-        console.error('Error copying to clipboard:', fallbackError);
-        // Show manual copy modal as last resort
+        const authorIdentifier = note.pubkey === currentUser?.pubkey 
+          ? getCurrentUserIdentifier(currentUser)
+          : await getUserIdentifier(ndk, note.pubkey);
+        const dTag = note.dTag || note.id.slice(0, 8);
+        const shareUrl = `${window.location.origin}${generateNip05Url(authorIdentifier, dTag)}`;
         setCopyModal({
           visible: true,
-          text: fallbackUrl,
+          text: shareUrl,
+          title: 'Copy Link'
+        });
+      } catch {
+        // If even the fallback fails, show a simple URL
+        const simpleUrl = `${window.location.origin}/reader/${note.id}`;
+        setCopyModal({
+          visible: true,
+          text: simpleUrl,
           title: 'Copy Link'
         });
       }
@@ -417,17 +425,12 @@ export default function Longform() {
     try {
       // Convert hex event ID to note1 format according to NIP-19
       const note1 = hexToNote1(note.id);
-      if (note1) {
-        await copyToClipboard(note1);
-        toast.success('Note ID copied to clipboard!');
-      } else {
-        // Fallback to hex if conversion fails
-        await copyToClipboard(note.id);
-        toast.success('Note ID copied to clipboard!');
-      }
-    } catch (error) {
-      console.error('Error copying note ID:', error);
-      // Show manual copy modal as last resort
+      const textToCopy = note1 || note.id;
+      
+      await copyToClipboard(textToCopy);
+      toast.success('Note ID copied to clipboard!');
+    } catch {
+      // Show manual copy modal for mobile or when clipboard fails
       const textToCopy = hexToNote1(note.id) || note.id;
       setCopyModal({
         visible: true,
@@ -717,26 +720,27 @@ export default function Longform() {
               </button>
             </div>
             <div className="modal-body">
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Copy the text below manually:
-              </p>
-              <textarea
-                value={copyModal.text}
-                readOnly
-                style={{
-                  width: '100%',
-                  minHeight: '100px',
-                  padding: '0.75rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.375rem',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--text)',
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                  resize: 'vertical'
-                }}
-                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-              />
+              <div className="copy-url-container">
+                <input
+                  type="text"
+                  value={copyModal.text}
+                  readOnly
+                  className="copy-url-input"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  className="copy-url-button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(copyModal.text).then(() => {
+                      toast.success('Copied to clipboard!');
+                    }).catch(() => {
+                      toast.error('Failed to copy');
+                    });
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
             </div>
           </div>
         </div>

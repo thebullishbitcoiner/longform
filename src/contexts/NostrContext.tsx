@@ -79,12 +79,21 @@ initializeNDK().catch(error => {
   console.error('NDK: Initial connection failed:', error);
 });
 
+interface UserProfile {
+  pubkey: string;
+  npub: string;
+  nip05?: string;
+  name?: string;
+  displayName?: string;
+}
+
 interface NostrContextType {
   ndk: NDK;
   isLoading: boolean;
   isConnected: boolean;
   isAuthenticated: boolean;
   isWhitelisted: boolean;
+  currentUser: UserProfile | null;
   checkAuthentication: () => Promise<boolean>;
 }
 
@@ -94,6 +103,7 @@ const NostrContext = createContext<NostrContextType>({
   isConnected: false,
   isAuthenticated: false,
   isWhitelisted: false,
+  currentUser: null,
   checkAuthentication: async () => false
 });
 
@@ -108,6 +118,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isWhitelisted, setIsWhitelisted] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
   const checkAuthentication = async (): Promise<boolean> => {
     try {
@@ -131,23 +142,54 @@ export function NostrProvider({ children }: NostrProviderProps) {
             whitelistEnabled: true,
             whitelistKeys: ALPHA_WHITELIST.length
           });
+          setIsAuthenticated(false);
+          setIsWhitelisted(false);
+          setCurrentUser(null);
+          return false;
         } else {
           console.log('✅ Access granted - User is whitelisted');
+          
+          // Fetch and cache the user's profile
+          try {
+            const ndkUser = ndkInstance.getUser({ pubkey: user.pubkey });
+            const profile = await ndkUser.fetchProfile();
+            
+            const userProfile: UserProfile = {
+              pubkey: user.pubkey,
+              npub: user.npub,
+              nip05: profile?.nip05,
+              name: profile?.name,
+              displayName: profile?.displayName
+            };
+            
+            console.log('👤 Cached user profile:', userProfile);
+            setCurrentUser(userProfile);
+          } catch (profileError) {
+            console.warn('⚠️ Failed to fetch user profile, using basic info:', profileError);
+            // Still cache basic user info even if profile fetch fails
+            const userProfile: UserProfile = {
+              pubkey: user.pubkey,
+              npub: user.npub
+            };
+            setCurrentUser(userProfile);
+          }
+          
+          setIsWhitelisted(true);
+          setIsAuthenticated(true);
+          return true;
         }
-        
-        setIsWhitelisted(whitelisted);
-        setIsAuthenticated(whitelisted); // Only authenticate if whitelisted
-        return whitelisted;
       } else {
         console.log('❌ No user found - Authentication failed');
         setIsAuthenticated(false);
         setIsWhitelisted(false);
+        setCurrentUser(null);
         return false;
       }
     } catch (error) {
       console.error('NDK Provider: Error checking authentication:', error);
       setIsAuthenticated(false);
       setIsWhitelisted(false);
+      setCurrentUser(null);
       return false;
     }
   };
@@ -181,7 +223,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   }, []);
 
   return (
-    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, isWhitelisted, checkAuthentication }}>
+    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, isWhitelisted, currentUser, checkAuthentication }}>
       {children}
     </NostrContext.Provider>
   );

@@ -119,6 +119,24 @@ export const getUserIdentifier = async (ndk: NDK, pubkey: string): Promise<strin
 };
 
 /**
+ * Get the best identifier for the current logged-in user (uses cached profile)
+ * This is much faster than getUserIdentifier as it doesn't need to fetch from relays
+ */
+export const getCurrentUserIdentifier = (currentUser: { pubkey: string; npub: string; nip05?: string } | null): string => {
+  if (!currentUser) {
+    throw new Error('No current user available');
+  }
+  
+  // Use NIP-05 if available
+  if (currentUser.nip05) {
+    return currentUser.nip05;
+  }
+  
+  // Fallback to npub
+  return currentUser.npub;
+};
+
+/**
  * Resolve a NIP-05 identifier to a pubkey
  */
 export const resolveNip05 = async (ndk: NDK, identifier: string): Promise<string | null> => {
