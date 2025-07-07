@@ -407,7 +407,7 @@ export default function Longform() {
         setCopyModal({
           visible: true,
           text: shareUrl,
-          title: 'Copy Link'
+          title: 'Share this Article'
         });
       } catch {
         // If even the fallback fails, show a simple URL
@@ -711,7 +711,7 @@ export default function Longform() {
         <div className="modal-overlay" onClick={() => setCopyModal({ visible: false, text: '', title: '' })}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{copyModal.title}</h3>
+              <h3>Share this Article</h3>
               <button 
                 className="modal-close"
                 onClick={() => setCopyModal({ visible: false, text: '', title: '' })}
@@ -721,12 +721,13 @@ export default function Longform() {
             </div>
             <div className="modal-body">
               <div className="copy-url-container">
-                <input
-                  type="text"
+                <textarea
                   value={copyModal.text}
                   readOnly
                   className="copy-url-input"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                  rows={2}
+                  style={{ resize: 'none' }}
+                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
                 />
                 <button
                   className="copy-url-button"

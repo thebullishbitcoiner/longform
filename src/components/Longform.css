@@ -414,9 +414,14 @@
   background-color: var(--background);
   color: var(--text);
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s;
+  min-height: 2.8em;
+  max-height: 5.5em;
+  resize: none;
+  line-height: 1.4;
+  box-sizing: border-box;
 }
 
 .copy-url-input:focus {
@@ -481,5 +486,10 @@
     width: 100%;
     padding: 0.875rem;
     font-size: 1rem;
+  }
+  .copy-url-input {
+    font-size: 1.05rem;
+    min-height: 3.2em;
+    max-height: 6em;
   }
 } 
