@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import ConfirmModal from '@/components/ConfirmModal';
 import './page.css';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
+import Image from 'next/image';
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -924,10 +925,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         <div className="cover-image-section">
           {draft.coverImage ? (
             <div className="cover-image-preview">
-              <img 
+              <Image 
                 src={draft.coverImage} 
                 alt="Cover" 
                 className="cover-image"
+                width={800}
+                height={400}
+                style={{ width: '100%', height: 'auto' }}
                 onError={(e) => {
                   console.error('Failed to load cover image:', draft.coverImage);
                   e.currentTarget.style.display = 'none';

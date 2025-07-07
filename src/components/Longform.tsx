@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { PlusIcon, TrashIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
-import { hexToNote1 } from '@/utils/nostr';
+import { hexToNote1, generateNip05Url, getUserIdentifier } from '@/utils/nostr';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 
@@ -19,6 +19,7 @@ interface Draft {
 
 interface PublishedNote {
   id: string;
+  pubkey: string; // Add pubkey for generating NIP-05 URLs
   title: string;
   content: string;
   publishedAt: string;
@@ -218,6 +219,7 @@ export default function Longform() {
             
             return {
               id: event.id,
+              pubkey: event.pubkey,
               title,
               content: event.content,
               publishedAt: new Date(publishedAtTimestamp).toISOString(),
@@ -375,14 +377,28 @@ export default function Longform() {
   };
 
   const handleSharePublished = async (note: PublishedNote) => {
-    const shareUrl = `${window.location.origin}/reader/${note.id}`;
-    
     try {
+      // Get the best identifier for the author
+      const authorIdentifier = await getUserIdentifier(ndk, note.pubkey);
+      
+      // Use the d tag from the note if available, otherwise fallback to event ID
+      const dTag = note.dTag || note.id.slice(0, 8);
+      
+      const shareUrl = `${window.location.origin}${generateNip05Url(authorIdentifier, dTag)}`;
+      
       await navigator.clipboard.writeText(shareUrl);
       toast.success('Link copied to clipboard!');
     } catch (error) {
-      console.error('Error copying to clipboard:', error);
-      toast.error('Failed to copy link');
+      console.error('Error generating share URL:', error);
+      // Fallback to old format if we can't generate the new URL
+      const fallbackUrl = `${window.location.origin}/reader/${note.id}`;
+      try {
+        await navigator.clipboard.writeText(fallbackUrl);
+        toast.success('Link copied to clipboard!');
+      } catch (fallbackError) {
+        console.error('Error copying to clipboard:', fallbackError);
+        toast.error('Failed to copy link');
+      }
     }
   };
 

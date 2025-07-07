@@ -18,6 +18,7 @@ export interface BlogPost {
   image?: string;
   tags: string[];
   author?: AuthorProfile;
+  dTag?: string; // Add d tag for replaceable events
 }
 
 export type BlogContextType = {

@@ -9,6 +9,7 @@ import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'fra
 import { NDKSubscription } from '@nostr-dev-kit/ndk';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useRouter } from 'next/navigation';
+import { generateNip05Url, getUserIdentifier } from '@/utils/nostr';
 
 // Configuration: Specify which relays to use for contact list queries
 // You can modify this list to use only the relays you trust
@@ -678,6 +679,7 @@ export default function ReaderPage() {
               const published_at = parseInt(getTagValue(event.tags, 'published_at') || event.created_at.toString());
               const image = getTagValue(event.tags, 'image');
               const tags = getTagValues(event.tags, 't');
+              const dTag = getTagValue(event.tags, 'd'); // Extract d tag
 
               const post: BlogPost = {
                 id: event.id,
@@ -688,7 +690,8 @@ export default function ReaderPage() {
                 summary,
                 published_at,
                 image,
-                tags
+                tags,
+                dTag
               };
 
               console.log('✅ DEBUG: Adding post:', {
@@ -801,7 +804,7 @@ export default function ReaderPage() {
       }
       setIsLoadingPosts(false);
     }
-  }, [ndk, follows, isAuthenticated, isConnected, addPost, updateAuthorProfile, getSortedPosts, isLoading, isNavigating]);
+  }, [ndk, follows, isAuthenticated, isConnected, addPost, updateAuthorProfile, getSortedPosts, isLoading, isNavigating, fetchProfileOnce]);
 
   // Set up the subscription when dependencies are ready
   useEffect(() => {
@@ -825,8 +828,9 @@ export default function ReaderPage() {
         subscriptionRef.current = null;
         subscriptionStateRef.current = 'idle';
       }
-      if (setupSubscriptionTimeoutRef.current) {
-        clearTimeout(setupSubscriptionTimeoutRef.current);
+      const timeoutRef = setupSubscriptionTimeoutRef.current;
+      if (timeoutRef) {
+        clearTimeout(timeoutRef);
       }
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
@@ -864,14 +868,40 @@ export default function ReaderPage() {
     });
   }, [filteredPosts, postsToShow]);
 
-  const handleCardClick = useCallback((post: BlogPost) => {
+  const handleCardClick = useCallback(async (post: BlogPost) => {
     setIsNavigating(true);
-    router.push(`/reader/${post.id}`);
-  }, [router, setIsNavigating]);
+    
+    try {
+      // Get the best identifier for the author
+      const authorIdentifier = await getUserIdentifier(ndk, post.pubkey);
+      
+      // Use the d tag from the post if available, otherwise fallback to event ID
+      const dTag = post.dTag || post.id.slice(0, 8);
+      
+      const url = generateNip05Url(authorIdentifier, dTag);
+      router.push(url);
+    } catch (error) {
+      console.error('Error generating URL:', error);
+      // Fallback to home page if we can't generate the URL
+      router.push('/');
+    }
+  }, [router, setIsNavigating, ndk]);
 
-  const handleCardHover = useCallback((post: BlogPost) => {
-    router.prefetch(`/reader/${post.id}`);
-  }, [router]);
+  const handleCardHover = useCallback(async (post: BlogPost) => {
+    try {
+      // Get the best identifier for the author
+      const authorIdentifier = await getUserIdentifier(ndk, post.pubkey);
+      
+      // Use the d tag from the post if available, otherwise fallback to event ID
+      const dTag = post.dTag || post.id.slice(0, 8);
+      
+      const url = generateNip05Url(authorIdentifier, dTag);
+      router.prefetch(url);
+    } catch (error) {
+      console.error('Error prefetching URL:', error);
+      // Skip prefetching if we can't generate the URL
+    }
+  }, [router, ndk]);
 
   if (isLoading || isLoadingFollows) {
     return <div className={styles.loading}>Loading...</div>;
