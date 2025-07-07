@@ -6,6 +6,7 @@ import { PlusIcon, TrashIcon, EllipsisHorizontalIcon } from '@heroicons/react/24
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { hexToNote1, generateNip05Url, getUserIdentifier } from '@/utils/nostr';
+import { copyToClipboard } from '@/utils/clipboard';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 
@@ -386,14 +387,14 @@ export default function Longform() {
       
       const shareUrl = `${window.location.origin}${generateNip05Url(authorIdentifier, dTag)}`;
       
-      await navigator.clipboard.writeText(shareUrl);
+      await copyToClipboard(shareUrl);
       toast.success('Link copied to clipboard!');
     } catch (error) {
       console.error('Error generating share URL:', error);
       // Fallback to old format if we can't generate the new URL
       const fallbackUrl = `${window.location.origin}/reader/${note.id}`;
       try {
-        await navigator.clipboard.writeText(fallbackUrl);
+        await copyToClipboard(fallbackUrl);
         toast.success('Link copied to clipboard!');
       } catch (fallbackError) {
         console.error('Error copying to clipboard:', fallbackError);
@@ -407,11 +408,11 @@ export default function Longform() {
       // Convert hex event ID to note1 format according to NIP-19
       const note1 = hexToNote1(note.id);
       if (note1) {
-        await navigator.clipboard.writeText(note1);
+        await copyToClipboard(note1);
         toast.success('Note ID copied to clipboard!');
       } else {
         // Fallback to hex if conversion fails
-        await navigator.clipboard.writeText(note.id);
+        await copyToClipboard(note.id);
         toast.success('Note ID copied to clipboard!');
       }
     } catch (error) {
