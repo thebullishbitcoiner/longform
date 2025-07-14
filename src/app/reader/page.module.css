@@ -1,12 +1,10 @@
 .container {
-  min-height: calc(100vh - 4rem); /* Subtract header height */
+  min-height: 100vh;
   color: #fff;
   width: 100vw;
   margin: 0;
   padding: 0;
   background: #000;
-  position: relative;
-  top: 4rem; /* Start under header */
 }
 
 .content {
