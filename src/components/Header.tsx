@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import { APP_VERSION } from '../config/version';
 import Link from 'next/link';
+import { useNostr } from '@/contexts/NostrContext';
 import './Header.css';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { isAuthenticated, currentUser } = useNostr();
 
   useEffect(() => {
     setMounted(true);
@@ -16,6 +18,13 @@ const Header: React.FC = () => {
 
   const handleLinkClick = () => {
     setIsMenuOpen(false);
+  };
+
+  // Get the user's profile identifier (NIP-05 or npub)
+  const getUserProfileUrl = () => {
+    if (!currentUser) return null;
+    const identifier = currentUser.nip05 || currentUser.npub;
+    return `/profile/${encodeURIComponent(identifier)}`;
   };
 
   return (
@@ -47,6 +56,11 @@ const Header: React.FC = () => {
             <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
               Reader
             </Link>
+            {isAuthenticated && getUserProfileUrl() && (
+              <Link href={getUserProfileUrl()!} className="menu-link" onClick={handleLinkClick}>
+                Profile
+              </Link>
+            )}
             {mounted && <div className="menu-version">v{APP_VERSION}</div>}
           </div>
         </div>
