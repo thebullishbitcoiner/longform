@@ -255,6 +255,12 @@
   border: 1px solid rgb(63 63 70);
 }
 
+@media (max-width: 640px) {
+  .postCard {
+    flex-direction: column;
+  }
+}
+
 .postCard:hover {
   transform: translateY(-2px);
   border-color: rgb(82 82 91);
@@ -270,10 +276,30 @@
   position: relative;
 }
 
+@media (max-width: 640px) {
+  .postImage {
+    width: 100%;
+    height: 0;
+    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    position: relative;
+  }
+}
+
 .postImageContent {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+@media (max-width: 640px) {
+  .postImageContent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 }
 
 .postImage::after {
@@ -300,6 +326,13 @@
   flex-direction: column;
   justify-content: space-between;
   min-height: 187px; /* Match the image height to prevent gaps */
+}
+
+@media (max-width: 640px) {
+  .postContent {
+    min-height: auto;
+    padding: 1rem;
+  }
 }
 
 .postTitle {
