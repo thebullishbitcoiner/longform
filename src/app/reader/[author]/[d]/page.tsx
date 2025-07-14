@@ -649,9 +649,23 @@ export default function BlogPost() {
               <div className={styles.author}>
                 <span className={styles.label}>Author:</span>
                 <span className={styles.authorValue}>
-                  {post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...'}
+                  {(() => {
+                    // First check if we have author info in the post itself
+                    if (post.author?.displayName || post.author?.name) {
+                      return post.author.displayName || post.author.name;
+                    }
+                    
+                    // If not, check the centralized author profiles cache
+                    const cachedProfile = getAuthorProfile(post.pubkey);
+                    if (cachedProfile?.displayName || cachedProfile?.name) {
+                      return cachedProfile.displayName || cachedProfile.name;
+                    }
+                    
+                    // Fallback to truncated pubkey
+                    return post.pubkey.slice(0, 8) + '...';
+                  })()}
                 </span>
-                {isLoadingAdditionalData && !post.author && (
+                {isLoadingAdditionalData && !post.author && !getAuthorProfile(post.pubkey) && (
                   <span className={styles.loadingIndicator}> (loading...)</span>
                 )}
               </div>

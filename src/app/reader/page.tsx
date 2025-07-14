@@ -27,7 +27,7 @@ function getTagValues(tags: string[][], tagName: string): string[] {
 }
 
 const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (post: BlogPost) => void; onHover: (post: BlogPost) => void }) => {
-  const { isPostRead, markPostAsRead, markPostAsUnread } = useBlog();
+  const { isPostRead, markPostAsRead, markPostAsUnread, getAuthorProfile } = useBlog();
   const x = useMotionValue(0);
   const controls = useAnimation();
 
@@ -100,10 +100,22 @@ const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (p
   // Memoize the read status to prevent unnecessary re-renders
   const isRead = useMemo(() => isPostRead(post.id), [isPostRead, post.id]);
   
-  // Memoize the author display name
+  // Memoize the author display name - check both post.author and centralized cache
   const authorDisplay = useMemo(() => {
-    return post.author?.displayName || post.author?.name || post.pubkey.slice(0, 8) + '...';
-  }, [post.author?.displayName, post.author?.name, post.pubkey]);
+    // First check if we have author info in the post itself
+    if (post.author?.displayName || post.author?.name) {
+      return post.author.displayName || post.author.name;
+    }
+    
+    // If not, check the centralized author profiles cache
+    const cachedProfile = getAuthorProfile(post.pubkey);
+    if (cachedProfile?.displayName || cachedProfile?.name) {
+      return cachedProfile.displayName || cachedProfile.name;
+    }
+    
+    // Fallback to truncated pubkey
+    return post.pubkey.slice(0, 8) + '...';
+  }, [post.author?.displayName, post.author?.name, post.pubkey, getAuthorProfile]);
   
   // Memoize the formatted date
   const formattedDate = useMemo(() => {
@@ -161,6 +173,8 @@ const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (p
   );
 }, (prevProps, nextProps) => {
   // Custom comparison function for React.memo
+  // Note: We don't need to compare author profiles here because the memoized authorDisplay
+  // will automatically update when the context's authorProfiles change
   return (
     prevProps.post.id === nextProps.post.id &&
     prevProps.post.title === nextProps.post.title &&
