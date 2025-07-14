@@ -22,7 +22,7 @@ export const ALPHA_WHITELIST: string[] = [
   'npub1wf0w8jcnhav6wu7umz2pg6hzrcvt3h874h5g7uq9p0r3m8taxsssfafcny', //Ryan Matta
   'npub1mgvmt553uphdpxa9gk79xejq3hyzh2xfa8uh6vh236nq78mvh74q8tr9yd', //n0>1
   'npub1ftkx02mg3u6l6ksfzv6r0nzed03cqcmy9me3vf75zkcjeca0alvq7lskzl', //Dave Plotz
-  'npub1uzt238htjzpq39dxmltlx60vxym9fetk9czz6kddq6fhvkf4z3usy9qtrh', // Oshi
+  'npub1uzt238htjzpq39dxmltlx60vxym9fetk9czz6kddq6fhvkf4z3usy9qtrh', //Oshi
   'npub164xgt7nysd3euvrdk0h6p7xxhulhnjnpmu0utzau86wf6859qn6srac0qx', //Rotten
   'npub10zsum2w6qv39w34fa83ttk8js793adly5g6u0ngt5e2qt6qqavtq6fken2', //FreebornFarm
   'npub19yw8tkfh530kdgfqn782vcga7azgckdn2fjjp3nv5txu6dl3h7lqhv322j', //Jared Logan
@@ -35,6 +35,7 @@ export const ALPHA_WHITELIST: string[] = [
   'npub10xxhztawwgtuapdej49q5jgfawu5p0f2j2tzuaxxww2hl546ct3sr7pcjl', //Kenshin
   'npub197swtr3ymz7aw72tu7eqspxjta7zwcwf23uw4fxyxe2r2eyrfa2sdpner3', //McIntosh
   'npub1hkkcygtuz63jccf3ls63eqltrkztnx2n0kqtq2qgeqq6e52x9xyqpyfvlm', //Satoshi's Plebs
+  'npub160t5zfxalddaccdc7xx30sentwa5lrr3rq4rtm38x99ynf8t0vwsvzyjc9', //average_gary
 ];
 
 // Enable/disable whitelist checking
