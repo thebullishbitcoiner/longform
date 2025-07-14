@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { Draft, saveLastDraft, getLastDraft, clearLastDraft, hasUnsavedDraft } from '@/utils/storage';
@@ -14,6 +14,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import './page.css';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 import Image from 'next/image';
+import React from 'react';
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -27,7 +28,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const { ndk, isConnected, isAuthenticated } = useNostr();
   const editorRef = useRef<EditorRef | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Auto-save function
   const autoSaveDraft = (currentDraft: Draft) => {
     // Only auto-save temporary drafts (not saved to Nostr yet)
@@ -267,7 +268,56 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     debouncedAutoSave(updatedDraft);
   };
 
+  const handleDTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!draft) return;
+    
+    console.log('Raw slug input:', e.target.value);
+    
+    // For now, just use the input value directly
+    const urlFriendlyValue = e.target.value;
+    
+    console.log('Processed slug:', urlFriendlyValue);
+    
+    const updatedDraft = {
+      ...draft,
+      dTag: urlFriendlyValue,
+      lastModified: new Date().toISOString(),
+    };
+    setDraft(updatedDraft);
+    setHasUnsavedChanges(true);
+    debouncedAutoSave(updatedDraft);
+  };
+
+  const generateSlug = () => {
+    if (!draft) return;
+    
+    // Generate slug from title: lowercase, replace spaces with dashes, remove special chars
+    const generatedSlug = draft.title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters except spaces and hyphens
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+    
+    const updatedDraft = {
+      ...draft,
+      dTag: generatedSlug,
+      lastModified: new Date().toISOString(),
+    };
+    setDraft(updatedDraft);
+    setHasUnsavedChanges(true);
+    debouncedAutoSave(updatedDraft);
+  };
+
   const [hashtagInput, setHashtagInput] = useState('');
+
+  // Use a ref to store the cover image URL and prevent unnecessary re-renders
+  const coverImageRef = useRef<string>('');
+  
+  // Only update the ref when the cover image URL actually changes
+  if (draft?.coverImage !== coverImageRef.current) {
+    coverImageRef.current = draft?.coverImage || '';
+  }
 
   const handleHashtagInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -481,6 +531,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           const hasDTag = updatedTags.some(tag => tag[0] === 'd');
           if (!hasDTag) {
             updatedTags.push(['d', dTagValue]);
+          } else {
+            // Update existing d tag with the new value
+            const dTagIndex = updatedTags.findIndex(tag => tag[0] === 'd');
+            updatedTags[dTagIndex] = ['d', dTagValue];
           }
           
           // Remove existing hashtags (t tags except 'longform') and add new ones
@@ -651,7 +705,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     input.click();
   };
 
-  const handleCoverImageUpload = async () => {
+  const handleCoverImageUpload = useCallback(async () => {
     if (!draft) return;
 
     if (!isAuthenticated) {
@@ -690,7 +744,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     };
 
     input.click();
-  };
+  }, [draft, isAuthenticated, uploader, setDraft, setHasUnsavedChanges, debouncedAutoSave]);
 
   const handlePublish = async () => {
     if (!draft || !ndk || !isAuthenticated) {
@@ -753,6 +807,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         const hasDTag = updatedTags.some(tag => tag[0] === 'd');
         if (!hasDTag) {
           updatedTags.push(['d', dTagValue]);
+        } else {
+          // Update existing d tag with the new value
+          const dTagIndex = updatedTags.findIndex(tag => tag[0] === 'd');
+          updatedTags[dTagIndex] = ['d', dTagValue];
         }
         
         // Remove existing hashtags (t tags except 'longform') and add new ones
@@ -926,7 +984,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           {draft.coverImage ? (
             <div className="cover-image-preview">
               <Image 
-                src={draft.coverImage} 
+                src={coverImageRef.current} 
                 alt="Cover" 
                 className="cover-image"
                 width={800}
@@ -972,6 +1030,27 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             onChange={handleTitleChange}
             className="title-input"
           />
+          
+          <label htmlFor="slug-input" className="input-label">
+            Slug
+          </label>
+          <div className="slug-input-container">
+            <input
+              id="slug-input"
+              type="text"
+              value={draft.dTag || ''}
+              onChange={handleDTagChange}
+              className="slug-input"
+            />
+            <button
+              type="button"
+              onClick={generateSlug}
+              className="generate-slug-button"
+              title="Generate slug from title"
+            >
+              Generate
+            </button>
+          </div>
           
           <label htmlFor="summary-input" className="input-label">
             Summary

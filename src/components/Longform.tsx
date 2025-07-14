@@ -44,7 +44,7 @@ export default function Longform() {
     visible: false,
     data: null
   });
-  const [copyModal, setCopyModal] = useState<{ visible: boolean; text: string; title: string }>({
+  const [shareModal, setShareModal] = useState<{ visible: boolean; text: string; title: string }>({
     visible: false,
     text: '',
     title: ''
@@ -404,7 +404,7 @@ export default function Longform() {
           : await getUserIdentifier(ndk, note.pubkey);
         const dTag = note.dTag || note.id.slice(0, 8);
         const shareUrl = `${window.location.origin}${generateNip05Url(authorIdentifier, dTag)}`;
-        setCopyModal({
+        setShareModal({
           visible: true,
           text: shareUrl,
           title: 'Share this Article'
@@ -412,7 +412,7 @@ export default function Longform() {
       } catch {
         // If even the fallback fails, show a simple URL
         const simpleUrl = `${window.location.origin}/reader/${note.id}`;
-        setCopyModal({
+        setShareModal({
           visible: true,
           text: simpleUrl,
           title: 'Copy Link'
@@ -432,7 +432,7 @@ export default function Longform() {
     } catch {
       // Show manual copy modal for mobile or when clipboard fails
       const textToCopy = hexToNote1(note.id) || note.id;
-      setCopyModal({
+      setShareModal({
         visible: true,
         text: textToCopy,
         title: 'Copy Note ID'
@@ -528,6 +528,22 @@ export default function Longform() {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [contextMenu.visible]);
+
+  // Prevent scrolling when modals are open
+  useEffect(() => {
+    const isModalOpen = jsonModal.visible || shareModal.visible;
+    
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    // Cleanup function to restore scrolling when component unmounts
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [jsonModal.visible, shareModal.visible]);
 
   return (
     <>
@@ -706,15 +722,15 @@ export default function Longform() {
         </div>
       )}
 
-      {/* Copy Modal */}
-      {copyModal.visible && (
-        <div className="modal-overlay" onClick={() => setCopyModal({ visible: false, text: '', title: '' })}>
+      {/* Share Modal */}
+      {shareModal.visible && (
+        <div className="modal-overlay" onClick={() => setShareModal({ visible: false, text: '', title: '' })}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Share this Article</h3>
               <button 
                 className="modal-close"
-                onClick={() => setCopyModal({ visible: false, text: '', title: '' })}
+                onClick={() => setShareModal({ visible: false, text: '', title: '' })}
               >
                 ×
               </button>
@@ -722,7 +738,7 @@ export default function Longform() {
             <div className="modal-body">
               <div className="copy-url-container">
                 <textarea
-                  value={copyModal.text}
+                  value={shareModal.text}
                   readOnly
                   className="copy-url-input"
                   rows={3}
@@ -732,7 +748,7 @@ export default function Longform() {
                 <button
                   className="copy-url-button"
                   onClick={() => {
-                    navigator.clipboard?.writeText(copyModal.text).then(() => {
+                    navigator.clipboard?.writeText(shareModal.text).then(() => {
                       toast.success('Copied to clipboard!');
                     }).catch(() => {
                       toast.error('Failed to copy');

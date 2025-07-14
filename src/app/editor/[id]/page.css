@@ -86,6 +86,60 @@
   color: var(--text-secondary);
 }
 
+.slug-input {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 400;
+  outline: none;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.slug-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.slug-input:focus {
+  border-color: var(--text);
+}
+
+.slug-input-container {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.slug-input-container .slug-input {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.generate-slug-button {
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
+  box-sizing: border-box;
+  height: 42px;
+}
+
+.generate-slug-button:hover {
+  background-color: var(--button-hover);
+}
+
 .title-input-container {
   width: 100%;
   max-width: 800px;
