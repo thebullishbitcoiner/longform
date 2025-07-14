@@ -36,6 +36,7 @@ export const ALPHA_WHITELIST: string[] = [
   'npub197swtr3ymz7aw72tu7eqspxjta7zwcwf23uw4fxyxe2r2eyrfa2sdpner3', //McIntosh
   'npub1hkkcygtuz63jccf3ls63eqltrkztnx2n0kqtq2qgeqq6e52x9xyqpyfvlm', //Satoshi's Plebs
   'npub160t5zfxalddaccdc7xx30sentwa5lrr3rq4rtm38x99ynf8t0vwsvzyjc9', //average_gary
+  'npub18zsu6xlfpwdgnrfyzhwpq80ssu83tdew5g7dkzkl4tavsrgzl5yslzlyv6', //Neal
 ];
 
 // Enable/disable whitelist checking
