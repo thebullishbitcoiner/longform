@@ -1,23 +1,33 @@
 .container {
-  min-height: 100vh;
+  min-height: calc(100vh - 4rem); /* Subtract header height */
   color: #fff;
   width: 100vw;
   margin: 0;
   padding: 0;
+  background: #000;
+  position: relative;
+  top: 4rem; /* Start under header */
 }
 
 .content {
   width: 100%;
   margin: 0;
   padding: 0;
+  height: 100%;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 1rem;
-  padding: 0 1rem;
+  margin: 0;
+  padding: 1rem 2rem;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgb(39 39 42);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .title {
@@ -156,13 +166,38 @@
   text-align: center;
   color: rgb(161 161 170);
   padding: 2rem 0;
+  grid-column: 1 / -1;
 }
 
 .postsGrid {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0;
   width: 100%;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+}
+
+.column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  min-width: 0;
+}
+
+.column:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: rgb(39 39 42);
+  z-index: 10;
+  pointer-events: none;
 }
 
 .swipeContainer {
@@ -172,6 +207,8 @@
   touch-action: pan-y;
   border-radius: 0;
   border-bottom: 1px solid rgb(39 39 42);
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .swipeAction {
@@ -225,6 +262,11 @@
   -webkit-font-smoothing: antialiased;
   transition: all 0.2s ease;
   z-index: 2;
+  margin: 0;
+  border-radius: 0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  display: block;
 }
 
 .postCard.read {
@@ -273,8 +315,6 @@
   gap: 0.25rem;
 }
 
-
-
 .postCardTitle {
   font-size: 1rem;
   font-weight: 600;
@@ -283,8 +323,6 @@
   margin: 0;
   flex: 1;
 }
-
-
 
 .postCardMeta {
   display: flex;
@@ -344,6 +382,7 @@
   min-height: 50vh;
   color: rgb(161 161 170);
   font-size: 1rem;
+  grid-column: 1 / -1;
 }
 
 .loadingState {
@@ -358,39 +397,119 @@
   border-radius: 0.5rem;
   margin: 1rem;
   border: 1px solid rgb(39 39 42);
+  grid-column: 1 / -1;
+}
+
+/* Ensure all full-width elements work properly */
+@media (min-width: 768px) {
+  .loadingState,
+  .loading,
+  .emptyState {
+    column-span: all;
+    -webkit-column-span: all;
+  }
 }
 
 .swipeActionVisible {
   opacity: 1;
 }
 
-@media (min-width: 640px) {
-  .container {
-    width: 100%;
+/* Tablet - 2 columns */
+@media (min-width: 768px) {
+  .postsGrid {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
   }
+  
+  .column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  
+  .postCard {
+    margin-bottom: 0;
+  }
+  
+  .postCardContent {
+    padding: 1.25rem;
+  }
+}
 
-  .content {
-    max-width: 800px;
-    margin: 0 auto;
+/* Wide screens - 3 columns */
+@media (min-width: 1280px) {
+  .postsGrid {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+  }
+  
+  .column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  
+  .postCardContent {
     padding: 1.5rem;
   }
-
-  .header {
-    margin: 0 0 1rem 0;
-    padding: 0;
+  
+  .postCardTitle {
+    font-size: 1.1rem;
   }
+}
 
+/* Ultra wide screens - 4 columns */
+@media (min-width: 1536px) {
   .postsGrid {
-    gap: 0.5rem;
+    display: flex;
+    flex-direction: row;
+    gap: 0;
   }
-
-  .swipeContainer {
-    border-radius: 8px;
-    border-bottom: none;
+  
+  .column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
   }
+  
+  .postCardContent {
+    padding: 1.75rem;
+  }
+  
+  .postCardTitle {
+    font-size: 1.2rem;
+  }
+  
+  .postCardSummary {
+    font-size: 0.9rem;
+  }
+}
 
-  .postCard {
-    border-radius: 8px;
-    border: 1px solid rgb(39 39 42);
+/* Mobile adjustments */
+@media (max-width: 767px) {
+  .container {
+    top: 3.5rem; /* Slightly smaller header on mobile */
+  }
+  
+  .header {
+    padding: 0.75rem 1rem;
+  }
+  
+  .title {
+    font-size: 1.25rem;
+  }
+  
+  .filterButtons {
+    gap: 0.25rem;
+  }
+  
+  .filterButton {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
   }
 } 

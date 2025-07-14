@@ -270,7 +270,6 @@ export default function ReaderPage() {
     // Only take the first postsToShow posts
     const limited = filteredByReadStatus.slice(0, postsToShow);
     
-    // Only log if the result actually changed
     console.log('🔍 DEBUG: Filtered posts calculation:', {
       totalPosts: sortedPosts.length,
       fromFollows: postsFromFollows.length,
@@ -282,6 +281,26 @@ export default function ReaderPage() {
     
     return limited;
   }, [sortedPosts, follows, filter, isPostRead, postsToShow]);
+
+  // Create columns for masonry layout
+  const columns = useMemo(() => {
+    const columnCount = typeof window !== 'undefined' 
+      ? (window.innerWidth >= 1536 ? 4 : window.innerWidth >= 1280 ? 3 : window.innerWidth >= 768 ? 2 : 1)
+      : 1;
+    
+    if (columnCount === 1) {
+      return [filteredPosts];
+    }
+    
+    const cols: BlogPost[][] = Array.from({ length: columnCount }, () => []);
+    
+    filteredPosts.forEach((post, index) => {
+      const columnIndex = index % columnCount;
+      cols[columnIndex].push(post);
+    });
+    
+    return cols;
+  }, [filteredPosts]);
   
   // Calculate total available for load more button (separate from rendering)
   const totalAvailablePosts = useMemo(() => {
@@ -1414,40 +1433,61 @@ export default function ReaderPage() {
                   Loading posts from {follows.length} people you follow...
                 </div>
               )}
-              {(() => {
-                console.log('🎨 DEBUG: Rendering posts grid:', {
-                  filteredPostsLength: debouncedFilteredPosts.length,
-                  postsToShow,
-                  firstFew: debouncedFilteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
-                });
-                return debouncedFilteredPosts.map((post) => (
-                  <PostCard key={post.id} post={post} onClick={handleCardClick} onHover={handleCardHover} />
-                ));
-              })()}
-              {debouncedFilteredPosts.length === postsToShow && (
-                <div style={{
-                  padding: '10px',
-                  background: 'rgba(161, 161, 170, 0.1)',
-                  border: '1px solid rgb(39, 39, 42)',
-                  borderRadius: '4px',
-                  margin: '10px 0',
-                  fontSize: '14px',
-                  color: 'rgb(161, 161, 170)',
-                  textAlign: 'center'
-                }}>
-                  Showing {postsToShow} / {totalAvailablePosts.length} articles
+              {debouncedFilteredPosts.length === 0 && !isLoadingPosts ? (
+                <div className={styles.emptyState}>
+                  {follows.length === 0 ? (
+                    <>
+                      You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
+                    </>
+                  ) : filter === 'all' ? (
+                    "No blog posts found from people you follow."
+                  ) : filter === 'read' ? (
+                    "No read posts found."
+                  ) : (
+                    "No unread posts found."
+                  )}
                 </div>
+              ) : (
+                columns.map((column, columnIndex) => (
+                  <div key={`${columnIndex}-${column.length}`} className={styles.column}>
+                    {column.map((post) => (
+                      <PostCard key={post.id} post={post} onClick={handleCardClick} onHover={handleCardHover} />
+                    ))}
+                  </div>
+                ))
               )}
-              {/* Load More Button */}
-              {(() => {
-                const hasMorePosts = totalAvailablePosts.length > postsToShow;
+            </div>
+            
+            {/* Bottom controls row */}
+            {debouncedFilteredPosts.length > 0 && (
+              <div style={{
+                padding: '20px',
+                textAlign: 'center',
+                borderTop: '1px solid rgb(39, 39, 42)',
+                background: 'rgba(0, 0, 0, 0.3)',
+                marginTop: '0'
+              }}>
+                {debouncedFilteredPosts.length === postsToShow && (
+                  <div style={{
+                    padding: '10px',
+                    background: 'rgba(161, 161, 170, 0.1)',
+                    border: '1px solid rgb(39, 39, 42)',
+                    borderRadius: '4px',
+                    margin: '0 0 15px 0',
+                    fontSize: '14px',
+                    color: 'rgb(161, 161, 170)',
+                    textAlign: 'center'
+                  }}>
+                    Showing {postsToShow} / {totalAvailablePosts.length} articles
+                  </div>
+                )}
                 
-                if (hasMorePosts) {
-                  return (
-                    <div style={{
-                      padding: '20px',
-                      textAlign: 'center'
-                    }}>
+                {/* Load More Button */}
+                {(() => {
+                  const hasMorePosts = totalAvailablePosts.length > postsToShow;
+                  
+                  if (hasMorePosts) {
+                    return (
                       <button
                         onClick={() => setPostsToShow(prev => prev + 21)}
                         style={{
@@ -1472,27 +1512,12 @@ export default function ReaderPage() {
                       >
                         Load More
                       </button>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-              {debouncedFilteredPosts.length === 0 && !isLoadingPosts && (
-                <div className={styles.emptyState}>
-                  {follows.length === 0 ? (
-                    <>
-                      You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
-                    </>
-                  ) : filter === 'all' ? (
-                    "No blog posts found from people you follow."
-                  ) : filter === 'read' ? (
-                    "No read posts found."
-                  ) : (
-                    "No unread posts found."
-                  )}
-                </div>
-              )}
-            </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            )}
           </div>
         </div>
       </ErrorBoundary>
