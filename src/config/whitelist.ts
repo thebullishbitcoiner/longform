@@ -38,6 +38,9 @@ export const ALPHA_WHITELIST: string[] = [
   'npub160t5zfxalddaccdc7xx30sentwa5lrr3rq4rtm38x99ynf8t0vwsvzyjc9', //average_gary
   'npub18zsu6xlfpwdgnrfyzhwpq80ssu83tdew5g7dkzkl4tavsrgzl5yslzlyv6', //Neal
   'npub1rsvhkyk2nnsyzkmsuaq9h9ms7rkxhn8mtxejkca2l4pvkfpwzepql3vmtf', //DeAllen Young
+  'npub1xr8tvnnnr9aqt9vv30vj4vreeq2mk38mlwe7khvhvmzjqlcghh6sr85uum', //TheWildHustle
+  'npub1vygzr642y6f8gxcjx6auaf2vd25lyzarpjkwx9kr4y752zy6058s8jvy4e', //RUNSTR
+  'npub1xvjqzy3j8rkpxx9xaazf0ugnmvm7mned2c4rf3vyqcx2rfhewwxs8gtfr7', //HealthNote Labs
 ];
 
 // Enable/disable whitelist checking
