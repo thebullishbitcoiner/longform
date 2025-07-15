@@ -5,6 +5,14 @@
   margin-bottom: 1rem;
 }
 
+/* Fullscreen editor container */
+@media (min-width: 1280px) {
+  .editor-container {
+    height: 100vh;
+    margin-bottom: 0;
+  }
+}
+
 .editor-toolbar {
   display: flex;
   justify-content: flex-end;

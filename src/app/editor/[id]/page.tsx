@@ -16,6 +16,21 @@ import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 import Image from 'next/image';
 import React from 'react';
 
+// Custom hook to detect media query
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) {
+      setMatches(media.matches);
+    }
+    const listener = () => setMatches(media.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [matches, query]);
+  return matches;
+}
+
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -28,6 +43,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const { ndk, isConnected, isAuthenticated } = useNostr();
   const editorRef = useRef<EditorRef | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isWidescreen = useMediaQuery('(min-width: 1280px)');
 
   // Auto-save function
   const autoSaveDraft = (currentDraft: Draft) => {
@@ -968,142 +984,314 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <main className="container">
-      <div className="editor-header">
-        <button onClick={() => router.push('/')} className="back-button">
-          <ArrowLeftIcon />
-          Back to Posts
-        </button>
-        
-        {/* Page Title */}
-        <h1 className="editor-title">
-          {draft.kind === 30023 ? 'Edit Post' : 'Edit Draft'}
-        </h1>
-        
-        {/* Cover Image Section */}
-        <div className="cover-image-section">
-          {draft.coverImage ? (
-            <div className="cover-image-preview">
-              <Image 
-                src={coverImageRef.current} 
-                alt="Cover" 
-                className="cover-image"
-                width={800}
-                height={400}
-                style={{ width: '100%', height: 'auto' }}
-                onError={(e) => {
-                  console.error('Failed to load cover image:', draft.coverImage);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-              <div className="cover-image-overlay">
-                <button 
-                  onClick={handleCoverImageUpload}
-                  className="cover-image-action"
-                  title="Change Cover Image"
-                >
-                  <PhotoIcon />
-                </button>
+      {isWidescreen ? (
+        <>
+          {/* Back button and title for fullscreen layout */}
+          <div className="editor-top-bar">
+            <button onClick={() => router.push('/')} className="back-button">
+              <ArrowLeftIcon />
+              Back to Posts
+            </button>
+            <h1 className="editor-title">
+              {draft.kind === 30023 ? 'Edit Post' : 'Edit Draft'}
+            </h1>
+          </div>
+          <div className="editor-header">
+            {/* Left side - Title, Slug, Summary, Hashtags */}
+            <div className="editor-header-left">
+              <div className="title-input-container">
+                <label htmlFor="title-input" className="input-label">
+                  Title
+                </label>
+                <input
+                  id="title-input"
+                  type="text"
+                  value={draft.title}
+                  onChange={handleTitleChange}
+                  className="title-input"
+                />
+                <label htmlFor="slug-input" className="input-label">
+                  Slug
+                </label>
+                <div className="slug-input-container">
+                  <input
+                    id="slug-input"
+                    type="text"
+                    value={draft.dTag || ''}
+                    onChange={handleDTagChange}
+                    className="slug-input"
+                  />
+                  <button
+                    type="button"
+                    onClick={generateSlug}
+                    className="generate-slug-button"
+                    title="Generate slug from title"
+                  >
+                    Generate
+                  </button>
+                </div>
+                <label htmlFor="summary-input" className="input-label">
+                  Summary
+                </label>
+                <textarea
+                  id="summary-input"
+                  value={draft.summary || ''}
+                  onChange={handleSummaryChange}
+                  className="summary-input"
+                  rows={3}
+                />
+                <label htmlFor="hashtag-input" className="input-label">
+                  Hashtags
+                </label>
+                <div className="hashtags-container">
+                  <div className="hashtag-input-wrapper">
+                    {draft.hashtags && draft.hashtags.length > 0 && (
+                      <div className="hashtags-inline">
+                        {draft.hashtags.map((hashtag, index) => (
+                          <span key={index} className="hashtag-tag-inline">
+                            #{hashtag}
+                            <button
+                              type="button"
+                              onClick={() => removeHashtag(hashtag)}
+                              className="hashtag-remove-inline"
+                              title="Remove hashtag"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <input
+                      id="hashtag-input"
+                      type="text"
+                      value={hashtagInput}
+                      onChange={handleHashtagInputChange}
+                      onKeyDown={handleHashtagKeyDown}
+                      className="hashtag-input"
+                      placeholder={draft.hashtags && draft.hashtags.length > 0 ? "" : "Type hashtags separated by commas..."}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="cover-image-placeholder">
-              <button 
-                onClick={handleCoverImageUpload}
-                className="cover-image-upload-btn"
-                title="Add Cover Image"
+            {/* Right side - Cover Image */}
+            <div className="editor-header-right">
+              <div className="cover-image-section">
+                {draft.coverImage ? (
+                  <div className="cover-image-preview">
+                    <Image 
+                      src={coverImageRef.current} 
+                      alt="Cover" 
+                      className="cover-image"
+                      width={800}
+                      height={400}
+                      style={{ width: '100%', height: 'auto' }}
+                      onError={(e) => {
+                        console.error('Failed to load cover image:', draft.coverImage);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                    <div className="cover-image-overlay">
+                      <button 
+                        onClick={handleCoverImageUpload}
+                        className="cover-image-action"
+                        title="Change Cover Image"
+                      >
+                        <PhotoIcon />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="cover-image-placeholder">
+                    <button 
+                      onClick={handleCoverImageUpload}
+                      className="cover-image-upload-btn"
+                      title="Add Cover Image"
+                    >
+                      <PhotoIcon />
+                      <span>Add Cover Image</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="editor-header-regular">
+          <button onClick={() => router.push('/')} className="back-button">
+            <ArrowLeftIcon />
+            Back to Posts
+          </button>
+          <h1 className="editor-title">
+            {draft.kind === 30023 ? 'Edit Post' : 'Edit Draft'}
+          </h1>
+          {/* Cover Image Section */}
+          <div className="cover-image-section">
+            {draft.coverImage ? (
+              <div className="cover-image-preview">
+                <Image 
+                  src={coverImageRef.current} 
+                  alt="Cover" 
+                  className="cover-image"
+                  width={800}
+                  height={400}
+                  style={{ width: '100%', height: 'auto' }}
+                  onError={(e) => {
+                    console.error('Failed to load cover image:', draft.coverImage);
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <div className="cover-image-overlay">
+                  <button 
+                    onClick={handleCoverImageUpload}
+                    className="cover-image-action"
+                    title="Change Cover Image"
+                  >
+                    <PhotoIcon />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="cover-image-placeholder">
+                <button 
+                  onClick={handleCoverImageUpload}
+                  className="cover-image-upload-btn"
+                  title="Add Cover Image"
+                >
+                  <PhotoIcon />
+                  <span>Add Cover Image</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="title-input-container">
+            <label htmlFor="title-input" className="input-label">
+              Title
+            </label>
+            <input
+              id="title-input"
+              type="text"
+              value={draft.title}
+              onChange={handleTitleChange}
+              className="title-input"
+            />
+            <label htmlFor="slug-input" className="input-label">
+              Slug
+            </label>
+            <div className="slug-input-container">
+              <input
+                id="slug-input"
+                type="text"
+                value={draft.dTag || ''}
+                onChange={handleDTagChange}
+                className="slug-input"
+              />
+              <button
+                type="button"
+                onClick={generateSlug}
+                className="generate-slug-button"
+                title="Generate slug from title"
               >
-                <PhotoIcon />
-                <span>Add Cover Image</span>
+                Generate
               </button>
             </div>
-          )}
-        </div>
-        
-        <div className="title-input-container">
-          <label htmlFor="title-input" className="input-label">
-            Title
-          </label>
-          <input
-            id="title-input"
-            type="text"
-            value={draft.title}
-            onChange={handleTitleChange}
-            className="title-input"
-          />
-          
-          <label htmlFor="slug-input" className="input-label">
-            Slug
-          </label>
-          <div className="slug-input-container">
-            <input
-              id="slug-input"
-              type="text"
-              value={draft.dTag || ''}
-              onChange={handleDTagChange}
-              className="slug-input"
+            <label htmlFor="summary-input" className="input-label">
+              Summary
+            </label>
+            <textarea
+              id="summary-input"
+              value={draft.summary || ''}
+              onChange={handleSummaryChange}
+              className="summary-input"
+              rows={3}
             />
-            <button
-              type="button"
-              onClick={generateSlug}
-              className="generate-slug-button"
-              title="Generate slug from title"
-            >
-              Generate
-            </button>
-          </div>
-          
-          <label htmlFor="summary-input" className="input-label">
-            Summary
-          </label>
-          <textarea
-            id="summary-input"
-            value={draft.summary || ''}
-            onChange={handleSummaryChange}
-            className="summary-input"
-            rows={3}
-          />
-          
-          <label htmlFor="hashtag-input" className="input-label">
-            Hashtags
-          </label>
-          <div className="hashtags-container">
-            <div className="hashtag-input-wrapper">
-              {draft.hashtags && draft.hashtags.length > 0 && (
-                <div className="hashtags-inline">
-                  {draft.hashtags.map((hashtag, index) => (
-                    <span key={index} className="hashtag-tag-inline">
-                      #{hashtag}
-                      <button
-                        type="button"
-                        onClick={() => removeHashtag(hashtag)}
-                        className="hashtag-remove-inline"
-                        title="Remove hashtag"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <input
-                id="hashtag-input"
-                type="text"
-                value={hashtagInput}
-                onChange={handleHashtagInputChange}
-                onKeyDown={handleHashtagKeyDown}
-                className="hashtag-input"
-                placeholder={draft.hashtags && draft.hashtags.length > 0 ? "" : "Type hashtags separated by commas..."}
-              />
+            <label htmlFor="hashtag-input" className="input-label">
+              Hashtags
+            </label>
+            <div className="hashtags-container">
+              <div className="hashtag-input-wrapper">
+                {draft.hashtags && draft.hashtags.length > 0 && (
+                  <div className="hashtags-inline">
+                    {draft.hashtags.map((hashtag, index) => (
+                      <span key={index} className="hashtag-tag-inline">
+                        #{hashtag}
+                        <button
+                          type="button"
+                          onClick={() => removeHashtag(hashtag)}
+                          className="hashtag-remove-inline"
+                          title="Remove hashtag"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <input
+                  id="hashtag-input"
+                  type="text"
+                  value={hashtagInput}
+                  onChange={handleHashtagInputChange}
+                  onKeyDown={handleHashtagKeyDown}
+                  className="hashtag-input"
+                  placeholder={draft.hashtags && draft.hashtags.length > 0 ? "" : "Type hashtags separated by commas..."}
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
       <Editor 
         draft={draft} 
         onSave={handleSave} 
         onContentChange={debouncedAutoSave}
         ref={editorRef} 
       />
+      
+      {/* Floating action bar for fullscreen mode */}
+      <div className="floating-actions">
+        <div className="floating-actions-content">
+          <button 
+            onClick={handleImageUpload} 
+            className="action-button image-button"
+            title="Upload Image"
+          >
+            <PhotoIcon />
+            Upload
+          </button>
+          {/* Only show save button for drafts (kind 30024) */}
+          {draft.kind === 30024 && (
+            <button
+              onClick={() => {
+                if (editorRef.current) {
+                  editorRef.current.save();
+                }
+              }}
+              className="action-button save-button"
+              title={hasUnsavedChanges ? "Save Draft (unsaved changes)" : "Save Draft"}
+              disabled={isPublishing || !isConnected}
+            >
+              {isPublishing ? 'Saving...' : !isConnected ? 'Connecting...' : hasUnsavedChanges ? 'Save*' : 'Save'}
+            </button>
+          )}
+          <button 
+            onClick={async () => {
+              // Publish directly - handlePublish will get the latest content from the editor
+              await handlePublish();
+            }} 
+            className="action-button publish-button"
+            title={draft.kind === 30023 ? "Update Published Post" : "Publish to Nostr"}
+            disabled={isPublishing || !isConnected}
+          >
+            <ArrowUpTrayIcon />
+            {isPublishing ? 'Publishing...' : !isConnected ? 'Connecting...' : draft.kind === 30023 ? 'Update' : 'Publish'}
+          </button>
+        </div>
+      </div>
+      
+      {/* Regular footer for smaller screens */}
       <div className="editor-footer">
         <div className="editor-actions">
           <button 
