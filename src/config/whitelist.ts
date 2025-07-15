@@ -42,6 +42,8 @@ export const ALPHA_WHITELIST: string[] = [
   'npub1vygzr642y6f8gxcjx6auaf2vd25lyzarpjkwx9kr4y752zy6058s8jvy4e', //RUNSTR
   'npub1xvjqzy3j8rkpxx9xaazf0ugnmvm7mned2c4rf3vyqcx2rfhewwxs8gtfr7', //HealthNote Labs
   'npub15d3mwvwq0l69e42syhqrzy6yhtrsjm23u36au5g8ffg5xje9jz9svq8n99', //Felipe Martinho
+  'npub1xzrkzsrnr83vn7h0udq6tnapwpswy5equlrtkn3nu0e0anlmzynqne0qap', //AceaSpades
+  'npub13wnx7nyf0q6e2ltgae80d2l9nttk0dmvdrapjg7my8jl6kghtdssrlktxq', //Selim
 ];
 
 // Enable/disable whitelist checking
