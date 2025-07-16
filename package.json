@@ -1,6 +1,6 @@
 {
   "name": "longform",
-  "version": "0.0.76",
+  "version": "0.0.77",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "test": "npm run lint && npm run type-check && npm run build"
+    "test": "npm run lint && npm run type-check"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

@@ -1030,16 +1030,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                     Generate
                   </button>
                 </div>
-                <label htmlFor="summary-input" className="input-label">
-                  Summary
-                </label>
-                <textarea
-                  id="summary-input"
-                  value={draft.summary || ''}
-                  onChange={handleSummaryChange}
-                  className="summary-input"
-                  rows={3}
-                />
                 <label htmlFor="hashtag-input" className="input-label">
                   Hashtags
                 </label>
@@ -1116,6 +1106,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 )}
               </div>
             </div>
+          </div>
+          {/* Summary spanning both columns */}
+          <div className="summary-section">
+            <label htmlFor="summary-input" className="input-label">
+              Summary
+            </label>
+            <textarea
+              id="summary-input"
+              value={draft.summary || ''}
+              onChange={handleSummaryChange}
+              className="summary-input"
+              rows={3}
+            />
           </div>
         </>
       ) : (
