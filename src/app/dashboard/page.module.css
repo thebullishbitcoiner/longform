@@ -26,8 +26,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.5rem;
-  margin-bottom: 3rem;
+  margin-bottom: 1.5rem;
 }
+
+
 
 .stat-card {
   background: #18181b;
@@ -80,11 +82,18 @@
   letter-spacing: 0.05em;
 }
 
+.stat-subtext {
+  font-size: 0.75rem;
+  color: #22c55e;
+  margin: 0.25rem 0 0 0;
+  font-weight: 500;
+}
+
 .best-performing-section {
   background: #18181b;
   border: 1px solid #27272a;
   border-radius: 12px;
-  padding: 2rem;
+  padding: 1.5rem;
 }
 
 .section-title {
@@ -227,7 +236,7 @@
   }
   
   .stats-grid {
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
   }
   
@@ -255,7 +264,7 @@
 
 @media (max-width: 480px) {
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
   
   .stat-card {

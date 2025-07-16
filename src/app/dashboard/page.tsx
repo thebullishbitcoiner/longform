@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+
 import { useNostr } from '@/contexts/NostrContext';
 import { BlogPost } from '@/contexts/BlogContext';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
-import { ChartBarIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, FireIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftIcon, BoltIcon, ArrowPathIcon, DocumentTextIcon, HandThumbUpIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import styles from './page.module.css';
+
 
 interface ArticleStats {
   id: string;
@@ -16,6 +18,7 @@ interface ArticleStats {
   zapAmount: number;
   reactions: number;
   comments: number;
+  reposts: number;
   totalEngagement: number;
 }
 
@@ -26,8 +29,7 @@ interface DashboardStats {
   averageZapAmount: number;
   totalReactions: number;
   totalComments: number;
-  totalEngagement: number;
-  averageEngagement: number;
+  totalReposts: number;
   bestPerformingArticles: ArticleStats[];
 }
 
@@ -69,6 +71,7 @@ const DashboardPage: React.FC = () => {
             // Extract image from tags
             const imageTag = tags.find((tag: string[]) => tag[0] === 'image');
             const image = imageTag?.[1];
+
             // Extract other tags
             const otherTags = tags
               .filter((tag: string[]) => !['title', 'summary', 'image', 'd', 't'].includes(tag[0]))
@@ -130,6 +133,7 @@ const DashboardPage: React.FC = () => {
           zapAmount: 0,
           reactions: 0,
           comments: 0,
+          reposts: 0,
           totalEngagement: 0
         });
       });
@@ -137,7 +141,7 @@ const DashboardPage: React.FC = () => {
           try {
         return new Promise<Map<string, ArticleStats>>((resolve) => {
           let completedSubscriptions = 0;
-          const totalSubscriptions = 4;
+          const totalSubscriptions = 5;
 
           const checkComplete = () => {
             completedSubscriptions++;
@@ -161,7 +165,7 @@ const DashboardPage: React.FC = () => {
             if (articleId && articleStats.has(articleId)) {
               const stats = articleStats.get(articleId)!;
               stats.reactions++;
-              stats.totalEngagement = stats.reactions + stats.comments + stats.zaps;
+              stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
             }
           });
 
@@ -218,7 +222,7 @@ const DashboardPage: React.FC = () => {
               const totalZapAmount = zapAmounts.get(articleId) || 0;
               stats.zapAmount = totalZapAmount;
               
-              stats.totalEngagement = stats.reactions + stats.comments + stats.zaps;
+              stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
             }
           });
 
@@ -245,11 +249,34 @@ const DashboardPage: React.FC = () => {
             if (articleId && articleStats.has(articleId)) {
               const stats = articleStats.get(articleId)!;
               stats.comments++;
-              stats.totalEngagement = stats.reactions + stats.comments + stats.zaps;
+              stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
             }
           });
 
           commentsSubscription.on('eose', () => {
+            checkComplete();
+          });
+
+          // Fetch reposts (kind 6)
+          const repostsSubscription = ndk.subscribe(
+            { 
+              kinds: [6], 
+              '#e': articleIds,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          );
+
+          repostsSubscription.on('event', (event: NDKEvent) => {
+            const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+            if (articleId && articleStats.has(articleId)) {
+              const stats = articleStats.get(articleId)!;
+              stats.reposts++;
+              stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
+            }
+          });
+
+          repostsSubscription.on('eose', () => {
             checkComplete();
           });
         });
@@ -260,6 +287,8 @@ const DashboardPage: React.FC = () => {
     }
   }, [ndk]);
 
+
+
   // Calculate dashboard stats
   const calculateStats = useCallback((articleStats: Map<string, ArticleStats>): DashboardStats => {
     const statsArray = Array.from(articleStats.values());
@@ -269,8 +298,7 @@ const DashboardPage: React.FC = () => {
     const averageZapAmount = totalZaps > 0 ? totalZapAmount / totalZaps : 0;
     const totalReactions = statsArray.reduce((sum, article) => sum + article.reactions, 0);
     const totalComments = statsArray.reduce((sum, article) => sum + article.comments, 0);
-    const totalEngagement = statsArray.reduce((sum, article) => sum + article.totalEngagement, 0);
-    const averageEngagement = totalArticles > 0 ? totalEngagement / totalArticles : 0;
+    const totalReposts = statsArray.reduce((sum, article) => sum + article.reposts, 0);
     
     // Sort by total engagement to get best performing articles
     const bestPerformingArticles = statsArray
@@ -284,8 +312,7 @@ const DashboardPage: React.FC = () => {
       averageZapAmount,
       totalReactions,
       totalComments,
-      totalEngagement,
-      averageEngagement,
+      totalReposts,
       bestPerformingArticles
     };
   }, []);
@@ -319,8 +346,7 @@ const DashboardPage: React.FC = () => {
             averageZapAmount: 0,
             totalReactions: 0,
             totalComments: 0,
-            totalEngagement: 0,
-            averageEngagement: 0,
+            totalReposts: 0,
             bestPerformingArticles: []
           });
         }
@@ -384,7 +410,7 @@ const DashboardPage: React.FC = () => {
         <div className={styles['stats-grid']}>
           <div className={styles['stat-card']}>
             <div className={styles['stat-icon']}>
-              <ChartBarIcon className={styles.icon} />
+              <DocumentTextIcon className={styles.icon} />
             </div>
             <div className={styles['stat-content']}>
               <h3 className={styles['stat-number']}>{stats.totalArticles}</h3>
@@ -398,20 +424,12 @@ const DashboardPage: React.FC = () => {
             <div className={styles['stat-content']}>
               <h3 className={styles['stat-number']}>{stats.totalZaps}</h3>
               <p className={styles['stat-label']}>Total Zaps</p>
+              <p className={styles['stat-subtext']}>⚡ {stats.totalZapAmount.toLocaleString()} sats</p>
             </div>
           </div>
           <div className={styles['stat-card']}>
             <div className={styles['stat-icon']}>
-              <BoltIcon className={styles.icon} />
-            </div>
-            <div className={styles['stat-content']}>
-              <h3 className={styles['stat-number']}>{stats.averageZapAmount.toFixed(0)}</h3>
-              <p className={styles['stat-label']}>Avg. Zap Amount</p>
-            </div>
-          </div>
-          <div className={styles['stat-card']}>
-            <div className={styles['stat-icon']}>
-              <HeartIcon className={styles.icon} />
+              <HandThumbUpIcon className={styles.icon} />
             </div>
             <div className={styles['stat-content']}>
               <h3 className={styles['stat-number']}>{stats.totalReactions}</h3>
@@ -429,22 +447,15 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className={styles['stat-card']}>
             <div className={styles['stat-icon']}>
-              <FireIcon className={styles.icon} />
+              <ArrowPathIcon className={styles.icon} />
             </div>
             <div className={styles['stat-content']}>
-              <h3 className={styles['stat-number']}>{stats.totalEngagement}</h3>
-              <p className={styles['stat-label']}>Total Engagement</p>
+              <h3 className={styles['stat-number']}>{stats.totalReposts}</h3>
+              <p className={styles['stat-label']}>Total Reposts</p>
             </div>
           </div>
-          <div className={styles['stat-card']}>
-            <div className={styles['stat-icon']}>
-              <ChartBarIcon className={styles.icon} />
-            </div>
-            <div className={styles['stat-content']}>
-              <h3 className={styles['stat-number']}>{stats.averageEngagement.toFixed(1)}</h3>
-              <p className={styles['stat-label']}>Avg. Engagement</p>
-            </div>
-          </div>
+
+
         </div>
         {/* Best Performing Articles */}
         <div className={styles['best-performing-section']}>
@@ -452,7 +463,10 @@ const DashboardPage: React.FC = () => {
           {stats.bestPerformingArticles.length > 0 ? (
             <div className={styles['articles-list']}>
               {stats.bestPerformingArticles.map((article: ArticleStats) => (
-                <div key={article.id} className={styles['article-card']}>
+                <div 
+                  key={article.id} 
+                  className={styles['article-card']}
+                >
                   <div className={styles['article-header']}>
                     <h3 className={styles['article-title']}>{article.title}</h3>
                     <div className={styles['article-date']}>
@@ -465,7 +479,7 @@ const DashboardPage: React.FC = () => {
                       <span>{article.zaps}</span>
                     </div>
                     <div className={styles['stat-item']}>
-                      <HeartIcon className={styles['stat-icon-small']} />
+                      <HandThumbUpIcon className={styles['stat-icon-small']} />
                       <span>{article.reactions}</span>
                     </div>
                     <div className={styles['stat-item']}>
@@ -473,8 +487,8 @@ const DashboardPage: React.FC = () => {
                       <span>{article.comments}</span>
                     </div>
                     <div className={styles['stat-item']}>
-                      <FireIcon className={styles['stat-icon-small']} />
-                      <span>{article.totalEngagement}</span>
+                      <ArrowPathIcon className={styles['stat-icon-small']} />
+                      <span>{article.reposts}</span>
                     </div>
                   </div>
                 </div>
