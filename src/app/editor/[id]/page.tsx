@@ -423,7 +423,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         ndkEvent.tags = [
           ['title', updatedDraft.title],
           ['published_at', Math.floor(Date.now() / 1000).toString()],
-          ['t', 'longform']
+          ['t', 'longform'],
+          ['client', 'Longform._']
         ];
         
         // Add hashtags as 't' tags
@@ -589,13 +590,20 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             }
           }
           
+          // Add client tag
+          const hasClientTag = filteredTags.some(tag => tag[0] === 'client');
+          if (!hasClientTag) {
+            filteredTags.push(['client', 'Longform._']);
+          }
+          
           ndkEvent.tags = filteredTags;
         } else {
           // For new posts, use standard tags
           ndkEvent.tags = [
             ['title', updatedDraft.title],
             ['published_at', Math.floor(Date.now() / 1000).toString()],
-            ['t', 'longform']
+            ['t', 'longform'],
+            ['client', 'Longform._']
           ];
           
           // If updating a published post without original tags, add the "d" tag
@@ -683,7 +691,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     if (!draft) return;
 
     if (!isAuthenticated) {
-      alert('Please log in to upload images.');
+      toast.error('Please log in to upload images.');
       return;
     }
 
@@ -703,18 +711,25 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         
         // Insert the image markdown at the cursor position
         const imageMarkdown = `![${file.name}](${url})`;
-        const updatedDraft = {
-          ...draft,
-          content: draft.content + '\n' + imageMarkdown + '\n',
-          lastModified: new Date().toISOString(),
-        };
-        setDraft(updatedDraft);
-        setHasUnsavedChanges(true);
-        debouncedAutoSave(updatedDraft);
-        // Don't automatically save - let the user decide when to save
+        
+        if (editorRef.current) {
+          editorRef.current.insertAtCursor(imageMarkdown);
+          setHasUnsavedChanges(true);
+          toast.success('Image uploaded and inserted!');
+        } else {
+          // Fallback: append to end if editor ref is not available
+          const updatedDraft = {
+            ...draft,
+            content: draft.content + '\n' + imageMarkdown + '\n',
+            lastModified: new Date().toISOString(),
+          };
+          setDraft(updatedDraft);
+          setHasUnsavedChanges(true);
+          debouncedAutoSave(updatedDraft);
+        }
       } catch (error) {
         console.error('Editor: Error uploading image:', error);
-        alert('Failed to upload image. Please try again.');
+        toast.error('Failed to upload image. Please try again.');
       }
     };
 
@@ -865,6 +880,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           }
         }
         
+        // Add client tag
+        const hasClientTag = filteredTags.some(tag => tag[0] === 'client');
+        if (!hasClientTag) {
+          filteredTags.push(['client', 'Longform._']);
+        }
+        
         ndkEvent.tags = filteredTags;
       } else if (isUpdatingPublishedPost) {
         // Updating a published post but no original tags available
@@ -874,7 +895,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         ndkEvent.tags = [
           ['title', draft.title],
           ['published_at', originalPublishedAt || Math.floor(Date.now() / 1000).toString()],
-          ['t', 'longform']
+          ['t', 'longform'],
+          ['client', 'Longform._']
         ];
         
         // Add the "d" tag to link to the original post
@@ -902,7 +924,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         ndkEvent.tags = [
           ['title', draft.title],
           ['published_at', Math.floor(Date.now() / 1000).toString()],
-          ['t', 'longform']
+          ['t', 'longform'],
+          ['client', 'Longform._']
         ];
         
         // Add hashtags as 't' tags

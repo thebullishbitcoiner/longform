@@ -14,11 +14,15 @@ interface EditorProps {
 export interface EditorRef {
   save: () => void;
   getContent: () => string;
+  insertAtCursor: (text: string) => void;
 }
 
 const Editor = forwardRef<EditorRef, EditorProps>(({ draft, onSave, onContentChange }, ref) => {
   const [localDraft, setLocalDraft] = useState<Draft>(draft);
   const prevDraftContentRef = useRef<string>(draft.content);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const editorRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Update local draft when prop changes, but only if content actually changed
   useEffect(() => {
@@ -57,15 +61,50 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ draft, onSave, onContentCha
     onSave(localDraft);
   };
 
-  // Expose save function to parent
+  const insertAtCursor = (text: string) => {
+    if (containerRef.current) {
+      const textarea = containerRef.current.querySelector('textarea');
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentContent = localDraft.content;
+        
+        // Insert text at cursor position
+        const newContent = currentContent.substring(0, start) + text + currentContent.substring(end);
+        
+        // Update the draft with new content
+        const updatedDraft = {
+          ...localDraft,
+          content: newContent,
+          lastModified: new Date().toISOString(),
+        };
+        setLocalDraft(updatedDraft);
+        
+        // Notify parent of content change for auto-save
+        if (onContentChange) {
+          onContentChange(updatedDraft);
+        }
+        
+        // Set cursor position after inserted text
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + text.length, start + text.length);
+        }, 0);
+      }
+    }
+  };
+
+  // Expose functions to parent
   useImperativeHandle(ref, () => ({
     save: handleSave,
-    getContent: () => localDraft.content
+    getContent: () => localDraft.content,
+    insertAtCursor
   }));
 
   return (
-    <div className="editor-container">
+    <div className="editor-container" ref={containerRef}>
       <MDEditor
+        ref={editorRef}
         value={localDraft.content}
         onChange={handleContentChange}
         preview="edit"
