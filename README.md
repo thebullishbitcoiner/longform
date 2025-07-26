@@ -1,5 +1,25 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Features
+
+### Longform Blogging Platform
+A decentralized blogging platform built on Nostr protocol that allows users to:
+- Create and edit long-form content
+- Publish articles to Nostr network
+- Read content from other authors
+- Manage drafts and published posts
+
+### Settings & Preferred Relays
+The platform includes a settings page that allows users to manage their preferred relays for private events according to [NIP-37](https://github.com/nostr-protocol/nips/blob/master/37.md):
+
+- **Account Information**: View your public key, NIP-05 identifier, and display name
+- **Preferred Relays**: Configure trusted relays for private events with different policies:
+  - **Read Only**: Only receive private events from this relay
+  - **Write Only**: Only send private events to this relay  
+  - **Read & Write**: Both send and receive private events with this relay
+- **Relay Testing**: Test connection to relays before adding them
+- **Relay Management**: Add, remove, and update relay policies
+
 ## Getting Started
 
 First, run the development server:

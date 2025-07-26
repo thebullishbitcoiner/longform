@@ -53,19 +53,24 @@ const Header: React.FC = () => {
             <Link href="/" className="menu-link" onClick={handleLinkClick}>
               Home
             </Link>
-            <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
-              Reader
-            </Link>
-            {isAuthenticated && (
-              <Link href="/dashboard" className="menu-link" onClick={handleLinkClick}>
-                Dashboard
-              </Link>
-            )}
             {isAuthenticated && getUserProfileUrl() && (
               <Link href={getUserProfileUrl()!} className="menu-link" onClick={handleLinkClick}>
                 Profile
               </Link>
             )}
+            {isAuthenticated && (
+              <Link href="/settings" className="menu-link" onClick={handleLinkClick}>
+                Settings
+              </Link>
+            )}
+            {isAuthenticated && (
+              <Link href="/dashboard" className="menu-link" onClick={handleLinkClick}>
+                Dashboard
+              </Link>
+            )}
+            <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
+              Reader
+            </Link>
             {mounted && <div className="menu-version">v{APP_VERSION}</div>}
           </div>
         </div>
