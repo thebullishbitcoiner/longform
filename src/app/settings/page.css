@@ -281,7 +281,8 @@
   margin-bottom: 2rem;
 }
 
-.no-relays {
+.no-relays,
+.loading-relays {
   text-align: center;
   color: var(--text-secondary);
   font-style: italic;
@@ -289,6 +290,11 @@
   background-color: var(--bg-primary);
   border-radius: 0.5rem;
   border: 1px dashed var(--border);
+}
+
+.loading-relays {
+  font-style: normal;
+  color: var(--text-primary);
 }
 
 .relay-item {

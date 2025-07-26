@@ -6,16 +6,13 @@ import { ArrowLeftIcon, PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon } 
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import {
-    getPreferredRelays,
-    savePreferredRelays,
     isValidRelayUrl,
     testRelayConnection,
     type PreferredRelay
 } from '@/utils/preferredRelays';
 import {
-    getRelayList,
-    saveRelayList,
     createRelayListEvent,
+    parseRelayListEvent,
     convertPreferredToRelayInfo,
     type RelayInfo
 } from '@/utils/relayList';
@@ -26,29 +23,82 @@ import './page.css';
 
 export default function SettingsPage() {
     const router = useRouter();
-    const { isAuthenticated, currentUser } = useNostr();
+    const { isAuthenticated, currentUser, ndk } = useNostr();
     const [preferredRelays, setPreferredRelays] = useState<PreferredRelay[]>([]);
     const [relayList, setRelayList] = useState<RelayInfo[]>([]);
     const [newRelayUrl, setNewRelayUrl] = useState('');
     const [newRelayPolicy, setNewRelayPolicy] = useState<'read' | 'write' | 'readwrite'>('readwrite');
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingRelayList, setIsLoadingRelayList] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [showRelayListInfoModal, setShowRelayListInfoModal] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
 
-    const loadPreferredRelays = useCallback(() => {
+    const loadPreferredRelays = useCallback(async () => {
         if (currentUser?.pubkey) {
-            const relays = getPreferredRelays(currentUser.pubkey);
-            setPreferredRelays(relays);
+            setIsLoading(true);
+            try {
+                const events = await ndk.fetchEvents({
+                    kinds: [10013 as number], // NIP-37 preferred relays kind
+                    authors: [currentUser.pubkey],
+                    limit: 1
+                });
+                
+                if (events.size > 0) {
+                    const latestEvent = Array.from(events)[0];
+                    const networkRelays: PreferredRelay[] = [];
+                    
+                    // Parse relay tags from the event
+                    latestEvent.tags.forEach(tag => {
+                        if (tag[0] === 'r' && tag[1]) {
+                            const url = tag[1];
+                            const policy = (tag[2] as 'read' | 'write' | 'readwrite') || 'readwrite';
+                            
+                            networkRelays.push({
+                                url,
+                                policy
+                            });
+                        }
+                    });
+                    
+                    setPreferredRelays(networkRelays);
+                } else {
+                    setPreferredRelays([]);
+                }
+            } catch (error) {
+                console.warn('Failed to fetch preferred relays from Nostr:', error);
+                setPreferredRelays([]);
+            } finally {
+                setIsLoading(false);
+            }
         }
-    }, [currentUser?.pubkey]);
+    }, [currentUser?.pubkey, ndk]);
 
-    const loadRelayList = useCallback(() => {
+    const loadRelayList = useCallback(async () => {
         if (currentUser?.pubkey) {
-            const relays = getRelayList(currentUser.pubkey);
-            setRelayList(relays);
+            setIsLoadingRelayList(true);
+            try {
+                const events = await ndk.fetchEvents({
+                    kinds: [10002], // NIP-65 relay list kind
+                    authors: [currentUser.pubkey],
+                    limit: 1
+                });
+                
+                if (events.size > 0) {
+                    const latestEvent = Array.from(events)[0];
+                    const networkRelays = parseRelayListEvent(latestEvent);
+                    setRelayList(networkRelays);
+                } else {
+                    setRelayList([]);
+                }
+            } catch (error) {
+                console.warn('Failed to fetch relay list from Nostr:', error);
+                setRelayList([]);
+            } finally {
+                setIsLoadingRelayList(false);
+            }
         }
-    }, [currentUser?.pubkey]);
+    }, [currentUser?.pubkey, ndk]);
 
     // Load relays from localStorage on component mount
     useEffect(() => {
@@ -73,16 +123,7 @@ export default function SettingsPage() {
     }, [showInfoModal, showRelayListInfoModal]);
 
     const handleSavePreferredRelays = (relays: PreferredRelay[]) => {
-        try {
-            if (currentUser?.pubkey) {
-                savePreferredRelays(currentUser.pubkey, relays);
-                setPreferredRelays(relays);
-                toast.success('Preferred relays saved');
-            }
-        } catch (error) {
-            console.error('Error saving preferred relays:', error);
-            toast.error('Failed to save preferred relays');
-        }
+        setPreferredRelays(relays);
     };
 
     const addRelay = () => {
@@ -147,16 +188,7 @@ export default function SettingsPage() {
 
     // Relay List (NIP-65) functions
     const handleSaveRelayList = (relays: RelayInfo[]) => {
-        try {
-            if (currentUser?.pubkey) {
-                saveRelayList(currentUser.pubkey, relays);
-                setRelayList(relays);
-                toast.success('Relay list saved');
-            }
-        } catch (error) {
-            console.error('Error saving relay list:', error);
-            toast.error('Failed to save relay list');
-        }
+        setRelayList(relays);
     };
 
     const addRelayToList = () => {
@@ -290,7 +322,10 @@ export default function SettingsPage() {
                         </button>
                     </div>
 
-                    {preferredRelays.length === 0 && (
+                    {isLoading && (
+                        <p className="loading-relays">Loading preferred relays from Nostr network...</p>
+                    )}
+                    {!isLoading && preferredRelays.length === 0 && (
                         <p className="no-relays">No preferred relays configured. Add some relays below.</p>
                     )}
 
@@ -384,7 +419,10 @@ export default function SettingsPage() {
                         </button>
                     </div>
 
-                    {relayList.length === 0 && (
+                    {isLoadingRelayList && (
+                        <p className="loading-relays">Loading relay list from Nostr network...</p>
+                    )}
+                    {!isLoadingRelayList && relayList.length === 0 && (
                         <p className="no-relays">No relay list configured. Add some relays below or sync from preferred relays.</p>
                     )}
 
