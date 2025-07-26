@@ -9,16 +9,27 @@ A decentralized blogging platform built on Nostr protocol that allows users to:
 - Read content from other authors
 - Manage drafts and published posts
 
-### Settings & Preferred Relays
-The platform includes a settings page that allows users to manage their preferred relays for private events according to [NIP-37](https://github.com/nostr-protocol/nips/blob/master/37.md):
+### Settings & Relay Management
+The platform includes a comprehensive settings page for managing relay preferences:
 
-- **Account Information**: View your public key, NIP-05 identifier, and display name
-- **Preferred Relays**: Configure trusted relays for private events with different policies:
-  - **Read Only**: Only receive private events from this relay
-  - **Write Only**: Only send private events to this relay  
-  - **Read & Write**: Both send and receive private events with this relay
+#### NIP-37 Preferred Relays
+Configure trusted relays for private events according to [NIP-37](https://github.com/nostr-protocol/nips/blob/master/37.md):
+- **Read Only**: Only receive private events from this relay
+- **Write Only**: Only send private events to this relay  
+- **Read & Write**: Both send and receive private events with this relay
+
+#### NIP-65 Relay Lists
+Publish relay preferences as Nostr events according to [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md):
+- **Network Publishing**: Share your relay list with the Nostr network
+- **Cross-Device Sync**: Your relay preferences sync across different devices
+- **Discovery**: Other clients can discover your preferred relays
+- **Backup**: Your relay preferences are stored on the Nostr network
+
+#### Relay Management Features
 - **Relay Testing**: Test connection to relays before adding them
-- **Relay Management**: Add, remove, and update relay policies
+- **Cross-Sync**: Sync relay lists from preferred relays
+- **Local Storage**: Persistent storage of relay preferences
+- **Policy Management**: Set read/write permissions for each relay
 
 ## Getting Started
 
