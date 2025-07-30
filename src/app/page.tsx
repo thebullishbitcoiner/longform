@@ -1,41 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import Longform from '@/components/Longform';
 import { useNostr } from '@/contexts/NostrContext';
-import toast from 'react-hot-toast';
 
 export default function Home() {
-  const [isLoading, setIsLoading] = useState(false);
-  const { isAuthenticated, isWhitelisted, checkAuthentication } = useNostr();
+  const { isAuthenticated, isWhitelisted } = useNostr();
 
-  const handleLogin = async () => {
-    setIsLoading(true);
-    try {
-      const nostr = window.nostr;
-      if (!nostr) {
-        alert('Please install a Nostr extension like nos2x, Alby, or similar to use this app.');
-        return;
-      }
-
-      // Request permission to sign
-      await nostr.getPublicKey();
-      // Check authentication status in context
-      const authResult = await checkAuthentication();
-      
-      // Show toast if authentication failed due to whitelist
-      if (!authResult) {
-        toast.error('Access denied: This app is currently in alpha testing. Only approved testers can access the app.', {
-          duration: 6000,
-          position: 'top-center',
-        });
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-      alert('Login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleLogin = () => {
+    // Launch nostr-login welcome screen
+    document.dispatchEvent(new CustomEvent('nlLaunch', { detail: 'welcome' }));
   };
 
   if (!isAuthenticated) {
@@ -49,10 +22,9 @@ export default function Home() {
             </p>
             <button 
               onClick={handleLogin}
-              disabled={isLoading}
               className="login-button"
             >
-              {isLoading ? 'Connecting...' : 'Login with Nostr'}
+              Login with Nostr
             </button>
             {isAuthenticated === false && !isWhitelisted && (
               <div className="whitelist-notice">

@@ -33,12 +33,14 @@ const Header: React.FC = () => {
         <Link href="/" className="header-title">
           Longform._
         </Link>
-        <button
-          onClick={() => setIsMenuOpen(true)}
-          className="menu-button"
-        >
-          <Bars3Icon className="menu-icon" />
-        </button>
+        {isAuthenticated && (
+          <button
+            onClick={() => setIsMenuOpen(true)}
+            className="menu-button"
+          >
+            <Bars3Icon className="menu-icon" />
+          </button>
+        )}
       </div>
 
       {isMenuOpen && (

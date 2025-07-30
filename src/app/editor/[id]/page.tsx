@@ -11,6 +11,7 @@ import type { NostrSigner } from '@nostrify/types';
 import { useNostr } from '@/contexts/NostrContext';
 import toast from 'react-hot-toast';
 import ConfirmModal from '@/components/ConfirmModal';
+import { AuthGuard } from '@/components/AuthGuard';
 import './page.css';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 import Image from 'next/image';
@@ -1006,7 +1007,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   if (!draft) return null;
 
   return (
-    <main className="container">
+    <AuthGuard>
+      <main className="container">
       {isWidescreen ? (
         <>
           {/* Back button and title for fullscreen layout */}
@@ -1367,5 +1369,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         message={`You have an unsaved draft from ${lastDraft ? new Date(lastDraft.lastModified).toLocaleString() : ''}. Would you like to restore it?`}
       />
     </main>
+    </AuthGuard>
   );
 } 

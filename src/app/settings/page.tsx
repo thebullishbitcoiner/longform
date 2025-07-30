@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeftIcon, PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import {
@@ -17,12 +16,12 @@ import {
     type RelayInfo
 } from '@/utils/relayList';
 import toast from 'react-hot-toast';
+import { AuthGuard } from '@/components/AuthGuard';
 import './page.css';
 
 
 
 export default function SettingsPage() {
-    const router = useRouter();
     const { isAuthenticated, currentUser, ndk } = useNostr();
     const [preferredRelays, setPreferredRelays] = useState<PreferredRelay[]>([]);
     const [relayList, setRelayList] = useState<RelayInfo[]>([]);
@@ -288,23 +287,11 @@ export default function SettingsPage() {
         }
     };
 
-    if (!isAuthenticated) {
-        return (
-            <main className="container">
-                <div className="auth-required">
-                    <h1>Settings</h1>
-                    <p>Please log in to access settings.</p>
-                    <button onClick={() => router.push('/')} className="back-button">
-                        <ArrowLeftIcon />
-                        Back to Home
-                    </button>
-                </div>
-            </main>
-        );
-    }
+
 
     return (
-        <main className="container">
+        <AuthGuard>
+            <main className="container">
             <div className="settings-header">
                 <h1>Settings</h1>
             </div>
@@ -605,5 +592,6 @@ export default function SettingsPage() {
                 </div>
             )}
         </main>
+        </AuthGuard>
     );
 } 

@@ -4,9 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 import { useNostr } from '@/contexts/NostrContext';
 import { BlogPost } from '@/contexts/BlogContext';
-import { NDKEvent } from '@nostr-dev-kit/ndk';
+import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 import { ChatBubbleLeftIcon, BoltIcon, ArrowPathIcon, DocumentTextIcon, HandThumbUpIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { AuthGuard } from '@/components/AuthGuard';
 import styles from './page.module.css';
 
 
@@ -142,13 +143,27 @@ const DashboardPage: React.FC = () => {
         return new Promise<Map<string, ArticleStats>>((resolve) => {
           let completedSubscriptions = 0;
           const totalSubscriptions = 5;
+          const subscriptions: NDKSubscription[] = [];
 
           const checkComplete = () => {
             completedSubscriptions++;
+            console.log(`Dashboard: Subscription ${completedSubscriptions}/${totalSubscriptions} completed`);
             if (completedSubscriptions === totalSubscriptions) {
+              console.log('Dashboard: All subscriptions completed, resolving stats');
+              clearTimeout(timeout);
+              // Close all subscriptions
+              subscriptions.forEach(sub => sub.stop());
               resolve(articleStats);
             }
           };
+
+          // Add timeout to prevent hanging
+          const timeout = setTimeout(() => {
+            console.log('Dashboard: Interaction fetch timeout, resolving with current stats');
+            // Close any remaining subscriptions
+            subscriptions.forEach(sub => sub.stop());
+            resolve(articleStats);
+          }, 30000); // 30 second timeout
 
           // Fetch reactions (kind 7 - likes, hearts, etc.)
           const reactionsSubscription = ndk.subscribe(
@@ -159,6 +174,7 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
+          subscriptions.push(reactionsSubscription);
 
           reactionsSubscription.on('event', (event: NDKEvent) => {
             const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
@@ -170,8 +186,15 @@ const DashboardPage: React.FC = () => {
           });
 
           reactionsSubscription.on('eose', () => {
+            console.log('Dashboard: Reactions subscription EOSE');
             checkComplete();
           });
+
+          reactionsSubscription.on('close', () => {
+            console.log('Dashboard: Reactions subscription closed');
+          });
+
+
 
           // Fetch zap requests (kind 9734 - contains amount) and receipts (kind 9735)
           const zapRequestsSubscription = ndk.subscribe(
@@ -182,6 +205,7 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
+          subscriptions.push(zapRequestsSubscription);
 
           const zapReceiptsSubscription = ndk.subscribe(
             { 
@@ -191,6 +215,7 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
+          subscriptions.push(zapReceiptsSubscription);
 
           // Track zap amounts from requests
           const zapAmounts = new Map<string, number>();
@@ -227,11 +252,21 @@ const DashboardPage: React.FC = () => {
           });
 
           zapRequestsSubscription.on('eose', () => {
+            console.log('Dashboard: Zap requests subscription EOSE');
             checkComplete();
           });
 
+          zapRequestsSubscription.on('close', () => {
+            console.log('Dashboard: Zap requests subscription closed');
+          });
+
           zapReceiptsSubscription.on('eose', () => {
+            console.log('Dashboard: Zap receipts subscription EOSE');
             checkComplete();
+          });
+
+          zapReceiptsSubscription.on('close', () => {
+            console.log('Dashboard: Zap receipts subscription closed');
           });
 
           // Fetch comments (kind 1 that reference articles)
@@ -243,6 +278,7 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
+          subscriptions.push(commentsSubscription);
 
           commentsSubscription.on('event', (event: NDKEvent) => {
             const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
@@ -254,7 +290,12 @@ const DashboardPage: React.FC = () => {
           });
 
           commentsSubscription.on('eose', () => {
+            console.log('Dashboard: Comments subscription EOSE');
             checkComplete();
+          });
+
+          commentsSubscription.on('close', () => {
+            console.log('Dashboard: Comments subscription closed');
           });
 
           // Fetch reposts (kind 6)
@@ -266,6 +307,7 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
+          subscriptions.push(repostsSubscription);
 
           repostsSubscription.on('event', (event: NDKEvent) => {
             const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
@@ -277,7 +319,12 @@ const DashboardPage: React.FC = () => {
           });
 
           repostsSubscription.on('eose', () => {
+            console.log('Dashboard: Reposts subscription EOSE');
             checkComplete();
+          });
+
+          repostsSubscription.on('close', () => {
+            console.log('Dashboard: Reposts subscription closed');
           });
         });
     } catch (error: unknown) {
@@ -361,20 +408,7 @@ const DashboardPage: React.FC = () => {
     loadDashboard();
   }, [isAuthenticated, currentUser, fetchUserArticles, fetchArticleInteractions, calculateStats]);
 
-  if (!isAuthenticated) {
-    return (
-      <main>
-        <div className={styles['welcome-section']}>
-          <div className={styles['welcome-content']}>
-            <h1 className={styles['welcome-title']}>Dashboard</h1>
-            <p className={styles['welcome-description']}>
-              Please log in to view your article statistics.
-            </p>
-          </div>
-        </div>
-      </main>
-    );
-  }
+
 
   if (isLoading) {
     return (
@@ -398,8 +432,9 @@ const DashboardPage: React.FC = () => {
   }
 
   return (
-    <main>
-      <div className={styles.dashboard}>
+    <AuthGuard>
+      <main>
+        <div className={styles.dashboard}>
         <div className={styles['dashboard-header']}>
           <h1 className={styles['dashboard-title']}>Dashboard</h1>
           <p className={styles['dashboard-subtitle']}>
@@ -502,6 +537,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
     </main>
+    </AuthGuard>
   );
 };
 

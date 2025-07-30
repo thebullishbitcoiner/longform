@@ -1,8 +1,9 @@
 'use client';
 
-import NDK, { NDKNip07Signer } from '@nostr-dev-kit/ndk';
+import NDK from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { isWhitelisted as checkWhitelist, ALPHA_WHITELIST } from '@/config/whitelist';
+import { NostrLoginSigner } from '@/utils/nostrLoginSigner';
 
 // Create a singleton NDK instance without signer initially
 const ndkInstance = new NDK({
@@ -95,6 +96,7 @@ interface NostrContextType {
   isWhitelisted: boolean;
   currentUser: UserProfile | null;
   checkAuthentication: () => Promise<boolean>;
+  logout: () => void;
 }
 
 const NostrContext = createContext<NostrContextType>({
@@ -104,7 +106,8 @@ const NostrContext = createContext<NostrContextType>({
   isAuthenticated: false,
   isWhitelisted: false,
   currentUser: null,
-  checkAuthentication: async () => false
+  checkAuthentication: async () => false,
+  logout: () => {}
 });
 
 export const useNostr = () => useContext(NostrContext);
@@ -120,70 +123,103 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const [isWhitelisted, setIsWhitelisted] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
+  const logout = () => {
+    console.log('🚪 Logging out user');
+    setIsAuthenticated(false);
+    setIsWhitelisted(false);
+    setCurrentUser(null);
+    ndkInstance.signer = undefined;
+  };
+
   const checkAuthentication = async (): Promise<boolean> => {
     try {
-      // Only create signer when explicitly checking authentication
-      const nip07signer = new NDKNip07Signer();
-      ndkInstance.signer = nip07signer;
+      // Check if window.nostr is available (nostr-login should provide this)
+      if (!window.nostr) {
+        console.log('❌ window.nostr not available - nostr-login may not be initialized');
+        setIsAuthenticated(false);
+        setIsWhitelisted(false);
+        setCurrentUser(null);
+        return false;
+      }
+
+      // Get the user's public key from nostr-login
+      const pubkey = await window.nostr.getPublicKey();
       
-      const user = await nip07signer.user();
-      const hasUser = !!user.npub;
-      
-      if (hasUser) {
-        console.log('🔐 Authentication check - User public key:', user.npub);
-        
-        // Check if the user's public key is whitelisted
-        const whitelisted = checkWhitelist(user.npub);
-        console.log('📋 Whitelist check result:', whitelisted);
-        
-        if (!whitelisted) {
-          console.warn('🚫 Access denied - User not in whitelist:', {
-            npub: user.npub,
-            whitelistEnabled: true,
-            whitelistKeys: ALPHA_WHITELIST.length
-          });
-          setIsAuthenticated(false);
-          setIsWhitelisted(false);
-          setCurrentUser(null);
-          return false;
-        } else {
-          console.log('✅ Access granted - User is whitelisted');
-          
-          // Fetch and cache the user's profile
-          try {
-            const ndkUser = ndkInstance.getUser({ pubkey: user.pubkey });
-            const profile = await ndkUser.fetchProfile();
-            
-            const userProfile: UserProfile = {
-              pubkey: user.pubkey,
-              npub: user.npub,
-              nip05: profile?.nip05,
-              name: profile?.name,
-              displayName: profile?.displayName
-            };
-            
-            console.log('👤 Cached user profile:', userProfile);
-            setCurrentUser(userProfile);
-          } catch (profileError) {
-            console.warn('⚠️ Failed to fetch user profile, using basic info:', profileError);
-            // Still cache basic user info even if profile fetch fails
-            const userProfile: UserProfile = {
-              pubkey: user.pubkey,
-              npub: user.npub
-            };
-            setCurrentUser(userProfile);
-          }
-          
-          setIsWhitelisted(true);
-          setIsAuthenticated(true);
-          return true;
-        }
-      } else {
+      if (!pubkey) {
         console.log('❌ No user found - Authentication failed');
         setIsAuthenticated(false);
         setIsWhitelisted(false);
         setCurrentUser(null);
         return false;
+      }
+
+              // Convert hex pubkey to npub format using bech32
+        let npub = pubkey; // Default fallback
+        try {
+          const { bech32 } = await import('bech32');
+          const words = bech32.toWords(Buffer.from(pubkey, 'hex'));
+          npub = bech32.encode('npub', words);
+        } catch (error) {
+          console.error('Error converting hex to npub:', error);
+          // Keep pubkey as fallback
+        }
+
+      // Check if we already have this user authenticated
+      if (isAuthenticated && currentUser && currentUser.pubkey === pubkey) {
+        console.log('🔐 User already authenticated, skipping duplicate check');
+        return true;
+      }
+      
+      console.log('🔐 Authentication check - User public key:', npub);
+      
+      // Check if the user's public key is whitelisted
+      const whitelisted = checkWhitelist(npub);
+      console.log('📋 Whitelist check result:', whitelisted);
+      
+      if (!whitelisted) {
+        console.warn('🚫 Access denied - User not in whitelist:', {
+          npub: npub,
+          whitelistEnabled: true,
+          whitelistKeys: ALPHA_WHITELIST.length
+        });
+        setIsAuthenticated(false);
+        setIsWhitelisted(false);
+        setCurrentUser(null);
+        return false;
+      } else {
+        console.log('✅ Access granted - User is whitelisted');
+        
+        // Set up NDK signer using nostr-login
+        ndkInstance.signer = new NostrLoginSigner(ndkInstance);
+        
+        // Fetch and cache the user's profile
+        try {
+          const ndkUser = ndkInstance.getUser({ pubkey: pubkey });
+          const profile = await ndkUser.fetchProfile();
+          
+          const userProfile: UserProfile = {
+            pubkey: pubkey,
+            npub: npub,
+            nip05: profile?.nip05,
+            name: profile?.name,
+            displayName: profile?.displayName
+          };
+          
+          console.log('👤 Cached user profile:', userProfile);
+          setCurrentUser(userProfile);
+        } catch (profileError) {
+          console.warn('⚠️ Failed to fetch user profile, using basic info:', profileError);
+          // Still cache basic user info even if profile fetch fails
+          const userProfile: UserProfile = {
+            pubkey: pubkey,
+            npub: npub
+          };
+          setCurrentUser(userProfile);
+        }
+        
+        setIsWhitelisted(true);
+        setIsAuthenticated(true);
+        return true;
       }
     } catch (error) {
       console.error('NDK Provider: Error checking authentication:', error);
@@ -223,7 +259,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   }, []);
 
   return (
-    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, isWhitelisted, currentUser, checkAuthentication }}>
+    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, isWhitelisted, currentUser, checkAuthentication, logout }}>
       {children}
     </NostrContext.Provider>
   );

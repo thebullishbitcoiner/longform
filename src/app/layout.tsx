@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import Header from "@/components/Header";
 import { NostrProvider } from "@/contexts/NostrContext";
 import { BlogProvider } from "@/contexts/BlogContext";
+import { NostrLoginProvider } from "@/components/NostrLoginProvider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -33,10 +34,20 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="theme-color" content="#000000" />
+        <script 
+          src="https://www.unpkg.com/nostr-login@latest/dist/unpkg.js"
+          data-theme="default"
+          data-dark-mode="true"
+          data-bunkers="nsec.app,highlighter.com"
+          data-perms="sign_event:1,sign_event:0"
+          data-no-banner="false"
+          async
+        />
       </head>
       <body className={inter.className}>
         <NostrProvider>
           <BlogProvider>
+            <NostrLoginProvider />
             <Header />
             {children}
             <Toaster
