@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { safeSetItem, STORAGE_KEYS } from '@/utils/storage';
 
 interface Props {
   children: ReactNode;
@@ -36,13 +37,17 @@ class ErrorBoundary extends Component<Props, State> {
         url: typeof window !== 'undefined' ? window.location.href : 'unknown'
       };
       
-      const existingErrors = JSON.parse(localStorage.getItem('mobile-errors') || '[]');
+      const existingErrors = JSON.parse(localStorage.getItem(STORAGE_KEYS.MOBILE_ERRORS) || '[]');
       existingErrors.push(errorData);
-      // Keep only last 10 errors
-      if (existingErrors.length > 10) {
-        existingErrors.splice(0, existingErrors.length - 10);
+      // Keep only last 5 errors to save space
+      if (existingErrors.length > 5) {
+        existingErrors.splice(0, existingErrors.length - 5);
       }
-      localStorage.setItem('mobile-errors', JSON.stringify(existingErrors));
+      
+      const success = safeSetItem(STORAGE_KEYS.MOBILE_ERRORS, JSON.stringify(existingErrors));
+      if (!success) {
+        console.warn('Failed to save error log due to storage constraints');
+      }
     } catch (e) {
       console.error('Failed to save error to localStorage:', e);
     }

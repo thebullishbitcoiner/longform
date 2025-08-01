@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
+import { safeSetItem, STORAGE_KEYS } from '@/utils/storage';
 
 interface AuthorProfile {
   name?: string;
@@ -64,24 +65,39 @@ interface BlogProviderProps {
 export function BlogProvider({ children }: BlogProviderProps) {
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     if (typeof window !== 'undefined') {
-      const cachedPosts = localStorage.getItem('longform_posts');
-      return cachedPosts ? JSON.parse(cachedPosts) : [];
+      try {
+        const cachedPosts = localStorage.getItem(STORAGE_KEYS.POSTS);
+        return cachedPosts ? JSON.parse(cachedPosts) : [];
+      } catch (error) {
+        console.error('Error loading posts from storage:', error);
+        return [];
+      }
     }
     return [];
   });
 
   const [readPosts, setReadPosts] = useState<Set<string>>(() => {
     if (typeof window !== 'undefined') {
-      const cachedReadPosts = localStorage.getItem('longform_readPosts');
-      return new Set(cachedReadPosts ? JSON.parse(cachedReadPosts) : []);
+      try {
+        const cachedReadPosts = localStorage.getItem(STORAGE_KEYS.READ_POSTS);
+        return new Set(cachedReadPosts ? JSON.parse(cachedReadPosts) : []);
+      } catch (error) {
+        console.error('Error loading read posts from storage:', error);
+        return new Set();
+      }
     }
     return new Set();
   });
 
   const [authorProfiles, setAuthorProfiles] = useState<Record<string, AuthorProfile>>(() => {
     if (typeof window !== 'undefined') {
-      const cachedProfiles = localStorage.getItem('longform_authorProfiles');
-      return cachedProfiles ? JSON.parse(cachedProfiles) : {};
+      try {
+        const cachedProfiles = localStorage.getItem(STORAGE_KEYS.AUTHOR_PROFILES);
+        return cachedProfiles ? JSON.parse(cachedProfiles) : {};
+      } catch (error) {
+        console.error('Error loading author profiles from storage:', error);
+        return {};
+      }
     }
     return {};
   });
@@ -93,28 +109,37 @@ export function BlogProvider({ children }: BlogProviderProps) {
   const clearPostsRef = useRef(() => {
     setPosts([]);
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('longform_posts');
+      localStorage.removeItem(STORAGE_KEYS.POSTS);
     }
   });
 
   // Save to localStorage when posts change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('longform_posts', JSON.stringify(posts));
+      const success = safeSetItem(STORAGE_KEYS.POSTS, JSON.stringify(posts));
+      if (!success) {
+        console.warn('Failed to save posts due to storage constraints');
+      }
     }
   }, [posts]);
 
   // Save to localStorage when readPosts change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('longform_readPosts', JSON.stringify([...readPosts]));
+      const success = safeSetItem(STORAGE_KEYS.READ_POSTS, JSON.stringify([...readPosts]));
+      if (!success) {
+        console.warn('Failed to save read posts due to storage constraints');
+      }
     }
   }, [readPosts]);
 
   // Save to localStorage when authorProfiles change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('longform_authorProfiles', JSON.stringify(authorProfiles));
+      const success = safeSetItem(STORAGE_KEYS.AUTHOR_PROFILES, JSON.stringify(authorProfiles));
+      if (!success) {
+        console.warn('Failed to save author profiles due to storage constraints');
+      }
     }
   }, [authorProfiles]);
 

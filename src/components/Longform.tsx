@@ -7,6 +7,7 @@ import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { copyToClipboard } from '@/utils/clipboard';
+import { safeSetItem, STORAGE_KEYS, cleanupStorage, getAvailableStorage } from '@/utils/storage';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 
@@ -25,13 +26,17 @@ const logMobileError = (error: unknown, context: string) => {
         url: window.location.href
       };
       
-      const existingErrors = JSON.parse(localStorage.getItem('mobile-errors') || '[]');
+      const existingErrors = JSON.parse(localStorage.getItem(STORAGE_KEYS.MOBILE_ERRORS) || '[]');
       existingErrors.push(errorData);
-      // Keep only last 20 errors
-      if (existingErrors.length > 20) {
-        existingErrors.splice(0, existingErrors.length - 20);
+      // Keep only last 10 errors to save space
+      if (existingErrors.length > 10) {
+        existingErrors.splice(0, existingErrors.length - 10);
       }
-      localStorage.setItem('mobile-errors', JSON.stringify(existingErrors));
+      
+      const success = safeSetItem(STORAGE_KEYS.MOBILE_ERRORS, JSON.stringify(existingErrors));
+      if (!success) {
+        console.warn('Failed to save mobile error log due to storage constraints');
+      }
     } catch (e) {
       console.error('Failed to save mobile error to localStorage:', e);
     }
@@ -97,7 +102,7 @@ export default function Longform() {
 
   const clearMobileErrors = () => {
     try {
-      localStorage.removeItem('mobile-errors');
+      localStorage.removeItem(STORAGE_KEYS.MOBILE_ERRORS);
       toast.success('Mobile errors cleared');
     } catch (error) {
       console.error('Failed to clear mobile errors:', error);
@@ -106,7 +111,7 @@ export default function Longform() {
 
   const viewMobileErrors = () => {
     try {
-      const errors = JSON.parse(localStorage.getItem('mobile-errors') || '[]');
+      const errors = JSON.parse(localStorage.getItem(STORAGE_KEYS.MOBILE_ERRORS) || '[]');
       if (errors.length === 0) {
         toast.success('No mobile errors found');
         return;
@@ -133,6 +138,16 @@ export default function Longform() {
     } catch (error) {
       console.error('Failed to check authentication:', error);
       toast.error('Authentication check failed');
+    }
+  };
+
+  const handleStorageCleanup = () => {
+    try {
+      cleanupStorage();
+      toast.success('Storage cleanup completed');
+    } catch (error) {
+      console.error('Failed to cleanup storage:', error);
+      toast.error('Storage cleanup failed');
     }
   };
 
@@ -701,9 +716,13 @@ export default function Longform() {
                 <strong>Deletion Events:</strong> {deletionEventsRef.current.length}
               </div>
               <div className="debug-item">
-                <strong>Mobile Errors:</strong> {JSON.parse(localStorage.getItem('mobile-errors') || '[]').length}
+                <strong>Mobile Errors:</strong> {JSON.parse(localStorage.getItem(STORAGE_KEYS.MOBILE_ERRORS) || '[]').length}
                 <button onClick={clearMobileErrors} className="clear-errors-button">Clear</button>
                 <button onClick={viewMobileErrors} className="view-errors-button">View</button>
+              </div>
+              <div className="debug-item">
+                <strong>Available Storage:</strong> {Math.round(getAvailableStorage() / 1024)}KB
+                <button onClick={handleStorageCleanup} className="cleanup-storage-button">Cleanup Storage</button>
               </div>
               <div className="debug-item">
                 <button onClick={checkAuth} className="check-auth-button">Check Auth</button>

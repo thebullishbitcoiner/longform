@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import { NostrProvider } from "@/contexts/NostrContext";
 import { BlogProvider } from "@/contexts/BlogContext";
 import { NostrLoginProvider } from "@/components/NostrLoginProvider";
+import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <NostrProvider>
           <BlogProvider>
+            <GlobalErrorHandler />
             <NostrLoginProvider />
             <Header />
             {children}

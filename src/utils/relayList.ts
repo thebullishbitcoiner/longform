@@ -1,4 +1,5 @@
 import { NDKEvent } from '@nostr-dev-kit/ndk';
+import { safeSetItem, STORAGE_KEYS } from './storage';
 
 export interface RelayInfo {
   url: string;
@@ -74,7 +75,7 @@ export function parseRelayListEvent(event: NDKEvent): RelayInfo[] {
  */
 export function getRelayList(pubkey: string): RelayInfo[] {
   try {
-    const stored = localStorage.getItem(`relay_list_${pubkey}`);
+    const stored = localStorage.getItem(`${STORAGE_KEYS.RELAY_LIST_PREFIX}${pubkey}`);
     if (stored) {
       return JSON.parse(stored);
     }
@@ -91,7 +92,10 @@ export function getRelayList(pubkey: string): RelayInfo[] {
  */
 export function saveRelayList(pubkey: string, relays: RelayInfo[]): void {
   try {
-    localStorage.setItem(`relay_list_${pubkey}`, JSON.stringify(relays));
+    const success = safeSetItem(`${STORAGE_KEYS.RELAY_LIST_PREFIX}${pubkey}`, JSON.stringify(relays));
+    if (!success) {
+      console.warn('Failed to save relay list due to storage constraints');
+    }
   } catch (error) {
     console.error('Error saving relay list:', error);
     throw error;
