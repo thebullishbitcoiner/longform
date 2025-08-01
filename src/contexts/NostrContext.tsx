@@ -134,7 +134,19 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const checkAuthentication = async (): Promise<boolean> => {
     try {
       // Check if window.nostr is available (nostr-login should provide this)
-      if (!window.nostr) {
+      // Add retry logic for mobile devices where nostr-login might take longer to initialize
+      let nostr = window.nostr;
+      let attempts = 0;
+      const maxAttempts = 15; // More attempts for mobile
+      
+      while (!nostr && attempts < maxAttempts) {
+        console.log(`NDK Provider: Waiting for window.nostr (attempt ${attempts + 1}/${maxAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        nostr = window.nostr;
+        attempts++;
+      }
+      
+      if (!nostr) {
         console.log('❌ window.nostr not available - nostr-login may not be initialized');
         setIsAuthenticated(false);
         setIsWhitelisted(false);
@@ -143,7 +155,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
       }
 
       // Get the user's public key from nostr-login
-      const pubkey = await window.nostr.getPublicKey();
+      const pubkey = await nostr.getPublicKey();
       
       if (!pubkey) {
         console.log('❌ No user found - Authentication failed');

@@ -10,6 +10,34 @@ import { copyToClipboard } from '@/utils/clipboard';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 
+// Mobile error logging utility
+const logMobileError = (error: unknown, context: string) => {
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (isMobile) {
+    console.error(`🚨 MOBILE ERROR [${context}]:`, error);
+    try {
+      const errorData = {
+        context,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        url: window.location.href
+      };
+      
+      const existingErrors = JSON.parse(localStorage.getItem('mobile-errors') || '[]');
+      existingErrors.push(errorData);
+      // Keep only last 20 errors
+      if (existingErrors.length > 20) {
+        existingErrors.splice(0, existingErrors.length - 20);
+      }
+      localStorage.setItem('mobile-errors', JSON.stringify(existingErrors));
+    } catch (e) {
+      console.error('Failed to save mobile error to localStorage:', e);
+    }
+  }
+};
+
 interface Draft {
   id: string;
   title: string;
@@ -34,6 +62,7 @@ export default function Longform() {
   const [publishedNotes, setPublishedNotes] = useState<PublishedNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingPublished, setIsLoadingPublished] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; noteId: string | null }>({
     visible: false,
     x: 0,
@@ -49,11 +78,63 @@ export default function Longform() {
     text: '',
     title: ''
   });
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const eventsRef = useRef<NDKEvent[]>([]);
   const publishedEventsRef = useRef<NDKEvent[]>([]);
   const deletionEventsRef = useRef<NDKEvent[]>([]); // Add reference for deletion events
   const router = useRouter();
-  const { ndk, isAuthenticated, currentUser } = useNostr();
+  const { ndk, isAuthenticated, currentUser, isConnected, checkAuthentication } = useNostr();
+
+  const retryLoad = () => {
+    setLoadError(null);
+    setIsLoading(true);
+    setIsLoadingPublished(true);
+    eventsRef.current = [];
+    publishedEventsRef.current = [];
+    deletionEventsRef.current = [];
+    // The useEffect will automatically retry since we changed the loading states
+  };
+
+  const clearMobileErrors = () => {
+    try {
+      localStorage.removeItem('mobile-errors');
+      toast.success('Mobile errors cleared');
+    } catch (error) {
+      console.error('Failed to clear mobile errors:', error);
+    }
+  };
+
+  const viewMobileErrors = () => {
+    try {
+      const errors = JSON.parse(localStorage.getItem('mobile-errors') || '[]');
+      if (errors.length === 0) {
+        toast.success('No mobile errors found');
+        return;
+      }
+      
+      const errorText = errors.map((error: { context: string; message: string; timestamp: string }, index: number) => 
+        `Error ${index + 1}:\nContext: ${error.context}\nMessage: ${error.message}\nTime: ${error.timestamp}\n\n`
+      ).join('');
+      
+      setShareModal({
+        visible: true,
+        text: errorText,
+        title: 'Mobile Errors'
+      });
+    } catch (error) {
+      console.error('Failed to view mobile errors:', error);
+    }
+  };
+
+  const checkAuth = async () => {
+    try {
+      await checkAuthentication();
+      toast.success('Authentication check completed');
+    } catch (error) {
+      console.error('Failed to check authentication:', error);
+      toast.error('Authentication check failed');
+    }
+  };
 
   useEffect(() => {
     const loadNostrContent = async () => {
@@ -64,20 +145,36 @@ export default function Longform() {
       deletionEventsRef.current = []; // Reset deletion events
       
       if (!ndk || !isAuthenticated) {
+        console.log('Longform: NDK or authentication not ready, skipping load');
         setIsLoading(false);
         setIsLoadingPublished(false);
         return;
       }
 
       try {
-        const nostr = window.nostr;
+        // Wait for window.nostr to be available (especially important on mobile)
+        let nostr = window.nostr;
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (!nostr && attempts < maxAttempts) {
+          console.log(`Longform: Waiting for window.nostr (attempt ${attempts + 1}/${maxAttempts})`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          nostr = window.nostr;
+          attempts++;
+        }
+        
         if (!nostr) {
+          console.error('Longform: window.nostr not available after waiting');
           setIsLoading(false);
           setIsLoadingPublished(false);
           return;
         }
         
+        console.log('Longform: window.nostr is available, proceeding with load');
+        
         const pubkey = await nostr.getPublicKey();
+        console.log('Longform: Got pubkey:', pubkey);
         
         // Subscribe to draft events (kind 30024)
         const draftSubscription = ndk.subscribe(
@@ -122,6 +219,12 @@ export default function Longform() {
         );
 
         // Set a timeout to process all events after they're received
+        // Increased timeout for mobile devices
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const timeoutDuration = isMobile ? 15000 : 8000; // 15 seconds on mobile, 8 seconds on desktop
+        
+        console.log(`Longform: Setting timeout for ${timeoutDuration}ms (mobile: ${isMobile})`);
+        
         setTimeout(() => {
           console.log('Longform: Processing draft events:', eventsRef.current.length);
           console.log('Longform: Processing deletion events:', deletionEventsRef.current.length);
@@ -305,7 +408,7 @@ export default function Longform() {
           
           setPublishedNotes(sortedPublishedNotes);
           setIsLoadingPublished(false);
-        }, 5000);
+        }, timeoutDuration);
 
         return () => {
           draftSubscription.stop();
@@ -314,6 +417,9 @@ export default function Longform() {
         };
       } catch (error) {
         console.error('Longform: Error loading Nostr content:', error);
+        logMobileError(error, 'loadNostrContent');
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        setLoadError(errorMessage);
         setIsLoading(false);
         setIsLoadingPublished(false);
       }
@@ -336,6 +442,7 @@ export default function Longform() {
       router.push(`/editor/${tempId}`);
     } catch (error) {
       console.error('Longform: Error creating new draft:', error);
+      logMobileError(error, 'handleCreateDraft');
       toast.error('Failed to create new draft. Please try again.');
     }
   };
@@ -373,6 +480,7 @@ export default function Longform() {
         toast.success('Draft deleted from Nostr');
       } catch (error) {
         console.error('Longform: Error deleting draft:', error);
+        logMobileError(error, 'handleDeleteDraft');
         toast.error('Failed to delete draft. Please try again.');
       }
     }
@@ -550,6 +658,62 @@ export default function Longform() {
       <div className="action-bar">
       </div>
 
+      {/* Error Display */}
+      {loadError && (
+        <div className="error-container">
+          <p className="error-message">Failed to load content: {loadError}</p>
+          <button onClick={retryLoad} className="retry-button">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Mobile Debug Panel */}
+      {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
+        <div className="debug-panel">
+          <button 
+            onClick={() => setShowDebugPanel(!showDebugPanel)}
+            className="debug-toggle"
+          >
+            {showDebugPanel ? 'Hide' : 'Show'} Debug Info
+          </button>
+          {showDebugPanel && (
+            <div className="debug-content">
+              <div className="debug-item">
+                <strong>Connection:</strong> {isConnected ? '✅ Connected' : '❌ Disconnected'}
+              </div>
+              <div className="debug-item">
+                <strong>Authenticated:</strong> {isAuthenticated ? '✅ Yes' : '❌ No'}
+              </div>
+              <div className="debug-item">
+                <strong>Window.nostr:</strong> {window.nostr ? '✅ Available' : '❌ Not Available'}
+              </div>
+              <div className="debug-item">
+                <strong>User:</strong> {currentUser ? currentUser.npub?.slice(0, 20) + '...' : 'None'}
+              </div>
+              <div className="debug-item">
+                <strong>Draft Events:</strong> {eventsRef.current.length}
+              </div>
+              <div className="debug-item">
+                <strong>Published Events:</strong> {publishedEventsRef.current.length}
+              </div>
+              <div className="debug-item">
+                <strong>Deletion Events:</strong> {deletionEventsRef.current.length}
+              </div>
+              <div className="debug-item">
+                <strong>Mobile Errors:</strong> {JSON.parse(localStorage.getItem('mobile-errors') || '[]').length}
+                <button onClick={clearMobileErrors} className="clear-errors-button">Clear</button>
+                <button onClick={viewMobileErrors} className="view-errors-button">View</button>
+              </div>
+              <div className="debug-item">
+                <button onClick={checkAuth} className="check-auth-button">Check Auth</button>
+                <button onClick={retryLoad} className="retry-load-button">Retry Load</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Drafts Section */}
       <div className="content-section">
         <div className="section-header">
@@ -561,6 +725,9 @@ export default function Longform() {
         {isLoading ? (
           <div className="loading-container">
             <div className="loading-spinner"></div>
+            {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
+              <p>Loading drafts... This may take longer on mobile devices.</p>
+            )}
           </div>
         ) : (
           <div className="draft-list">
@@ -612,6 +779,9 @@ export default function Longform() {
         {isLoadingPublished ? (
           <div className="loading-container">
             <div className="loading-spinner"></div>
+            {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
+              <p>Loading published articles... This may take longer on mobile devices.</p>
+            )}
           </div>
         ) : (
           <div className="published-list">

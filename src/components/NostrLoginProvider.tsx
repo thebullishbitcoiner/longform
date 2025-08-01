@@ -12,16 +12,38 @@ export function NostrLoginProvider() {
       try {
         const { init } = await import('nostr-login');
         
-        init({
-          theme: 'default',
-          startScreen: 'welcome',
-          bunkers: 'nsec.app,highlighter.com',
-          perms: 'sign_event:1,sign_event:0',
-          darkMode: true,
-          noBanner: false
-        });
+        // Add retry logic for mobile devices
+        let initAttempts = 0;
+        const maxInitAttempts = 5;
+        
+        while (initAttempts < maxInitAttempts) {
+          try {
+            console.log(`NostrLoginProvider: Initializing nostr-login (attempt ${initAttempts + 1}/${maxInitAttempts})`);
+            
+            init({
+              theme: 'default',
+              startScreen: 'welcome',
+              bunkers: 'nsec.app,highlighter.com',
+              perms: 'sign_event:1,sign_event:0',
+              darkMode: true,
+              noBanner: false
+            });
 
-        console.log('✅ Nostr-login initialized successfully');
+            console.log('✅ Nostr-login initialized successfully');
+            break; // Success, exit the retry loop
+          } catch (initError) {
+            console.warn(`⚠️ Nostr-login init attempt ${initAttempts + 1} failed:`, initError);
+            initAttempts++;
+            
+            if (initAttempts < maxInitAttempts) {
+              // Wait before retrying
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } else {
+              console.error('❌ Failed to initialize nostr-login after all attempts');
+              throw initError;
+            }
+          }
+        }
       } catch (error) {
         console.error('❌ Failed to initialize nostr-login:', error);
       }
@@ -40,9 +62,13 @@ export function NostrLoginProvider() {
           clearTimeout(authCheckTimeoutRef.current);
         }
         
+        // Slightly longer delay for mobile devices
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const delay = isMobile ? 200 : 100;
+        
         authCheckTimeoutRef.current = setTimeout(async () => {
           await checkAuthentication();
-        }, 100);
+        }, delay);
       } else if (customEvent.detail.type === 'logout') {
         console.log('🚪 User logged out');
         logout();
