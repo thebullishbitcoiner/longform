@@ -17,6 +17,7 @@ import {
 } from '@/utils/relayList';
 import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
+import { cleanupStorage, getAvailableStorage } from '@/utils/storage';
 import './page.css';
 
 
@@ -32,6 +33,8 @@ export default function SettingsPage() {
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [showRelayListInfoModal, setShowRelayListInfoModal] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
+    const [cacheData, setCacheData] = useState<Array<{key: string, value: string, size: number}>>([]);
+    const [showCacheInfoModal, setShowCacheInfoModal] = useState(false);
 
     const loadPreferredRelays = useCallback(async () => {
         if (currentUser?.pubkey) {
@@ -109,7 +112,7 @@ export default function SettingsPage() {
 
     // Prevent scrolling when modal is open
     useEffect(() => {
-        if (showInfoModal || showRelayListInfoModal) {
+        if (showInfoModal || showRelayListInfoModal || showCacheInfoModal) {
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = 'unset';
@@ -119,7 +122,7 @@ export default function SettingsPage() {
         return () => {
             document.body.style.overflow = 'unset';
         };
-    }, [showInfoModal, showRelayListInfoModal]);
+    }, [showInfoModal, showRelayListInfoModal, showCacheInfoModal]);
 
     const handleSavePreferredRelays = (relays: PreferredRelay[]) => {
         setPreferredRelays(relays);
@@ -286,6 +289,78 @@ export default function SettingsPage() {
             setIsPublishing(false);
         }
     };
+
+    // Cache management functions
+    const loadCacheData = useCallback(() => {
+        if (typeof window === 'undefined') return;
+
+        const data: Array<{key: string, value: string, size: number}> = [];
+        
+        // Get all localStorage keys that start with 'longform_'
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('longform_')) {
+                try {
+                    const value = localStorage.getItem(key) || '';
+                    const size = new Blob([value]).size;
+                    data.push({ key, value, size });
+                } catch (error) {
+                    console.error(`Error reading cache key ${key}:`, error);
+                }
+            }
+        }
+        
+        // Sort by size (largest first)
+        data.sort((a, b) => b.size - a.size);
+        setCacheData(data);
+    }, []);
+
+    const deleteCacheKey = (key: string) => {
+        try {
+            localStorage.removeItem(key);
+            toast.success(`Deleted cache key: ${key}`);
+            loadCacheData(); // Reload the cache data
+        } catch (error) {
+            console.error('Error deleting cache key:', error);
+            toast.error('Failed to delete cache key');
+        }
+    };
+
+    const clearAllCache = () => {
+        try {
+            // Only clear longform_ keys
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('longform_')) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            toast.success(`Cleared ${keysToRemove.length} cache entries`);
+            loadCacheData(); // Reload the cache data
+        } catch (error) {
+            console.error('Error clearing cache:', error);
+            toast.error('Failed to clear cache');
+        }
+    };
+
+    const runStorageCleanup = () => {
+        try {
+            cleanupStorage();
+            toast.success('Storage cleanup completed');
+            loadCacheData(); // Reload the cache data
+        } catch (error) {
+            console.error('Error running storage cleanup:', error);
+            toast.error('Failed to run storage cleanup');
+        }
+    };
+
+    // Load cache data on component mount
+    useEffect(() => {
+        loadCacheData();
+    }, [loadCacheData]);
 
 
 
@@ -506,6 +581,76 @@ export default function SettingsPage() {
                         </button>
                     </div>
                 </section>
+
+                <section className="settings-section">
+                    <div className="section-header">
+                        <h2>Cache</h2>
+                        <button
+                            onClick={() => setShowCacheInfoModal(true)}
+                            className="info-button"
+                            title="Learn more about cache management"
+                        >
+                            <InformationCircleIcon />
+                        </button>
+                    </div>
+
+                    <div className="cache-info">
+                        <p>Available Storage: <strong>{Math.round(getAvailableStorage() / 1024)}KB</strong></p>
+                        <p>Cache Entries: <strong>{cacheData.length}</strong></p>
+                        <p>Total Cache Size: <strong>{Math.round(cacheData.reduce((sum, item) => sum + item.size, 0) / 1024)}KB</strong></p>
+                    </div>
+
+                    <div className="cache-actions">
+                        <button
+                            onClick={runStorageCleanup}
+                            className="cleanup-button"
+                            title="Run automatic storage cleanup"
+                        >
+                            Run Cleanup
+                        </button>
+                        <button
+                            onClick={clearAllCache}
+                            className="clear-all-button"
+                            title="Clear all cache data"
+                        >
+                            Clear All Cache
+                        </button>
+                        <button
+                            onClick={loadCacheData}
+                            className="refresh-button"
+                            title="Refresh cache data"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+
+                    {cacheData.length > 0 ? (
+                        <div className="cache-list">
+                            <h3>Cache Entries</h3>
+                            {cacheData.map((item, index) => (
+                                <div key={index} className="cache-item">
+                                    <div className="cache-item-info">
+                                        <div className="cache-key">{item.key}</div>
+                                        <div className="cache-size">{Math.round(item.size / 1024)}KB</div>
+                                    </div>
+                                    <div className="cache-item-actions">
+                                        <button
+                                            onClick={() => deleteCacheKey(item.key)}
+                                            className="delete-cache-button"
+                                            title={`Delete ${item.key}`}
+                                        >
+                                            <TrashIcon />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="no-cache">
+                            <p>No cache data found.</p>
+                        </div>
+                    )}
+                </section>
             </div>
 
             {/* Info Modal */}
@@ -586,6 +731,46 @@ export default function SettingsPage() {
                             </p>
                             <p>
                                 Publishing your relay list makes it available to other Nostr clients and helps build a more connected network.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Cache Info Modal */}
+            {showCacheInfoModal && (
+                <div className="modal-overlay" onClick={() => setShowCacheInfoModal(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>About Cache Management</h3>
+                            <button
+                                onClick={() => setShowCacheInfoModal(false)}
+                                className="modal-close-button"
+                                title="Close"
+                            >
+                                <XMarkIcon />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p>
+                                The cache stores various data to improve app performance and user experience:
+                            </p>
+                            <ul>
+                                <li><strong>Posts:</strong> Cached blog posts and articles</li>
+                                <li><strong>Author Profiles:</strong> User profile information</li>
+                                <li><strong>Read Status:</strong> Which posts you&apos;ve read</li>
+                                <li><strong>Drafts:</strong> Your unsaved draft content</li>
+                                <li><strong>Relay Lists:</strong> Your preferred relay configurations</li>
+                                <li><strong>Error Logs:</strong> Debug information for troubleshooting</li>
+                            </ul>
+                            <p>
+                                <strong>Available Storage:</strong> Shows how much browser storage space is available<br/>
+                                <strong>Run Cleanup:</strong> Automatically removes old data to free space<br/>
+                                <strong>Clear All Cache:</strong> Removes all cached data (you&apos;ll need to reload content)<br/>
+                                <strong>Delete Individual Keys:</strong> Remove specific cache entries
+                            </p>
+                            <p>
+                                <strong>Note:</strong> Clearing cache will require the app to reload data from the Nostr network, which may take some time.
                             </p>
                         </div>
                     </div>

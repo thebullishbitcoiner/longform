@@ -656,4 +656,189 @@
 .save-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Cache Section Styles */
+.cache-info {
+  background-color: var(--bg-primary);
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+
+.cache-info p {
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.cache-info strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.cache-actions {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.cleanup-button,
+.clear-all-button,
+.refresh-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.cleanup-button {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.cleanup-button:hover {
+  background-color: var(--hover);
+}
+
+.clear-all-button {
+  background-color: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.clear-all-button:hover {
+  background-color: #b91c1c;
+}
+
+.refresh-button {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.refresh-button:hover {
+  background-color: var(--hover);
+}
+
+.cache-list {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.cache-list h3 {
+  margin: 0;
+  padding: 1rem 1.5rem;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cache-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  transition: all 0.2s;
+}
+
+.cache-item:last-child {
+  border-bottom: none;
+}
+
+.cache-item:hover {
+  background-color: var(--hover);
+}
+
+.cache-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.cache-key {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.cache-size {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.cache-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.delete-cache-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-cache-button:hover {
+  background-color: var(--hover);
+  color: var(--text-primary);
+}
+
+.delete-cache-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.no-cache {
+  text-align: center;
+  padding: 2rem;
+  background-color: var(--bg-primary);
+  border-radius: 0.5rem;
+  border: 1px dashed var(--border);
+}
+
+.no-cache p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Responsive Design for Cache Section */
+@media (max-width: 768px) {
+  .cache-actions {
+    flex-direction: column;
+  }
+  
+  .cache-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .cache-item-actions {
+    justify-content: flex-end;
+  }
 } 

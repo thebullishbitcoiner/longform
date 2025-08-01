@@ -15,11 +15,11 @@ export interface Draft {
 // Storage quota management
 const STORAGE_KEYS = {
   LAST_DRAFT: 'longform_lastDraft',
-  MOBILE_ERRORS: 'mobile-errors',
+  MOBILE_ERRORS: 'longform_mobile-errors',
   POSTS: 'longform_posts',
   READ_POSTS: 'longform_readPosts',
   AUTHOR_PROFILES: 'longform_authorProfiles',
-  RELAY_LIST_PREFIX: 'relay_list_'
+  RELAY_LIST_PREFIX: 'longform_relay_list_'
 };
 
 // Check available storage space
