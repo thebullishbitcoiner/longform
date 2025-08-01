@@ -36,7 +36,7 @@ function getAvailableStorage(): number {
       try {
         localStorage.setItem(testKey + i, testValue);
         available += testValue.length;
-      } catch (e) {
+      } catch {
         break;
       }
     }
@@ -106,10 +106,10 @@ function cleanupStorage(): void {
           const trimmedPosts = postsArray.slice(-100);
           localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(trimmedPosts));
         }
-      } catch (e) {
-        // If posts are corrupted, remove them
-        localStorage.removeItem(STORAGE_KEYS.POSTS);
-      }
+             } catch {
+         // If posts are corrupted, remove them
+         localStorage.removeItem(STORAGE_KEYS.POSTS);
+       }
     }
     
     // Remove old author profiles if we have too many
@@ -119,15 +119,15 @@ function cleanupStorage(): void {
         const profilesObj = JSON.parse(profiles);
         const profileKeys = Object.keys(profilesObj);
         if (profileKeys.length > 50) { // Keep only last 50 profiles
-          const trimmedProfiles: Record<string, any> = {};
+          const trimmedProfiles: Record<string, unknown> = {};
           profileKeys.slice(-50).forEach(key => {
-            trimmedProfiles[key] = profilesObj[key];
-          });
-          localStorage.setItem(STORAGE_KEYS.AUTHOR_PROFILES, JSON.stringify(trimmedProfiles));
-        }
-      } catch (e) {
-        localStorage.removeItem(STORAGE_KEYS.AUTHOR_PROFILES);
-      }
+                       trimmedProfiles[key] = profilesObj[key];
+         });
+         localStorage.setItem(STORAGE_KEYS.AUTHOR_PROFILES, JSON.stringify(trimmedProfiles));
+       }
+     } catch {
+       localStorage.removeItem(STORAGE_KEYS.AUTHOR_PROFILES);
+     }
     }
     
     console.log('Storage cleanup completed');
