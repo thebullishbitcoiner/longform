@@ -154,7 +154,159 @@
   font-style: italic;
 }
 
-/* Loading Styles */
+/* Terminal Loading Styles */
+.terminal-container {
+  background-color: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 0.5rem;
+  margin-bottom: 2rem;
+  overflow: hidden;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #1a1a1a;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #333;
+}
+
+.terminal-title {
+  color: #e5e5e5;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.terminal-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.terminal-clear-btn {
+  background-color: #333;
+  color: #e5e5e5;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.terminal-clear-btn:hover {
+  background-color: #444;
+}
+
+.terminal-body {
+  padding: 1rem;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: #0a0a0a;
+}
+
+.terminal-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #888;
+  font-size: 0.875rem;
+}
+
+.terminal-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.terminal-timestamp {
+  color: #666;
+  font-size: 0.75rem;
+  min-width: 80px;
+}
+
+.terminal-prompt {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.terminal-text {
+  color: #e5e5e5;
+  flex: 1;
+}
+
+.terminal-cursor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.terminal-cursor-blink {
+  color: #00ff00;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Terminal message types */
+.terminal-info .terminal-text {
+  color: #e5e5e5;
+}
+
+.terminal-success .terminal-text {
+  color: #00ff00;
+}
+
+.terminal-error .terminal-text {
+  color: #ff4444;
+}
+
+.terminal-warning .terminal-text {
+  color: #ffaa00;
+}
+
+/* Mobile terminal adjustments */
+@media (max-width: 768px) {
+  .terminal-container {
+    margin-bottom: 1.5rem;
+  }
+  
+  .terminal-header {
+    padding: 1rem;
+  }
+  
+  .terminal-title {
+    font-size: 1rem;
+  }
+  
+  .terminal-body {
+    padding: 1.25rem;
+    min-height: 150px;
+    max-height: 300px;
+  }
+  
+  .terminal-line {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .terminal-timestamp {
+    font-size: 0.875rem;
+    min-width: 90px;
+  }
+}
+
+/* Legacy Loading Styles (kept for backward compatibility) */
 .loading-container {
   display: flex;
   flex-direction: column;

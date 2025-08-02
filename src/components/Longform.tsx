@@ -7,41 +7,10 @@ import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { copyToClipboard } from '@/utils/clipboard';
-import { safeSetItem, STORAGE_KEYS, cleanupStorage, getAvailableStorage } from '@/utils/storage';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 
-// Mobile error logging utility
-const logMobileError = (error: unknown, context: string) => {
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  if (isMobile) {
-    console.error(`🚨 MOBILE ERROR [${context}]:`, error);
-    try {
-      const errorData = {
-        context,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        url: window.location.href
-      };
-      
-      const existingErrors = JSON.parse(localStorage.getItem(STORAGE_KEYS.MOBILE_ERRORS) || '[]');
-      existingErrors.push(errorData);
-      // Keep only last 10 errors to save space
-      if (existingErrors.length > 10) {
-        existingErrors.splice(0, existingErrors.length - 10);
-      }
-      
-      const success = safeSetItem(STORAGE_KEYS.MOBILE_ERRORS, JSON.stringify(existingErrors));
-      if (!success) {
-        console.warn('Failed to save mobile error log due to storage constraints');
-      }
-    } catch (e) {
-      console.error('Failed to save mobile error to localStorage:', e);
-    }
-  }
-};
+
 
 interface Draft {
   id: string;
@@ -62,12 +31,15 @@ interface PublishedNote {
   createdAt: string; // Add created_at for versioning
 }
 
+
+
 export default function Longform() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [publishedNotes, setPublishedNotes] = useState<PublishedNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingPublished, setIsLoadingPublished] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
   const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; noteId: string | null }>({
     visible: false,
     x: 0,
@@ -83,12 +55,13 @@ export default function Longform() {
     text: '',
     title: ''
   });
-  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const eventsRef = useRef<NDKEvent[]>([]);
   const publishedEventsRef = useRef<NDKEvent[]>([]);
   const deletionEventsRef = useRef<NDKEvent[]>([]); // Add reference for deletion events
   const router = useRouter();
-  const { ndk, isAuthenticated, currentUser, isConnected, checkAuthentication } = useNostr();
+  const { ndk, isAuthenticated, currentUser } = useNostr();
+
+
 
   const retryLoad = () => {
     setLoadError(null);
@@ -100,56 +73,7 @@ export default function Longform() {
     // The useEffect will automatically retry since we changed the loading states
   };
 
-  const clearMobileErrors = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.MOBILE_ERRORS);
-      toast.success('Mobile errors cleared');
-    } catch (error) {
-      console.error('Failed to clear mobile errors:', error);
-    }
-  };
 
-  const viewMobileErrors = () => {
-    try {
-      const errors = JSON.parse(localStorage.getItem(STORAGE_KEYS.MOBILE_ERRORS) || '[]');
-      if (errors.length === 0) {
-        toast.success('No mobile errors found');
-        return;
-      }
-      
-      const errorText = errors.map((error: { context: string; message: string; timestamp: string }, index: number) => 
-        `Error ${index + 1}:\nContext: ${error.context}\nMessage: ${error.message}\nTime: ${error.timestamp}\n\n`
-      ).join('');
-      
-      setShareModal({
-        visible: true,
-        text: errorText,
-        title: 'Mobile Errors'
-      });
-    } catch (error) {
-      console.error('Failed to view mobile errors:', error);
-    }
-  };
-
-  const checkAuth = async () => {
-    try {
-      await checkAuthentication();
-      toast.success('Authentication check completed');
-    } catch (error) {
-      console.error('Failed to check authentication:', error);
-      toast.error('Authentication check failed');
-    }
-  };
-
-  const handleStorageCleanup = () => {
-    try {
-      cleanupStorage();
-      toast.success('Storage cleanup completed');
-    } catch (error) {
-      console.error('Failed to cleanup storage:', error);
-      toast.error('Storage cleanup failed');
-    }
-  };
 
   useEffect(() => {
     const loadNostrContent = async () => {
@@ -167,7 +91,9 @@ export default function Longform() {
       }
 
       try {
-        // Wait for window.nostr to be available (especially important on mobile)
+        console.log('Longform: Attempting to load Nostr content...');
+
+        // Wait for window.nostr to be available
         let nostr = window.nostr;
         let attempts = 0;
         const maxAttempts = 10;
@@ -191,6 +117,8 @@ export default function Longform() {
         const pubkey = await nostr.getPublicKey();
         console.log('Longform: Got pubkey:', pubkey);
         
+        console.log('Longform: Setting up Nostr subscriptions...');
+        
         // Subscribe to draft events (kind 30024)
         const draftSubscription = ndk.subscribe(
           { 
@@ -204,6 +132,7 @@ export default function Longform() {
             }
           }
         );
+        console.log('Longform: Draft subscription active');
 
         // Subscribe to deletion events (kind 5)
         const deletionSubscription = ndk.subscribe(
@@ -218,6 +147,7 @@ export default function Longform() {
             }
           }
         );
+        console.log('Longform: Deletion subscription active');
 
         // Subscribe to published longform events (kind 30023)
         const publishedSubscription = ndk.subscribe(
@@ -232,18 +162,15 @@ export default function Longform() {
             }
           }
         );
+        console.log('Longform: Published subscription active');
 
         // Set a timeout to process all events after they're received
-        // Increased timeout for mobile devices
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        const timeoutDuration = isMobile ? 15000 : 8000; // 15 seconds on mobile, 8 seconds on desktop
+        const timeoutDuration = 8000; // 8 seconds for all devices
         
-        console.log(`Longform: Setting timeout for ${timeoutDuration}ms (mobile: ${isMobile})`);
+        console.log(`Longform: Setting timeout for ${timeoutDuration}ms`);
         
         setTimeout(() => {
           console.log('Longform: Processing draft events:', eventsRef.current.length);
-          console.log('Longform: Processing deletion events:', deletionEventsRef.current.length);
-          console.log('Longform: Processing published events:', publishedEventsRef.current.length);
           
           // Get all deleted event IDs from deletion events
           const deletedEventIds = new Set<string>();
@@ -255,7 +182,7 @@ export default function Longform() {
             });
           });
           
-          console.log('Longform: Deleted event IDs:', Array.from(deletedEventIds));
+          console.log(`Longform: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
           
           // Process drafts - filter out deleted ones
           const uniqueDraftEvents = eventsRef.current.filter((event, index, self) => 
@@ -267,12 +194,12 @@ export default function Longform() {
             const isDeleted = deletedEventIds.has(event.id);
             if (isDeleted) {
               const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
-              console.log('Longform: Removing deleted draft:', event.id, 'with title:', title);
+              console.log(`Longform: Removing deleted draft: ${event.id} with title: ${title}`);
             }
             return !isDeleted;
           });
           
-          console.log('Longform: Draft events after filtering deletions:', nonDeletedDraftEvents.length);
+          console.log(`Longform: Draft events after filtering deletions: ${nonDeletedDraftEvents.length}`);
           
           const allDrafts: Draft[] = nonDeletedDraftEvents.map(event => {
             const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
@@ -286,7 +213,7 @@ export default function Longform() {
             };
           });
           
-          console.log('Longform: All drafts before cleanup:', allDrafts.map(d => ({ id: d.id, title: d.title, dTag: d.dTag })));
+          console.log(`Longform: All drafts before cleanup: ${allDrafts.length}`);
           
           // Clean up: keep only the latest version of each draft
           const finalDrafts = allDrafts.filter(draft => {
@@ -295,12 +222,12 @@ export default function Longform() {
               otherDraft.dTag === draft.id
             );
             if (isReferenced) {
-              console.log('Longform: Removing older draft', draft.id, 'referenced by newer draft');
+              console.log(`Longform: Removing older draft ${draft.id} referenced by newer draft`);
             }
             return !isReferenced;
           });
           
-          console.log('Longform: Final drafts after cleanup:', finalDrafts.map(d => ({ id: d.id, title: d.title, dTag: d.dTag })));
+          console.log(`Longform: Final drafts after cleanup: ${finalDrafts.length}`);
           
           setDrafts(finalDrafts);
           setIsLoading(false);
@@ -315,12 +242,12 @@ export default function Longform() {
             const isDeleted = deletedEventIds.has(event.id);
             if (isDeleted) {
               const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
-              console.log('Longform: Removing deleted published note:', event.id, 'with title:', title);
+              console.log(`Longform: Removing deleted published note: ${event.id} with title: ${title}`);
             }
             return !isDeleted;
           });
           
-          console.log('Longform: Published events after filtering deletions:', nonDeletedPublishedEvents.length);
+          console.log(`Longform: Published events after filtering deletions: ${nonDeletedPublishedEvents.length}`);
           
           const allPublishedNotes: PublishedNote[] = nonDeletedPublishedEvents.map(event => {
             const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
@@ -353,7 +280,7 @@ export default function Longform() {
             };
           });
           
-          console.log('Longform: All published notes before cleanup:', allPublishedNotes.map(n => ({ id: n.id, title: n.title, publishedAt: n.publishedAt, dTag: n.dTag })));
+          console.log(`Longform: All published notes before cleanup: ${allPublishedNotes.length}`);
           
           // Clean up: keep only the latest version of each published note
           // Use "d" tag to group related posts, with fallback strategies for edge cases
@@ -370,7 +297,7 @@ export default function Longform() {
                 );
                 
                 if (mostRecentNote.id !== note.id) {
-                  console.log('Longform: Removing older published note', note.id, 'keeping newer version', mostRecentNote.id, 'with d tag', note.dTag);
+                  console.log(`Longform: Removing older published note ${note.id} keeping newer version ${mostRecentNote.id} with d tag ${note.dTag}`);
                   return false;
                 }
               }
@@ -393,7 +320,7 @@ export default function Longform() {
                 );
                 
                 if (mostRecentWithDTag.id !== note.id) {
-                  console.log('Longform: Removing note with same title but different d tag', note.id, 'keeping version with d tag', mostRecentWithDTag.id);
+                  console.log(`Longform: Removing note with same title but different d tag ${note.id} keeping version with d tag ${mostRecentWithDTag.id}`);
                   return false;
                 }
               } else if (notesWithoutDTags.length > 1) {
@@ -403,7 +330,7 @@ export default function Longform() {
                 );
                 
                 if (mostRecentNote.id !== note.id) {
-                  console.log('Longform: Removing older published note with same title', note.id, 'keeping newer version', mostRecentNote.id);
+                  console.log(`Longform: Removing older published note with same title ${note.id} keeping newer version ${mostRecentNote.id}`);
                   return false;
                 }
               }
@@ -412,36 +339,36 @@ export default function Longform() {
             return true;
           });
           
-          console.log('Longform: Final published notes after cleanup:', finalPublishedNotes.map(n => ({ id: n.id, title: n.title, publishedAt: n.publishedAt, dTag: n.dTag })));
+          console.log(`Longform: Final published notes after cleanup: ${finalPublishedNotes.length}`);
           
           // Sort published notes by published date (newest first)
           const sortedPublishedNotes = finalPublishedNotes.sort((a, b) => 
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
           
-          console.log('Longform: Published notes:', sortedPublishedNotes.map(n => ({ id: n.id, title: n.title })));
+          console.log(`Longform: Published notes: ${sortedPublishedNotes.length}`);
           
-          setPublishedNotes(sortedPublishedNotes);
+                            setPublishedNotes(sortedPublishedNotes);
           setIsLoadingPublished(false);
-        }, timeoutDuration);
+          console.log(`Longform: Loading complete! Found ${finalDrafts.length} drafts and ${sortedPublishedNotes.length} published articles`);
+      }, timeoutDuration);
 
-        return () => {
-          draftSubscription.stop();
-          publishedSubscription.stop();
-          deletionSubscription.stop();
-        };
-      } catch (error) {
+      return () => {
+        draftSubscription.stop();
+        publishedSubscription.stop();
+        deletionSubscription.stop();
+      };
+          } catch (error) {
         console.error('Longform: Error loading Nostr content:', error);
-        logMobileError(error, 'loadNostrContent');
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         setLoadError(errorMessage);
         setIsLoading(false);
         setIsLoadingPublished(false);
       }
-    };
+  };
 
-    loadNostrContent();
-  }, [ndk, isAuthenticated]);
+  loadNostrContent();
+}, [ndk, isAuthenticated]);
 
   const handleCreateDraft = async () => {
     if (!ndk || !isAuthenticated) {
@@ -457,7 +384,6 @@ export default function Longform() {
       router.push(`/editor/${tempId}`);
     } catch (error) {
       console.error('Longform: Error creating new draft:', error);
-      logMobileError(error, 'handleCreateDraft');
       toast.error('Failed to create new draft. Please try again.');
     }
   };
@@ -493,11 +419,10 @@ export default function Longform() {
         setDrafts(drafts.filter(draft => draft.id !== id));
         
         toast.success('Draft deleted from Nostr');
-      } catch (error) {
-        console.error('Longform: Error deleting draft:', error);
-        logMobileError(error, 'handleDeleteDraft');
-        toast.error('Failed to delete draft. Please try again.');
-      }
+          } catch (error) {
+      console.error('Longform: Error deleting draft:', error);
+      toast.error('Failed to delete draft. Please try again.');
+    }
     }
   };
 
@@ -683,179 +608,126 @@ export default function Longform() {
         </div>
       )}
 
-      {/* Mobile Debug Panel */}
-      {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
-        <div className="debug-panel">
-          <button 
-            onClick={() => setShowDebugPanel(!showDebugPanel)}
-            className="debug-toggle"
-          >
-            {showDebugPanel ? 'Hide' : 'Show'} Debug Info
-          </button>
-          {showDebugPanel && (
-            <div className="debug-content">
-              <div className="debug-item">
-                <strong>Connection:</strong> {isConnected ? '✅ Connected' : '❌ Disconnected'}
-              </div>
-              <div className="debug-item">
-                <strong>Authenticated:</strong> {isAuthenticated ? '✅ Yes' : '❌ No'}
-              </div>
-              <div className="debug-item">
-                <strong>Window.nostr:</strong> {window.nostr ? '✅ Available' : '❌ Not Available'}
-              </div>
-              <div className="debug-item">
-                <strong>User:</strong> {currentUser ? currentUser.npub?.slice(0, 20) + '...' : 'None'}
-              </div>
-              <div className="debug-item">
-                <strong>Draft Events:</strong> {eventsRef.current.length}
-              </div>
-              <div className="debug-item">
-                <strong>Published Events:</strong> {publishedEventsRef.current.length}
-              </div>
-              <div className="debug-item">
-                <strong>Deletion Events:</strong> {deletionEventsRef.current.length}
-              </div>
-              <div className="debug-item">
-                <strong>Mobile Errors:</strong> {JSON.parse(localStorage.getItem(STORAGE_KEYS.MOBILE_ERRORS) || '[]').length}
-                <button onClick={clearMobileErrors} className="clear-errors-button">Clear</button>
-                <button onClick={viewMobileErrors} className="view-errors-button">View</button>
-              </div>
-              <div className="debug-item">
-                <strong>Available Storage:</strong> {Math.round(getAvailableStorage() / 1024)}KB
-                <button onClick={handleStorageCleanup} className="cleanup-storage-button">Cleanup Storage</button>
-              </div>
-              <div className="debug-item">
-                <button onClick={checkAuth} className="check-auth-button">Check Auth</button>
-                <button onClick={retryLoad} className="retry-load-button">Retry Load</button>
-              </div>
-            </div>
-          )}
+
+
+      {/* Global Loading Spinner */}
+      {(isLoading || isLoadingPublished) && (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading kinds 30023 and 30024...</p>
         </div>
       )}
 
-      {/* Drafts Section */}
-      <div className="content-section">
-        <div className="section-header">
-          <h2 className="section-title">Drafts ({drafts.length})</h2>
-          <button onClick={handleCreateDraft} className="new-draft-button" disabled={isLoading}>
-            <PlusIcon />
-          </button>
-        </div>
-        {isLoading ? (
-          <div className="loading-container">
-            <div className="loading-spinner"></div>
-            {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
-              <p>Loading drafts... This may take longer on mobile devices.</p>
-            )}
-          </div>
-        ) : (
-          <div className="draft-list">
-            {drafts.map((draft) => (
-              <div
-                key={draft.id}
-                className="draft-item"
-                onClick={() => router.push(`/editor/${draft.id}`)}
-              >
-                <div className="draft-content">
-                  <div className="draft-info">
-                    <div className="draft-title">
-                      {draft.title}
+      {/* Drafts and Published Sections - only show when loading is complete */}
+      {(!isLoading && !isLoadingPublished) && (
+        <>
+          {/* Drafts Section */}
+          <div className="content-section">
+            <div className="section-header">
+              <h2 className="section-title">Drafts ({drafts.length})</h2>
+              <button onClick={handleCreateDraft} className="new-draft-button" disabled={isLoading}>
+                <PlusIcon />
+              </button>
+            </div>
+            <div className="draft-list">
+              {drafts.map((draft) => (
+                <div
+                  key={draft.id}
+                  className="draft-item"
+                  onClick={() => router.push(`/editor/${draft.id}`)}
+                >
+                  <div className="draft-content">
+                    <div className="draft-info">
+                      <div className="draft-title">
+                        {draft.title}
+                      </div>
+                      <div className="draft-date">
+                        Last modified: {new Date(draft.lastModified).toLocaleDateString('en-US', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          year: '2-digit'
+                        })} {new Date(draft.lastModified).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </div>
                     </div>
-                    <div className="draft-date">
-                      Last modified: {new Date(draft.lastModified).toLocaleDateString('en-US', {
-                        month: 'numeric',
-                        day: 'numeric',
-                        year: '2-digit'
-                      })} {new Date(draft.lastModified).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      })}
-                    </div>
+                    <button
+                      onClick={(e) => handleDeleteDraft(draft.id, draft.title, e)}
+                      className="delete-button"
+                    >
+                      <TrashIcon />
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => handleDeleteDraft(draft.id, draft.title, e)}
-                    className="delete-button"
-                  >
-                    <TrashIcon />
-                  </button>
                 </div>
-              </div>
-            ))}
-            {drafts.length === 0 && !isLoading && (
-              <div className="empty-state">
-                <p>No drafts yet. Click the + button to create your first draft.</p>
-              </div>
-            )}
+              ))}
+              {drafts.length === 0 && (
+                <div className="empty-state">
+                  <p>No drafts yet. Click the + button to create your first draft.</p>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Published Section */}
-      <div className="content-section">
-        <div className="section-header">
-          <h2 className="section-title">Published ({publishedNotes.length})</h2>
-        </div>
-        {isLoadingPublished ? (
-          <div className="loading-container">
-            <div className="loading-spinner"></div>
-            {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
-              <p>Loading published articles... This may take longer on mobile devices.</p>
-            )}
-          </div>
-        ) : (
-          <div className="published-list">
-            {publishedNotes.map((note) => (
-              <div
-                key={note.id}
-                className="published-item"
-                onClick={() => handleViewPublished(note.id)}
-              >
-                <div className="published-content">
-                  <div className="published-info">
-                    <div className="published-title">
-                      {note.title}
-                    </div>
-                    <div className="published-dates">
-                      <div className="last-modified-date">
-                        Last Modified: {new Date(note.createdAt).toLocaleDateString('en-US', {
-                          month: 'numeric',
-                          day: 'numeric',
-                          year: '2-digit'
-                        })} {new Date(note.createdAt).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit'
-                        })}
+          {/* Published Section */}
+          <div className="content-section">
+            <div className="section-header">
+              <h2 className="section-title">Published ({publishedNotes.length})</h2>
+            </div>
+            <div className="published-list">
+              {publishedNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className="published-item"
+                  onClick={() => handleViewPublished(note.id)}
+                >
+                  <div className="published-content">
+                    <div className="published-info">
+                      <div className="published-title">
+                        {note.title}
                       </div>
-                      <div className="published-date-info">
-                        Published: {new Date(note.publishedAt).toLocaleDateString('en-US', {
-                          month: 'numeric',
-                          day: 'numeric',
-                          year: '2-digit'
-                        })} {new Date(note.publishedAt).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit'
-                        })}
+                      <div className="published-dates">
+                        <div className="last-modified-date">
+                          Last Modified: {new Date(note.createdAt).toLocaleDateString('en-US', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            year: '2-digit'
+                          })} {new Date(note.createdAt).toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                        <div className="published-date-info">
+                          Published: {new Date(note.publishedAt).toLocaleDateString('en-US', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            year: '2-digit'
+                          })} {new Date(note.publishedAt).toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </div>
                       </div>
                     </div>
+                    <button
+                      onClick={(e) => handleContextMenu(e, note.id)}
+                      className="menu-button"
+                      title="More options"
+                    >
+                      <EllipsisHorizontalIcon />
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => handleContextMenu(e, note.id)}
-                    className="menu-button"
-                    title="More options"
-                  >
-                    <EllipsisHorizontalIcon />
-                  </button>
                 </div>
-              </div>
-            ))}
-            {publishedNotes.length === 0 && !isLoadingPublished && (
-              <div className="empty-state">
-                <p>No published notes yet. Create a draft and publish it to see it here.</p>
-              </div>
-            )}
+              ))}
+              {publishedNotes.length === 0 && (
+                <div className="empty-state">
+                  <p>No published notes yet. Create a draft and publish it to see it here.</p>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Context Menu */}
       {contextMenu.visible && (
