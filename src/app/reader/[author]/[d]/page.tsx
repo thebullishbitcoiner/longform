@@ -549,7 +549,8 @@ export default function BlogPost() {
     }
   };
 
-  // Highlighting functions
+
+
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
@@ -559,9 +560,9 @@ export default function BlogPost() {
     }
 
     const range = selection.getRangeAt(0);
-    const selectedText = selection.toString().trim();
+    const selectedTextString = selection.toString().trim();
     
-    if (selectedText.length === 0) {
+    if (selectedTextString.length === 0) {
       setShowContextMenu(false);
       setSelectedText(null);
       return;
@@ -575,45 +576,56 @@ export default function BlogPost() {
     }
 
     // For mobile devices, ensure we have a valid selection
-    if (selectedText.length < 1) {
+    if (selectedTextString.length < 1) {
       setShowContextMenu(false);
       setSelectedText(null);
       return;
     }
 
-    // Get the position for the context menu
-    const rect = range.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    
-    // Calculate initial position
-    let x = rect.left + rect.width / 2;
-    let y = rect.top - 10;
-    
-    // Ensure the context menu stays within viewport bounds
-    const menuWidth = 120; // Approximate menu width
-    const menuHeight = 40; // Approximate menu height
-    
-    if (x + menuWidth / 2 > viewportWidth) {
-      x = viewportWidth - menuWidth / 2 - 10;
-    } else if (x - menuWidth / 2 < 0) {
-      x = menuWidth / 2 + 10;
-    }
-    
-    if (y - menuHeight < 0) {
-      y = rect.bottom + 10;
-    }
-    
-    setContextMenuPosition({ x, y });
+    // On mobile, show floating action bar. On desktop, show positioned context menu
+    if (isMobile) {
+      setSelectedText({
+        text: selectedTextString,
+        startOffset: range.startOffset,
+        endOffset: range.endOffset,
+        container: range.commonAncestorContainer
+      });
+      setShowContextMenu(true);
+    } else {
+      // Get the position for the context menu (desktop only)
+      const rect = range.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      
+      // Calculate initial position
+      let x = rect.left + rect.width / 2;
+      let y = rect.top - 10;
+      
+      // Ensure the context menu stays within viewport bounds
+      const menuWidth = 120; // Approximate menu width
+      const menuHeight = 40; // Approximate menu height
+      
+      if (x + menuWidth / 2 > viewportWidth) {
+        x = viewportWidth - menuWidth / 2 - 10;
+      } else if (x - menuWidth / 2 < 0) {
+        x = menuWidth / 2 + 10;
+      }
+      
+      if (y - menuHeight < 0) {
+        y = rect.bottom + 10;
+      }
+      
+      setContextMenuPosition({ x, y });
 
-    setSelectedText({
-      text: selectedText,
-      startOffset: range.startOffset,
-      endOffset: range.endOffset,
-      container: range.commonAncestorContainer
-    });
+      setSelectedText({
+        text: selectedTextString,
+        startOffset: range.startOffset,
+        endOffset: range.endOffset,
+        container: range.commonAncestorContainer
+      });
 
-    setShowContextMenu(true);
-  }, []);
+      setShowContextMenu(true);
+    }
+  }, [isMobile]);
 
   const handleMouseUp = useCallback(() => {
     // Small delay to ensure selection is complete
@@ -644,40 +656,45 @@ export default function BlogPost() {
   }, [showContextMenu]);
 
   const handleContextMenu = useCallback((event: MouseEvent) => {
-    // Only handle context menu on mobile devices
-    if (!isMobile) {
-      return;
+    // Prevent native context menu on mobile devices
+    if (isMobile) {
+      event.preventDefault();
     }
-
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
-      return;
-    }
-
-    const selectedText = selection.toString().trim();
-    if (selectedText.length === 0) {
-      return;
-    }
-
-    // Check if selection is within the post content
-    if (!postContentRef.current?.contains(selection.anchorNode)) {
-      return;
-    }
-
-    // Store the selected text for later use
-    const range = selection.getRangeAt(0);
-    setSelectedText({
-      text: selectedText,
-      startOffset: range.startOffset,
-      endOffset: range.endOffset,
-      container: range.commonAncestorContainer
-    });
-
-    // Show our custom context menu instead of the native one
-    event.preventDefault();
-    setContextMenuPosition({ x: event.clientX, y: event.clientY });
-    setShowContextMenu(true);
   }, [isMobile]);
+
+  // Handle touch events for mobile text selection
+  const handleTouchStart = useCallback(() => {
+    // Clear any existing selection when starting a new touch
+    if (showContextMenu) {
+      setShowContextMenu(false);
+      setSelectedText(null);
+    }
+  }, [showContextMenu]);
+
+  const handleTouchEnd = useCallback(() => {
+    // For mobile devices, check for text selection after a delay
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) {
+        const selectedText = selection.toString().trim();
+        if (selectedText.length > 0 && postContentRef.current?.contains(selection.anchorNode)) {
+          const range = selection.getRangeAt(0);
+          
+          setSelectedText({
+            text: selectedText,
+            startOffset: range.startOffset,
+            endOffset: range.endOffset,
+            container: range.commonAncestorContainer
+          });
+          
+          // Show the floating action bar instead of context menu
+          setShowContextMenu(true);
+        }
+      }
+    }, 300); // Delay to allow selection to complete
+  }, []);
+
+
 
 
 
@@ -746,14 +763,25 @@ export default function BlogPost() {
     document.addEventListener('click', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('contextmenu', handleContextMenu);
+    
+    // Add touch events for mobile
+    if (isMobile) {
+      document.addEventListener('touchstart', handleTouchStart);
+      document.addEventListener('touchend', handleTouchEnd);
+    }
 
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('contextmenu', handleContextMenu);
+      
+      if (isMobile) {
+        document.removeEventListener('touchstart', handleTouchStart);
+        document.removeEventListener('touchend', handleTouchEnd);
+      }
     };
-  }, [handleMouseUp, handleClickOutside, handleKeyDown, handleContextMenu]);
+  }, [handleMouseUp, handleClickOutside, handleKeyDown, handleContextMenu, isMobile, handleTouchStart, handleTouchEnd]);
 
   // Mark post as read when end of content is reached (only if authenticated)
   useEffect(() => {
@@ -1128,31 +1156,51 @@ export default function BlogPost() {
         </div>
       )}
 
-                    {/* Highlight Context Menu */}
-        {showContextMenu && selectedText && (
-          <div 
-            className={styles.contextMenu}
-            style={{
-              left: `${contextMenuPosition.x}px`,
-              top: `${contextMenuPosition.y}px`
-            }}
-          >
-            {isAuthenticated ? (
-              <button 
-                className={styles.contextMenuButton}
-                onClick={createHighlight}
-                disabled={isCreatingHighlight}
-              >
-                <PencilIcon className={styles.contextMenuIcon} />
-                {isCreatingHighlight ? 'Creating...' : 'Highlight'}
-              </button>
-            ) : (
-              <div className={styles.contextMenuMessage}>
-                Please log in to create highlights
-              </div>
-            )}
-          </div>
-        )}
+                           {/* Highlight Context Menu - Desktop */}
+       {showContextMenu && selectedText && !isMobile && (
+         <div 
+           className={styles.contextMenu}
+           style={{
+             left: `${contextMenuPosition.x}px`,
+             top: `${contextMenuPosition.y}px`
+           }}
+         >
+           {isAuthenticated ? (
+             <button 
+               className={styles.contextMenuButton}
+               onClick={createHighlight}
+               disabled={isCreatingHighlight}
+             >
+               <PencilIcon className={styles.contextMenuIcon} />
+               {isCreatingHighlight ? 'Creating...' : 'Highlight'}
+             </button>
+           ) : (
+             <div className={styles.contextMenuMessage}>
+               Please log in to create highlights
+             </div>
+           )}
+         </div>
+       )}
+
+       {/* Floating Action Bar - Mobile */}
+       {showContextMenu && selectedText && isMobile && (
+         <div className={styles.floatingActionBar}>
+           {isAuthenticated ? (
+             <button 
+               className={styles.floatingActionButton}
+               onClick={createHighlight}
+               disabled={isCreatingHighlight}
+             >
+               <PencilIcon className={styles.floatingActionIcon} />
+               {isCreatingHighlight ? 'Creating...' : 'Highlight'}
+             </button>
+           ) : (
+             <div className={styles.floatingActionMessage}>
+               Please log in to create highlights
+             </div>
+           )}
+         </div>
+       )}
     </div>
   );
 } 
