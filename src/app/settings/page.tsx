@@ -534,50 +534,48 @@ export default function SettingsPage() {
                     <div className="relays-list">
                         {relayList.length > 0 && (
                             relayList.map((relay, index) => (
-                                <div key={index} className="relay-item">
-                                    <div className="relay-info">
-                                        <span className="relay-url">{relay.url}</span>
-                                        <div className="permission-badges">
-                                            {relay.read && <span className="permission-badge read">Read</span>}
-                                            {relay.write && <span className="permission-badge write">Write</span>}
-                                        </div>
-                                    </div>
-                                    <div className="relay-actions">
-                                        <div className="permission-toggles">
-                                            <label className="permission-toggle">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={relay.read}
-                                                    onChange={(e) => updateRelayListPermissions(relay.url, e.target.checked, relay.write)}
-                                                />
-                                                Read
-                                            </label>
-                                            <label className="permission-toggle">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={relay.write}
-                                                    onChange={(e) => updateRelayListPermissions(relay.url, relay.read, e.target.checked)}
-                                                />
-                                                Write
-                                            </label>
-                                        </div>
-                                        <button
-                                            onClick={() => handleTestRelayConnection(relay.url)}
-                                            disabled={isLoading}
-                                            className="test-button"
-                                            title="Test connection"
-                                        >
-                                            Test
-                                        </button>
-                                        <button
-                                            onClick={() => removeRelayFromList(relay.url)}
-                                            className="remove-button"
-                                            title="Remove relay"
-                                        >
-                                            <TrashIcon />
-                                        </button>
-                                    </div>
-                                </div>
+                                                                 <div key={index} className="relay-item">
+                                     <div className="relay-info">
+                                         <span className="relay-url">{relay.url}</span>
+                                     </div>
+                                     <div className="relay-controls">
+                                         <div className="permission-toggles">
+                                             <label className="permission-toggle">
+                                                 <input
+                                                     type="checkbox"
+                                                     checked={relay.read}
+                                                     onChange={(e) => updateRelayListPermissions(relay.url, e.target.checked, relay.write)}
+                                                 />
+                                                 Read
+                                             </label>
+                                             <label className="permission-toggle">
+                                                 <input
+                                                     type="checkbox"
+                                                     checked={relay.write}
+                                                     onChange={(e) => updateRelayListPermissions(relay.url, relay.read, e.target.checked)}
+                                                 />
+                                                 Write
+                                             </label>
+                                         </div>
+                                         <div className="relay-actions">
+                                             <button
+                                                 onClick={() => handleTestRelayConnection(relay.url)}
+                                                 disabled={isLoading}
+                                                 className="test-button"
+                                                 title="Test connection"
+                                             >
+                                                 Test
+                                             </button>
+                                             <button
+                                                 onClick={() => removeRelayFromList(relay.url)}
+                                                 className="remove-button"
+                                                 title="Remove relay"
+                                             >
+                                                 <TrashIcon />
+                                             </button>
+                                         </div>
+                                     </div>
+                                 </div>
                             ))
                         )}
                     </div>
