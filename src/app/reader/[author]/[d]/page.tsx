@@ -94,11 +94,8 @@ export default function BlogPost() {
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const postContentRef = useRef<HTMLDivElement>(null);
   
-  // Mobile long-press detection
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isLongPressRef = useRef(false);
+  // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
-  const [showMobileHighlightButton, setShowMobileHighlightButton] = useState(false);
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -623,38 +620,7 @@ export default function BlogPost() {
     setTimeout(handleTextSelection, 10);
   }, [handleTextSelection]);
 
-  const handleTouchEnd = useCallback(() => {
-    // For mobile devices, use a longer delay to ensure selection is complete
-    setTimeout(handleTextSelection, 100);
-  }, [handleTextSelection]);
 
-  const handleTouchStart = useCallback(() => {
-    // Only enable long press highlighting on mobile when highlight mode is enabled
-    if (!isMobile || !showMobileHighlightButton) {
-      return;
-    }
-    
-    // Clear any existing long press timer
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-    }
-    
-    // Set a timer for long press (500ms)
-    longPressTimerRef.current = setTimeout(() => {
-      isLongPressRef.current = true;
-      // On long press, try to show context menu
-      handleTextSelection();
-    }, 500);
-  }, [handleTextSelection, isMobile, showMobileHighlightButton]);
-
-  const handleTouchMove = useCallback(() => {
-    // Cancel long press if user moves finger
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    isLongPressRef.current = false;
-  }, []);
 
   const handleClickOutside = useCallback((event: MouseEvent) => {
     if (showContextMenu) {
@@ -676,6 +642,44 @@ export default function BlogPost() {
       window.getSelection()?.removeAllRanges();
     }
   }, [showContextMenu]);
+
+  const handleContextMenu = useCallback((event: MouseEvent) => {
+    // Only handle context menu on mobile devices
+    if (!isMobile) {
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      return;
+    }
+
+    const selectedText = selection.toString().trim();
+    if (selectedText.length === 0) {
+      return;
+    }
+
+    // Check if selection is within the post content
+    if (!postContentRef.current?.contains(selection.anchorNode)) {
+      return;
+    }
+
+    // Store the selected text for later use
+    const range = selection.getRangeAt(0);
+    setSelectedText({
+      text: selectedText,
+      startOffset: range.startOffset,
+      endOffset: range.endOffset,
+      container: range.commonAncestorContainer
+    });
+
+    // Show our custom context menu instead of the native one
+    event.preventDefault();
+    setContextMenuPosition({ x: event.clientX, y: event.clientY });
+    setShowContextMenu(true);
+  }, [isMobile]);
+
+
 
   const createHighlight = async () => {
     if (!selectedText || !post || !isAuthenticated) {
@@ -739,26 +743,17 @@ export default function BlogPost() {
   // Add event listeners for text selection
   useEffect(() => {
     document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchend', handleTouchEnd);
-    document.addEventListener('touchstart', handleTouchStart);
-    document.addEventListener('touchmove', handleTouchMove);
     document.addEventListener('click', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('contextmenu', handleContextMenu);
 
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('touchstart', handleTouchStart);
-      document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
-      
-      // Clean up any existing timers
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-      }
+      document.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [handleMouseUp, handleTouchEnd, handleTouchStart, handleTouchMove, handleClickOutside, handleKeyDown]);
+  }, [handleMouseUp, handleClickOutside, handleKeyDown, handleContextMenu]);
 
   // Mark post as read when end of content is reached (only if authenticated)
   useEffect(() => {
@@ -965,23 +960,7 @@ export default function BlogPost() {
               </div>
             )}
             
-            {/* Mobile Highlight Button */}
-            {isMobile && isAuthenticated && (
-              <div className={styles.mobileHighlightButton}>
-                <button 
-                  className={`${styles.mobileHighlightToggle} ${showMobileHighlightButton ? styles.active : ''}`}
-                  onClick={() => setShowMobileHighlightButton(!showMobileHighlightButton)}
-                >
-                  <PencilIcon className={styles.mobileHighlightIcon} />
-                  {showMobileHighlightButton ? 'Cancel' : 'Highlight'}
-                </button>
-                {showMobileHighlightButton && (
-                  <div className={styles.mobileHighlightInstructions}>
-                    Long press on text to highlight it
-                  </div>
-                )}
-              </div>
-            )}
+
             
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -1149,31 +1128,31 @@ export default function BlogPost() {
         </div>
       )}
 
-      {/* Highlight Context Menu */}
-      {showContextMenu && selectedText && (
-        <div 
-          className={styles.contextMenu}
-          style={{
-            left: `${contextMenuPosition.x}px`,
-            top: `${contextMenuPosition.y}px`
-          }}
-        >
-          {isAuthenticated ? (
-            <button 
-              className={styles.contextMenuButton}
-              onClick={createHighlight}
-              disabled={isCreatingHighlight}
-            >
-              <PencilIcon className={styles.contextMenuIcon} />
-              {isCreatingHighlight ? 'Creating...' : 'Highlight'}
-            </button>
-          ) : (
-            <div className={styles.contextMenuMessage}>
-              Please log in to create highlights
-            </div>
-          )}
-        </div>
-      )}
+                    {/* Highlight Context Menu */}
+        {showContextMenu && selectedText && (
+          <div 
+            className={styles.contextMenu}
+            style={{
+              left: `${contextMenuPosition.x}px`,
+              top: `${contextMenuPosition.y}px`
+            }}
+          >
+            {isAuthenticated ? (
+              <button 
+                className={styles.contextMenuButton}
+                onClick={createHighlight}
+                disabled={isCreatingHighlight}
+              >
+                <PencilIcon className={styles.contextMenuIcon} />
+                {isCreatingHighlight ? 'Creating...' : 'Highlight'}
+              </button>
+            ) : (
+              <div className={styles.contextMenuMessage}>
+                Please log in to create highlights
+              </div>
+            )}
+          </div>
+        )}
     </div>
   );
 } 
