@@ -93,29 +93,16 @@ export default function Longform() {
       try {
         console.log('Longform: Attempting to load Nostr content...');
 
-        // Wait for window.nostr to be available
-        let nostr = window.nostr;
-        let attempts = 0;
-        const maxAttempts = 10;
-        
-        while (!nostr && attempts < maxAttempts) {
-          console.log(`Longform: Waiting for window.nostr (attempt ${attempts + 1}/${maxAttempts})`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-          nostr = window.nostr;
-          attempts++;
-        }
-        
-        if (!nostr) {
-          console.error('Longform: window.nostr not available after waiting');
+        // Use the current user's pubkey from context instead of calling window.nostr.getPublicKey()
+        if (!currentUser?.pubkey) {
+          console.error('Longform: No current user pubkey available');
           setIsLoading(false);
           setIsLoadingPublished(false);
           return;
         }
         
-        console.log('Longform: window.nostr is available, proceeding with load');
-        
-        const pubkey = await nostr.getPublicKey();
-        console.log('Longform: Got pubkey:', pubkey);
+        const pubkey = currentUser.pubkey;
+        console.log('Longform: Using pubkey from context:', pubkey);
         
         console.log('Longform: Setting up Nostr subscriptions...');
         
@@ -348,27 +335,27 @@ export default function Longform() {
           
           console.log(`Longform: Published notes: ${sortedPublishedNotes.length}`);
           
-                            setPublishedNotes(sortedPublishedNotes);
+          setPublishedNotes(sortedPublishedNotes);
           setIsLoadingPublished(false);
           console.log(`Longform: Loading complete! Found ${finalDrafts.length} drafts and ${sortedPublishedNotes.length} published articles`);
-      }, timeoutDuration);
+        }, timeoutDuration);
 
-      return () => {
-        draftSubscription.stop();
-        publishedSubscription.stop();
-        deletionSubscription.stop();
-      };
-          } catch (error) {
+        return () => {
+          draftSubscription.stop();
+          publishedSubscription.stop();
+          deletionSubscription.stop();
+        };
+      } catch (error) {
         console.error('Longform: Error loading Nostr content:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         setLoadError(errorMessage);
         setIsLoading(false);
         setIsLoadingPublished(false);
       }
-  };
+    };
 
-  loadNostrContent();
-}, [ndk, isAuthenticated]);
+    loadNostrContent();
+  }, [ndk, isAuthenticated, currentUser?.pubkey]);
 
   const handleCreateDraft = async () => {
     if (!ndk || !isAuthenticated) {

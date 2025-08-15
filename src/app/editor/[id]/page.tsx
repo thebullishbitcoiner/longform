@@ -41,7 +41,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [lastDraft, setLastDraft] = useState<Draft | null>(null);
   const router = useRouter();
   const { id } = use(params);
-  const { ndk, isConnected, isAuthenticated } = useNostr();
+  const { ndk, isConnected, isAuthenticated, currentUser } = useNostr();
   const editorRef = useRef<EditorRef | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isWidescreen = useMediaQuery('(min-width: 1280px)');
@@ -118,17 +118,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         }
 
         // Load existing draft from Nostr
-        if (ndk && isAuthenticated) {
+        if (ndk && isAuthenticated && currentUser?.pubkey) {
           try {
-            const nostr = window.nostr;
-            if (!nostr) {
-              console.log('Editor: No Nostr extension found');
-              router.push('/');
-              return;
-            }
-
-            const pubkey = await nostr.getPublicKey();
-            console.log('Editor: User pubkey:', pubkey);
+            const pubkey = currentUser.pubkey;
+            console.log('Editor: User pubkey from context:', pubkey);
             
             // Query the specific event from Nostr
             console.log('Editor: Querying event from Nostr...');
@@ -183,7 +176,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     };
 
     loadDraft();
-  }, [id, router, ndk, isAuthenticated]);
+  }, [id, router, ndk, isAuthenticated, currentUser?.pubkey]);
 
   // Handle restore modal actions
   const handleRestoreDraft = () => {
@@ -221,33 +214,28 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   const signer: NostrSigner = {
     getPublicKey: async () => {
-      if (!isAuthenticated) {
+      if (!isAuthenticated || !currentUser?.pubkey) {
         throw new Error('Not authenticated. Please log in with nostr-login.');
       }
-      const nostr = window.nostr;
-      if (!nostr) {
-        throw new Error('Nostr extension not found. Please log in with nostr-login.');
-      }
-      return nostr.getPublicKey();
+      return currentUser.pubkey;
     },
     signEvent: async (event) => {
-      if (!isAuthenticated) {
+      if (!isAuthenticated || !currentUser?.pubkey) {
         throw new Error('Not authenticated. Please log in with nostr-login.');
       }
       const nostr = window.nostr;
       if (!nostr) {
         throw new Error('Nostr extension not found. Please log in with nostr-login.');
       }
-      const pubkey = await nostr.getPublicKey();
       const { sig } = await nostr.signEvent({
         ...event,
-        pubkey,
+        pubkey: currentUser.pubkey,
         id: '', // This will be computed by the uploader
         sig: ''
       });
       return {
         ...event,
-        pubkey,
+        pubkey: currentUser.pubkey,
         id: '', // This will be computed by the uploader
         sig
       };

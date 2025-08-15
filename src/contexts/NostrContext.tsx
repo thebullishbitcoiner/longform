@@ -1,7 +1,7 @@
 'use client';
 
 import NDK from '@nostr-dev-kit/ndk';
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { isWhitelisted as checkWhitelist, ALPHA_WHITELIST } from '@/config/whitelist';
 import { NostrLoginSigner } from '@/utils/nostrLoginSigner';
 
@@ -122,6 +122,11 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isWhitelisted, setIsWhitelisted] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  
+  // Add refs to prevent multiple simultaneous authentication checks
+  const authCheckInProgressRef = useRef(false);
+  const lastAuthCheckRef = useRef<number>(0);
+  const authCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const logout = () => {
     console.log('🚪 Logging out user');
@@ -132,12 +137,28 @@ export function NostrProvider({ children }: NostrProviderProps) {
   };
 
   const checkAuthentication = async (): Promise<boolean> => {
+    // Prevent multiple simultaneous authentication checks
+    if (authCheckInProgressRef.current) {
+      console.log('🔐 Authentication check already in progress, skipping');
+      return isAuthenticated;
+    }
+
+    // Debounce rapid calls (minimum 1 second between checks)
+    const now = Date.now();
+    const timeSinceLastCheck = now - lastAuthCheckRef.current;
+    if (timeSinceLastCheck < 1000) {
+      console.log(`🔐 Authentication check debounced (${timeSinceLastCheck}ms since last check)`);
+      return isAuthenticated;
+    }
+
+    authCheckInProgressRef.current = true;
+    lastAuthCheckRef.current = now;
+
     try {
       // Check if window.nostr is available (nostr-login should provide this)
-      // Add retry logic for mobile devices where nostr-login might take longer to initialize
       let nostr = window.nostr;
       let attempts = 0;
-      const maxAttempts = 15; // More attempts for mobile
+      const maxAttempts = 10; // Reduced from 15 to prevent excessive waiting
       
       while (!nostr && attempts < maxAttempts) {
         console.log(`NDK Provider: Waiting for window.nostr (attempt ${attempts + 1}/${maxAttempts})`);
@@ -165,16 +186,16 @@ export function NostrProvider({ children }: NostrProviderProps) {
         return false;
       }
 
-              // Convert hex pubkey to npub format using bech32
-        let npub = pubkey; // Default fallback
-        try {
-          const { bech32 } = await import('bech32');
-          const words = bech32.toWords(Buffer.from(pubkey, 'hex'));
-          npub = bech32.encode('npub', words);
-        } catch (error) {
-          console.error('Error converting hex to npub:', error);
-          // Keep pubkey as fallback
-        }
+      // Convert hex pubkey to npub format using bech32
+      let npub = pubkey; // Default fallback
+      try {
+        const { bech32 } = await import('bech32');
+        const words = bech32.toWords(Buffer.from(pubkey, 'hex'));
+        npub = bech32.encode('npub', words);
+      } catch (error) {
+        console.error('Error converting hex to npub:', error);
+        // Keep pubkey as fallback
+      }
 
       // Check if we already have this user authenticated
       if (isAuthenticated && currentUser && currentUser.pubkey === pubkey) {
@@ -239,6 +260,8 @@ export function NostrProvider({ children }: NostrProviderProps) {
       setIsWhitelisted(false);
       setCurrentUser(null);
       return false;
+    } finally {
+      authCheckInProgressRef.current = false;
     }
   };
 
@@ -265,8 +288,14 @@ export function NostrProvider({ children }: NostrProviderProps) {
     // Set up an interval to periodically check connection status
     const interval = setInterval(checkConnection, 30000);
 
+    // Capture the current timeout ref value for cleanup
+    const currentTimeoutRef = authCheckTimeoutRef.current;
+
     return () => {
       clearInterval(interval);
+      if (currentTimeoutRef) {
+        clearTimeout(currentTimeoutRef);
+      }
     };
   }, []);
 
