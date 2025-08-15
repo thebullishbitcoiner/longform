@@ -290,6 +290,7 @@
   background-color: var(--bg-primary);
   border-radius: 0.5rem;
   border: 1px dashed var(--border);
+  margin-bottom: 1.5rem;
 }
 
 .loading-relays {

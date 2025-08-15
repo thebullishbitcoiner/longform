@@ -245,6 +245,9 @@ export default function SettingsPage() {
             const event = createRelayListEvent(relayList);
             event.tags.push(['client', 'Longform._']);
             
+            // Ensure the event is associated with the NDK instance
+            event.ndk = ndk;
+            
             await event.publish();
             toast.success('Relay list published to Nostr network');
         } catch (error) {
@@ -270,7 +273,7 @@ export default function SettingsPage() {
         setIsPublishing(true);
         try {
             // Create a NIP-37 preferred relays event (kind 30078)
-            const event = new NDKEvent();
+            const event = new NDKEvent(ndk);
             event.kind = 30078; // NIP-37 preferred relays kind
             event.created_at = Math.floor(Date.now() / 1000);
             event.tags.push(['client', 'Longform._']);
@@ -364,6 +367,27 @@ export default function SettingsPage() {
 
 
 
+    // Show full-page loading when either relay list is loading
+    if (isLoading || isLoadingRelayList) {
+        return (
+            <AuthGuard>
+                <main className="container">
+                    <div className="loading-container">
+                        <div className="loading-spinner"></div>
+                        <p>
+                            {isLoading && isLoadingRelayList 
+                                ? "Loading kinds 30078 and 10002 from Nostr network..." 
+                                : isLoading 
+                                ? "Loading kind 30078 (NIP-37 preferred relays) from Nostr network..." 
+                                : "Loading kind 10002 (NIP-65 relay list) from Nostr network..."
+                            }
+                        </p>
+                    </div>
+                </main>
+            </AuthGuard>
+        );
+    }
+
     return (
         <AuthGuard>
             <main className="container">
@@ -384,10 +408,7 @@ export default function SettingsPage() {
                         </button>
                     </div>
 
-                    {isLoading && (
-                        <p className="loading-relays">Loading preferred relays from Nostr network...</p>
-                    )}
-                    {!isLoading && preferredRelays.length === 0 && (
+                    {preferredRelays.length === 0 && (
                         <p className="no-relays">No preferred relays configured. Add some relays below.</p>
                     )}
 
@@ -471,7 +492,7 @@ export default function SettingsPage() {
 
                 <section className="settings-section">
                     <div className="section-header">
-                        <h2>Relay List</h2>
+                        <h2>Relay List ({relayList.length})</h2>
                         <button
                             onClick={() => setShowRelayListInfoModal(true)}
                             className="info-button"
@@ -481,10 +502,7 @@ export default function SettingsPage() {
                         </button>
                     </div>
 
-                    {isLoadingRelayList && (
-                        <p className="loading-relays">Loading relay list from Nostr network...</p>
-                    )}
-                    {!isLoadingRelayList && relayList.length === 0 && (
+                    {relayList.length === 0 && (
                         <p className="no-relays">No relay list configured. Add some relays below or sync from preferred relays.</p>
                     )}
 

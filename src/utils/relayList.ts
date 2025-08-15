@@ -27,7 +27,7 @@ export function createRelayListEvent(relays: RelayInfo[]): NDKEvent {
   
   relays.forEach(relay => {
     if (relay.read && relay.write) {
-      tags.push(['r', relay.url, 'readwrite']);
+      tags.push(['r', relay.url]); // Omit marker for read+write (default)
     } else if (relay.read) {
       tags.push(['r', relay.url, 'read']);
     } else if (relay.write) {
