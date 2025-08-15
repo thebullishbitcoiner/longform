@@ -8,6 +8,7 @@ A decentralized blogging platform built on Nostr protocol that allows users to:
 - Publish articles to Nostr network
 - Read content from other authors
 - Manage drafts and published posts
+- Highlight text in blog posts (NIP-84 compliant)
 
 ### Settings & Relay Management
 The platform includes a comprehensive settings page for managing relay preferences:
@@ -30,6 +31,25 @@ Publish relay preferences as Nostr events according to [NIP-65](https://github.c
 - **Cross-Sync**: Sync relay lists from preferred relays
 - **Local Storage**: Persistent storage of relay preferences
 - **Policy Management**: Set read/write permissions for each relay
+
+### Text Highlighting (NIP-84)
+The platform supports text highlighting in blog posts according to [NIP-84](https://github.com/nostr-protocol/nips/blob/master/84.md):
+
+#### How to Use
+1. **Select Text**: Click and drag to select any text in a blog post
+2. **Context Menu**: A context menu will appear with a "Highlight" option
+3. **Create Highlight**: Click "Highlight" to create a kind 9802 event
+4. **Authentication**: Must be logged in to create highlights
+
+#### Technical Details
+- **Event Kind**: 9802 (as specified in NIP-84)
+- **Content**: The selected text
+- **Tags**: 
+  - `e`: Reference to the highlighted post
+  - `p`: Reference to the post author
+  - `a`: Reference to the post as a longform article
+  - `start`/`end`: Position information (when available)
+- **Cross-Platform**: Highlights are stored on the Nostr network and can be accessed by other clients
 
 ## Getting Started
 

@@ -7,13 +7,14 @@ import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { ArrowLeftIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
 import NDK from '@nostr-dev-kit/ndk';
 import { resolveNip05 } from '@/utils/nostr';
 import Image from 'next/image';
+import { NDKEvent } from '@nostr-dev-kit/ndk';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -50,6 +51,18 @@ interface ReactionData {
   authorName?: string;
 }
 
+interface ContextMenuPosition {
+  x: number;
+  y: number;
+}
+
+interface TextSelection {
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  container: Node;
+}
+
 export default function BlogPost() {
   const params = useParams();
   const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce } = useBlog();
@@ -73,6 +86,13 @@ export default function BlogPost() {
   const [reactionData, setReactionData] = useState<ReactionData[]>([]);
   const [isLoadingReactions, setIsLoadingReactions] = useState(false);
   const endOfContentRef = useRef<HTMLDivElement>(null);
+  
+  // Highlighting state
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition>({ x: 0, y: 0 });
+  const [selectedText, setSelectedText] = useState<TextSelection | null>(null);
+  const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
+  const postContentRef = useRef<HTMLDivElement>(null);
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -515,6 +535,163 @@ export default function BlogPost() {
     }
   };
 
+  // Highlighting functions
+  const handleTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      setShowContextMenu(false);
+      setSelectedText(null);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const selectedText = selection.toString().trim();
+    
+    if (selectedText.length === 0) {
+      setShowContextMenu(false);
+      setSelectedText(null);
+      return;
+    }
+
+    // Check if selection is within the post content
+    if (!postContentRef.current?.contains(range.commonAncestorContainer)) {
+      setShowContextMenu(false);
+      setSelectedText(null);
+      return;
+    }
+
+    // Get the position for the context menu
+    const rect = range.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    
+    // Calculate initial position
+    let x = rect.left + rect.width / 2;
+    let y = rect.top - 10;
+    
+    // Ensure the context menu stays within viewport bounds
+    const menuWidth = 120; // Approximate menu width
+    const menuHeight = 40; // Approximate menu height
+    
+    if (x + menuWidth / 2 > viewportWidth) {
+      x = viewportWidth - menuWidth / 2 - 10;
+    } else if (x - menuWidth / 2 < 0) {
+      x = menuWidth / 2 + 10;
+    }
+    
+    if (y - menuHeight < 0) {
+      y = rect.bottom + 10;
+    }
+    
+    setContextMenuPosition({ x, y });
+
+    setSelectedText({
+      text: selectedText,
+      startOffset: range.startOffset,
+      endOffset: range.endOffset,
+      container: range.commonAncestorContainer
+    });
+
+    setShowContextMenu(true);
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    // Small delay to ensure selection is complete
+    setTimeout(handleTextSelection, 10);
+  }, [handleTextSelection]);
+
+  const handleClickOutside = useCallback((event: MouseEvent) => {
+    if (showContextMenu) {
+      const target = event.target as Element;
+      const contextMenu = document.querySelector(`.${styles.contextMenu}`);
+      
+      if (contextMenu && !contextMenu.contains(target)) {
+        setShowContextMenu(false);
+        setSelectedText(null);
+        window.getSelection()?.removeAllRanges();
+      }
+    }
+  }, [showContextMenu]);
+
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape' && showContextMenu) {
+      setShowContextMenu(false);
+      setSelectedText(null);
+      window.getSelection()?.removeAllRanges();
+    }
+  }, [showContextMenu]);
+
+  const createHighlight = async () => {
+    if (!selectedText || !post || !isAuthenticated) {
+      return;
+    }
+
+    // Clean the selected text to remove any HTML tags or extra whitespace
+    const cleanText = selectedText.text.replace(/\s+/g, ' ').trim();
+    if (cleanText.length === 0) {
+      return;
+    }
+
+    const ndkToUse = contextNdk || standaloneNdk;
+    if (!ndkToUse) {
+      console.error('No NDK available for creating highlight');
+      return;
+    }
+
+    setIsCreatingHighlight(true);
+
+    try {
+      // Create kind 9802 event according to NIP-84
+      const ndkEvent = new NDKEvent(ndkToUse);
+      ndkEvent.kind = 9802;
+      ndkEvent.content = cleanText;
+      ndkEvent.tags = [
+        ['e', post.id], // Reference to the highlighted post
+        ['p', post.pubkey], // Reference to the post author
+        ['a', `30023:${post.pubkey}:${post.id}`], // Reference to the post as a longform article
+        ['client', 'Longform._']
+      ];
+
+      // Add position information if available
+      if (selectedText.startOffset !== undefined && selectedText.endOffset !== undefined) {
+        ndkEvent.tags.push(['start', selectedText.startOffset.toString()]);
+        ndkEvent.tags.push(['end', selectedText.endOffset.toString()]);
+      }
+
+      ndkEvent.created_at = Math.floor(Date.now() / 1000);
+
+      // Publish the highlight event
+      await ndkEvent.publish();
+      
+      console.log('Highlight created successfully:', ndkEvent.id);
+      
+      // Show success message (you can replace this with a toast notification)
+      alert('Highlight created successfully!');
+      
+      // Clear selection and hide context menu
+      window.getSelection()?.removeAllRanges();
+      setShowContextMenu(false);
+      setSelectedText(null);
+      
+    } catch (error) {
+      console.error('Error creating highlight:', error);
+    } finally {
+      setIsCreatingHighlight(false);
+    }
+  };
+
+  // Add event listeners for text selection
+  useEffect(() => {
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('click', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleMouseUp, handleClickOutside, handleKeyDown]);
+
   // Mark post as read when end of content is reached (only if authenticated)
   useEffect(() => {
     if (!post || hasMarkedAsRead || !endOfContentRef.current || !isAuthenticated) return;
@@ -713,7 +890,7 @@ export default function BlogPost() {
             <div className={styles.summary}>{post.summary}</div>
           )}
 
-          <div className={styles.postContent}>
+          <div className={styles.postContent} ref={postContentRef}>
             {isLoadingAdditionalData && processedContent === post.content && (
               <div className={styles.processingIndicator}>
                 Processing content...
@@ -882,6 +1059,32 @@ export default function BlogPost() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Highlight Context Menu */}
+      {showContextMenu && selectedText && (
+        <div 
+          className={styles.contextMenu}
+          style={{
+            left: `${contextMenuPosition.x}px`,
+            top: `${contextMenuPosition.y}px`
+          }}
+        >
+          {isAuthenticated ? (
+            <button 
+              className={styles.contextMenuButton}
+              onClick={createHighlight}
+              disabled={isCreatingHighlight}
+            >
+              <PencilIcon className={styles.contextMenuIcon} />
+              {isCreatingHighlight ? 'Creating...' : 'Highlight'}
+            </button>
+          ) : (
+            <div className={styles.contextMenuMessage}>
+              Please log in to create highlights
+            </div>
+          )}
         </div>
       )}
     </div>
