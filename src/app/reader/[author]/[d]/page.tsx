@@ -629,7 +629,7 @@ export default function BlogPost() {
 
   const handleMouseUp = useCallback(() => {
     // Small delay to ensure selection is complete
-    setTimeout(handleTextSelection, 10);
+    setTimeout(handleTextSelection, 50);
   }, [handleTextSelection]);
 
 
@@ -638,8 +638,13 @@ export default function BlogPost() {
     if (showContextMenu) {
       const target = event.target as Element;
       const contextMenu = document.querySelector(`.${styles.contextMenu}`);
+      const floatingActionBar = document.querySelector(`.${styles.floatingActionBar}`);
       
-      if (contextMenu && !contextMenu.contains(target)) {
+      // Check if click is outside both context menu and floating action bar
+      const isOutsideContextMenu = !contextMenu || !contextMenu.contains(target);
+      const isOutsideFloatingBar = !floatingActionBar || !floatingActionBar.contains(target);
+      
+      if (isOutsideContextMenu && isOutsideFloatingBar) {
         setShowContextMenu(false);
         setSelectedText(null);
         window.getSelection()?.removeAllRanges();
@@ -656,11 +661,9 @@ export default function BlogPost() {
   }, [showContextMenu]);
 
   const handleContextMenu = useCallback((event: MouseEvent) => {
-    // Prevent native context menu on mobile devices
-    if (isMobile) {
-      event.preventDefault();
-    }
-  }, [isMobile]);
+    // Prevent native context menu on all devices to avoid flashing
+    event.preventDefault();
+  }, []);
 
   // Handle touch events for mobile text selection
   const handleTouchStart = useCallback(() => {
@@ -680,6 +683,8 @@ export default function BlogPost() {
         if (selectedText.length > 0 && postContentRef.current?.contains(selection.anchorNode)) {
           const range = selection.getRangeAt(0);
           
+          console.log('Mobile text selection detected:', selectedText);
+          
           setSelectedText({
             text: selectedText,
             startOffset: range.startOffset,
@@ -691,7 +696,7 @@ export default function BlogPost() {
           setShowContextMenu(true);
         }
       }
-    }, 300); // Delay to allow selection to complete
+    }, 500); // Longer delay for mobile to ensure selection is complete
   }, []);
 
 
@@ -699,21 +704,37 @@ export default function BlogPost() {
 
 
   const createHighlight = async () => {
+    console.log('createHighlight called', { selectedText, post, isAuthenticated });
+    
     if (!selectedText || !post || !isAuthenticated) {
+      console.log('Missing required data:', { 
+        hasSelectedText: !!selectedText, 
+        hasPost: !!post, 
+        isAuthenticated 
+      });
       return;
     }
 
     // Clean the selected text to remove any HTML tags or extra whitespace
     const cleanText = selectedText.text.replace(/\s+/g, ' ').trim();
     if (cleanText.length === 0) {
+      console.log('Selected text is empty after cleaning');
       return;
     }
 
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) {
       console.error('No NDK available for creating highlight');
+      alert('No connection available. Please try again.');
       return;
     }
+
+    console.log('Creating highlight with:', {
+      cleanText,
+      postId: post.id,
+      postPubkey: post.pubkey,
+      ndkType: contextNdk ? 'context' : 'standalone'
+    });
 
     setIsCreatingHighlight(true);
 
@@ -737,6 +758,13 @@ export default function BlogPost() {
 
       ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
+      console.log('Publishing highlight event:', {
+        kind: ndkEvent.kind,
+        content: ndkEvent.content,
+        tags: ndkEvent.tags,
+        created_at: ndkEvent.created_at
+      });
+
       // Publish the highlight event
       await ndkEvent.publish();
       
@@ -752,6 +780,7 @@ export default function BlogPost() {
       
     } catch (error) {
       console.error('Error creating highlight:', error);
+      alert(`Error creating highlight: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsCreatingHighlight(false);
     }

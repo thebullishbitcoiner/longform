@@ -806,4 +806,18 @@
   color: inherit;
 }
 
+/* Prevent native context menu */
+.postContent {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.postContent * {
+  -webkit-touch-callout: none;
+}
+
  
