@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, UserIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import { APP_VERSION } from '../config/version';
 import Link from 'next/link';
 import { useNostr } from '@/contexts/NostrContext';
+import Image from 'next/image';
 import './Header.css';
 
 const Header: React.FC = () => {
@@ -36,8 +37,25 @@ const Header: React.FC = () => {
         {isAuthenticated && (
           <button
             onClick={() => setIsMenuOpen(true)}
-            className="menu-button"
+            className="menu-container"
           >
+            {currentUser?.picture ? (
+              <Image
+                src={currentUser.picture}
+                alt={currentUser.displayName || currentUser.name || 'Profile'}
+                width={32}
+                height={32}
+                className="profile-picture"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+            ) : (
+              <div className="profile-picture-placeholder">
+                <UserIcon className="placeholder-icon" />
+              </div>
+            )}
             <Bars3Icon className="menu-icon" />
           </button>
         )}

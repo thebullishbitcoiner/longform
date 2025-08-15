@@ -86,6 +86,7 @@ interface UserProfile {
   nip05?: string;
   name?: string;
   displayName?: string;
+  picture?: string;
 }
 
 interface NostrContextType {
@@ -235,7 +236,8 @@ export function NostrProvider({ children }: NostrProviderProps) {
             npub: npub,
             nip05: profile?.nip05,
             name: profile?.name,
-            displayName: profile?.displayName
+            displayName: profile?.displayName,
+            picture: profile?.image
           };
           
           console.log('👤 Cached user profile:', userProfile);

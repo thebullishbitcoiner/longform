@@ -46,7 +46,7 @@ export function NostrLoginProvider() {
                 bunkers: 'nsec.app,highlighter.com',
                 perms: 'sign_event:1,sign_event:0',
                 darkMode: true,
-                noBanner: false
+                noBanner: true
               });
 
               console.log('✅ Nostr-login initialized successfully');
