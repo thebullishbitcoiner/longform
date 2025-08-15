@@ -140,11 +140,11 @@
 }
 
 .delete-button:hover svg {
-  color: #f87171;
+  color: #8b5cf6;
 }
 
 .view-button:hover svg {
-  color: #60a5fa;
+  color: #8b5cf6;
 }
 
 .empty-state {
@@ -320,7 +320,7 @@
   width: 2rem;
   height: 2rem;
   border: 2px solid var(--border);
-  border-top: 2px solid var(--text);
+  border-top: 2px solid #8b5cf6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -359,7 +359,7 @@
 }
 
 .share-button:hover svg {
-  color: #60a5fa;
+  color: #8b5cf6;
 }
 
 /* Menu Button Styles */
@@ -693,7 +693,7 @@
 }
 
 .clear-errors-button {
-  background-color: #dc3545;
+  background-color: #6b7280;
   color: white;
   border: none;
   border-radius: 0.25rem;
@@ -705,11 +705,11 @@
 }
 
 .clear-errors-button:hover {
-  background-color: #c82333;
+  background-color: #4b5563;
 }
 
 .view-errors-button {
-  background-color: #17a2b8;
+  background-color: #8b5cf6;
   color: white;
   border: none;
   border-radius: 0.25rem;
@@ -721,11 +721,11 @@
 }
 
 .view-errors-button:hover {
-  background-color: #138496;
+  background-color: #7c3aed;
 }
 
 .check-auth-button, .retry-load-button {
-  background-color: #28a745;
+  background-color: #8b5cf6;
   color: white;
   border: none;
   border-radius: 0.25rem;
@@ -737,7 +737,7 @@
 }
 
 .check-auth-button:hover, .retry-load-button:hover {
-  background-color: #218838;
+  background-color: #7c3aed;
 }
 
 /* Mobile-specific debug adjustments */
@@ -763,8 +763,8 @@
 
 /* Error Display Styles */
 .error-container {
-  background-color: #fee;
-  border: 1px solid #fcc;
+  background-color: #1f2937;
+  border: 1px solid #374151;
   border-radius: 0.5rem;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -772,13 +772,13 @@
 }
 
 .error-message {
-  color: #c33;
+  color: #6b7280;
   margin: 0 0 1rem 0;
   font-size: 0.875rem;
 }
 
 .retry-button {
-  background-color: #007bff;
+  background-color: #8b5cf6;
   color: white;
   border: none;
   border-radius: 0.375rem;
@@ -790,7 +790,7 @@
 }
 
 .retry-button:hover {
-  background-color: #0056b3;
+  background-color: #7c3aed;
 }
 
 .retry-button:active {

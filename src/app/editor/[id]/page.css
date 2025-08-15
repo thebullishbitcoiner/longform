@@ -390,7 +390,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
+  min-height: 20vh;
   gap: 1rem;
 }
 
@@ -398,7 +398,7 @@
   width: 2rem;
   height: 2rem;
   border: 2px solid var(--border);
-  border-top: 2px solid var(--text);
+  border-top: 2px solid #8b5cf6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

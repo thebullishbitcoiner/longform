@@ -184,7 +184,7 @@
 }
 
 .external-link {
-  color: #3b82f6;
+  color: #8b5cf6;
   text-decoration: none;
 }
 
@@ -233,8 +233,8 @@
 
 .relay-url-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 .policy-select {
@@ -249,7 +249,7 @@
 
 .policy-select:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: #8b5cf6;
 }
 
 .add-button {
@@ -371,7 +371,7 @@
 
 .policy-select-small:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: #8b5cf6;
 }
 
 .test-button {
@@ -563,12 +563,12 @@
 }
 
 .publish-button {
-  background-color: #2563eb;
+  background-color: #8b5cf6;
   color: white;
 }
 
 .publish-button:hover:not(:disabled) {
-  background-color: #1d4ed8;
+  background-color: #7c3aed;
 }
 
 .publish-button:disabled {
@@ -710,13 +710,13 @@
 }
 
 .clear-all-button {
-  background-color: #dc2626;
+  background-color: #6b7280;
   color: white;
-  border-color: #dc2626;
+  border-color: #6b7280;
 }
 
 .clear-all-button:hover {
-  background-color: #b91c1c;
+  background-color: #4b5563;
 }
 
 .refresh-button {

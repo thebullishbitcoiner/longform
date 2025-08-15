@@ -29,7 +29,7 @@
 }
 
 .backLink:hover {
-  color: #2563eb;
+  color: #8b5cf6;
 }
 
 .icon {
@@ -43,7 +43,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 50vh;
+  min-height: 20vh;
   color: rgb(161 161 170);
   gap: 1rem;
 }
@@ -52,7 +52,7 @@
   width: 2rem;
   height: 2rem;
   border: 2px solid rgb(39 39 42);
-  border-top-color: rgb(59 130 246);
+  border-top: 2px solid #8b5cf6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -300,23 +300,6 @@
     height: 100%;
     object-fit: cover;
   }
-}
-
-.postImage::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(0, 0, 0, 0.3) 0%,
-    rgba(0, 0, 0, 0.1) 50%,
-    rgba(0, 0, 0, 0.4) 100%
-  );
-  pointer-events: none;
-  z-index: 1;
 }
 
 .postContent {
