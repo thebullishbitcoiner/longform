@@ -93,6 +93,12 @@ export default function BlogPost() {
   const [selectedText, setSelectedText] = useState<TextSelection | null>(null);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const postContentRef = useRef<HTMLDivElement>(null);
+  
+  // Mobile long-press detection
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showMobileHighlightButton, setShowMobileHighlightButton] = useState(false);
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -105,6 +111,17 @@ export default function BlogPost() {
       });
     }
   }, [contextNdk, standaloneNdk]);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as unknown as { opera?: string }).opera || '';
+      const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+      setIsMobile(isMobileDevice);
+    };
+    
+    checkMobile();
+  }, []);
 
   const fetchReactionStats = useCallback(async (postId: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
@@ -560,6 +577,13 @@ export default function BlogPost() {
       return;
     }
 
+    // For mobile devices, ensure we have a valid selection
+    if (selectedText.length < 1) {
+      setShowContextMenu(false);
+      setSelectedText(null);
+      return;
+    }
+
     // Get the position for the context menu
     const rect = range.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
@@ -598,6 +622,39 @@ export default function BlogPost() {
     // Small delay to ensure selection is complete
     setTimeout(handleTextSelection, 10);
   }, [handleTextSelection]);
+
+  const handleTouchEnd = useCallback(() => {
+    // For mobile devices, use a longer delay to ensure selection is complete
+    setTimeout(handleTextSelection, 100);
+  }, [handleTextSelection]);
+
+  const handleTouchStart = useCallback(() => {
+    // Only enable long press highlighting on mobile when highlight mode is enabled
+    if (!isMobile || !showMobileHighlightButton) {
+      return;
+    }
+    
+    // Clear any existing long press timer
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    
+    // Set a timer for long press (500ms)
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      // On long press, try to show context menu
+      handleTextSelection();
+    }, 500);
+  }, [handleTextSelection, isMobile, showMobileHighlightButton]);
+
+  const handleTouchMove = useCallback(() => {
+    // Cancel long press if user moves finger
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    isLongPressRef.current = false;
+  }, []);
 
   const handleClickOutside = useCallback((event: MouseEvent) => {
     if (showContextMenu) {
@@ -682,15 +739,26 @@ export default function BlogPost() {
   // Add event listeners for text selection
   useEffect(() => {
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchend', handleTouchEnd);
+    document.addEventListener('touchstart', handleTouchStart);
+    document.addEventListener('touchmove', handleTouchMove);
     document.addEventListener('click', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
+      
+      // Clean up any existing timers
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
     };
-  }, [handleMouseUp, handleClickOutside, handleKeyDown]);
+  }, [handleMouseUp, handleTouchEnd, handleTouchStart, handleTouchMove, handleClickOutside, handleKeyDown]);
 
   // Mark post as read when end of content is reached (only if authenticated)
   useEffect(() => {
@@ -896,6 +964,25 @@ export default function BlogPost() {
                 Processing content...
               </div>
             )}
+            
+            {/* Mobile Highlight Button */}
+            {isMobile && isAuthenticated && (
+              <div className={styles.mobileHighlightButton}>
+                <button 
+                  className={`${styles.mobileHighlightToggle} ${showMobileHighlightButton ? styles.active : ''}`}
+                  onClick={() => setShowMobileHighlightButton(!showMobileHighlightButton)}
+                >
+                  <PencilIcon className={styles.mobileHighlightIcon} />
+                  {showMobileHighlightButton ? 'Cancel' : 'Highlight'}
+                </button>
+                {showMobileHighlightButton && (
+                  <div className={styles.mobileHighlightInstructions}>
+                    Long press on text to highlight it
+                  </div>
+                )}
+              </div>
+            )}
+            
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
