@@ -65,6 +65,22 @@ export class NostrLoginSigner implements NDKSigner {
     return window.nostr.nip04.decrypt(sender.pubkey, value);
   }
 
+  // NIP-44 encryption (self-encryption)
+  async encryptNip44(value: string): Promise<string> {
+    if (!window.nostr?.nip44) {
+      throw new Error('NIP-44 encryption not available');
+    }
+    return window.nostr.nip44.encrypt(this._pubkey!, value);
+  }
+
+  // NIP-44 decryption (self-decryption)
+  async decryptNip44(value: string): Promise<string> {
+    if (!window.nostr?.nip44) {
+      throw new Error('NIP-44 decryption not available');
+    }
+    return window.nostr.nip44.decrypt(this._pubkey!, value);
+  }
+
   toPayload(): string {
     return JSON.stringify({
       pubkey: this._pubkey,

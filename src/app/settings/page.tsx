@@ -3,16 +3,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
-import { NDKEvent } from '@nostr-dev-kit/ndk';
 import {
     isValidRelayUrl,
     testRelayConnection,
+    createPreferredRelaysEvent,
+    parsePreferredRelaysEvent,
     type PreferredRelay
 } from '@/utils/preferredRelays';
 import {
     createRelayListEvent,
     parseRelayListEvent,
-    convertPreferredToRelayInfo,
     type RelayInfo
 } from '@/utils/relayList';
 import toast from 'react-hot-toast';
@@ -48,21 +48,9 @@ export default function SettingsPage() {
                 
                 if (events.size > 0) {
                     const latestEvent = Array.from(events)[0];
-                    const networkRelays: PreferredRelay[] = [];
                     
-                    // Parse relay tags from the event
-                    latestEvent.tags.forEach(tag => {
-                        if (tag[0] === 'r' && tag[1]) {
-                            const url = tag[1];
-                            const policy = (tag[2] as 'read' | 'write' | 'readwrite') || 'readwrite';
-                            
-                            networkRelays.push({
-                                url,
-                                policy
-                            });
-                        }
-                    });
-                    
+                    // Parse NIP-44 encrypted private tags from the event
+                    const networkRelays = await parsePreferredRelaysEvent(latestEvent, ndk);
                     setPreferredRelays(networkRelays);
                 } else {
                     setPreferredRelays([]);
@@ -258,11 +246,7 @@ export default function SettingsPage() {
         }
     };
 
-    const syncFromPreferredRelays = () => {
-        const relayInfos = convertPreferredToRelayInfo(preferredRelays);
-        handleSaveRelayList(relayInfos);
-        toast.success('Relay list synced from preferred relays');
-    };
+
 
     const publishPreferredRelays = async () => {
         if (!currentUser?.pubkey || preferredRelays.length === 0) {
@@ -272,19 +256,12 @@ export default function SettingsPage() {
 
         setIsPublishing(true);
         try {
-            // Create a NIP-37 preferred relays event (kind 30078)
-            const event = new NDKEvent(ndk);
-            event.kind = 30078; // NIP-37 preferred relays kind
-            event.created_at = Math.floor(Date.now() / 1000);
+            // Create a NIP-37 preferred relays event with NIP-44 encrypted private tags
+            const event = await createPreferredRelaysEvent(ndk, preferredRelays);
             event.tags.push(['client', 'Longform._']);
             
-            // Add relay tags with policies
-            preferredRelays.forEach(relay => {
-                event.tags.push(['r', relay.url, relay.policy]);
-            });
-            
             await event.publish();
-            toast.success('Preferred relays published to Nostr network');
+            toast.success('Preferred relays published to Nostr network (NIP-44 encrypted)');
         } catch (error) {
             console.error('Error publishing preferred relays:', error);
             toast.error('Failed to publish preferred relays');
@@ -376,10 +353,10 @@ export default function SettingsPage() {
                         <div className="loading-spinner"></div>
                         <p>
                             {isLoading && isLoadingRelayList 
-                                ? "Loading kinds 30078 and 10002 from Nostr network..." 
+                                ? "Loading kinds 30078 and 10002..." 
                                 : isLoading 
-                                ? "Loading kind 30078 (NIP-37 preferred relays) from Nostr network..." 
-                                : "Loading kind 10002 (NIP-65 relay list) from Nostr network..."
+                                ? "Loading kind 30078 (NIP-37 preferred relays)..." 
+                                : "Loading kind 10002 (NIP-65 relay list)..."
                             }
                         </p>
                     </div>
@@ -443,36 +420,43 @@ export default function SettingsPage() {
                                 <div key={index} className="relay-item">
                                     <div className="relay-info">
                                         <span className="relay-url">{relay.url}</span>
-                                        <span className={`policy-badge policy-${relay.policy}`}>
-                                            {relay.policy === 'read' ? 'Read Only' :
-                                                relay.policy === 'write' ? 'Write Only' : 'Read & Write'}
-                                        </span>
                                     </div>
-                                    <div className="relay-actions">
-                                        <select
-                                            value={relay.policy}
-                                            onChange={(e) => updateRelayPolicy(relay.url, e.target.value as 'read' | 'write' | 'readwrite')}
-                                            className="policy-select-small"
-                                        >
-                                            <option value="read">Read Only</option>
-                                            <option value="write">Write Only</option>
-                                            <option value="readwrite">Read & Write</option>
-                                        </select>
-                                        <button
-                                            onClick={() => handleTestRelayConnection(relay.url)}
-                                            disabled={isLoading}
-                                            className="test-button"
-                                            title="Test connection"
-                                        >
-                                            Test
-                                        </button>
-                                        <button
-                                            onClick={() => removeRelay(relay.url)}
-                                            className="remove-button"
-                                            title="Remove relay"
-                                        >
-                                            <TrashIcon />
-                                        </button>
+                                    <div className="relay-controls">
+                                        <div className="permission-toggles">
+                                            <label className="permission-toggle">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={relay.policy === 'read' || relay.policy === 'readwrite'}
+                                                    onChange={(e) => updateRelayPolicy(relay.url, e.target.checked ? (relay.policy === 'write' ? 'readwrite' : 'read') : (relay.policy === 'readwrite' ? 'write' : 'write'))}
+                                                />
+                                                Read
+                                            </label>
+                                            <label className="permission-toggle">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={relay.policy === 'write' || relay.policy === 'readwrite'}
+                                                    onChange={(e) => updateRelayPolicy(relay.url, e.target.checked ? (relay.policy === 'read' ? 'readwrite' : 'write') : (relay.policy === 'readwrite' ? 'read' : 'read'))}
+                                                />
+                                                Write
+                                            </label>
+                                        </div>
+                                        <div className="relay-actions">
+                                            <button
+                                                onClick={() => handleTestRelayConnection(relay.url)}
+                                                disabled={isLoading}
+                                                className="test-button"
+                                                title="Test connection"
+                                            >
+                                                Test
+                                            </button>
+                                            <button
+                                                onClick={() => removeRelay(relay.url)}
+                                                className="remove-button"
+                                                title="Remove relay"
+                                            >
+                                                <TrashIcon />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))
@@ -526,7 +510,7 @@ export default function SettingsPage() {
                             </select>
                             <button onClick={addRelayToList} className="add-button">
                                 <PlusIcon />
-                                Add to List
+                                Add
                             </button>
                         </div>
                     </div>
@@ -581,13 +565,6 @@ export default function SettingsPage() {
                     </div>
                     
                     <div className="section-actions">
-                        <button
-                            onClick={syncFromPreferredRelays}
-                            className="sync-button"
-                            disabled={preferredRelays.length === 0}
-                        >
-                            Sync from Preferred Relays
-                        </button>
                         <button
                             onClick={publishRelayList}
                             className="save-button"
@@ -667,6 +644,8 @@ export default function SettingsPage() {
                         </div>
                     )}
                 </section>
+
+
             </div>
 
             {/* Info Modal */}
