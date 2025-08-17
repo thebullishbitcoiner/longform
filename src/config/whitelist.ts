@@ -44,6 +44,8 @@ export const ALPHA_WHITELIST: string[] = [
   'npub15d3mwvwq0l69e42syhqrzy6yhtrsjm23u36au5g8ffg5xje9jz9svq8n99', //Felipe Martinho
   'npub1xzrkzsrnr83vn7h0udq6tnapwpswy5equlrtkn3nu0e0anlmzynqne0qap', //AceaSpades
   'npub13wnx7nyf0q6e2ltgae80d2l9nttk0dmvdrapjg7my8jl6kghtdssrlktxq', //Selim
+  'npub18u5f6090tcvd604pc8mgvr4t956xsn3rmfd04pj36szx8ne4h87qsztxdp', //The Pentographer
+  'npub17t33l3a3852l4ajh706ngwmpg2tj03uxsd6dvy4wumupdkcf59tspayzna', //Juls
 ];
 
 // Enable/disable whitelist checking
