@@ -23,6 +23,12 @@ interface ArticleStats {
   totalEngagement: number;
 }
 
+interface HashtagStats {
+  tag: string;
+  count: number;
+  fontSize: number;
+}
+
 interface DashboardStats {
   totalArticles: number;
   totalZaps: number;
@@ -32,6 +38,7 @@ interface DashboardStats {
   totalComments: number;
   totalReposts: number;
   bestPerformingArticles: ArticleStats[];
+  hashtags: HashtagStats[];
 }
 
 const DashboardPage: React.FC = () => {
@@ -49,7 +56,23 @@ const DashboardPage: React.FC = () => {
       
       return new Promise<BlogPost[]>((resolve) => {
         const articles: BlogPost[] = [];
+        const seenArticleIds = new Set<string>(); // Track seen article IDs to prevent duplicates
+        const deletionEventsRef: NDKEvent[] = []; // Track deletion events
         
+        // Subscribe to deletion events (kind 5) first
+        const deletionSubscription = ndk.subscribe(
+          { 
+            kinds: [5], 
+            authors: [currentUser.pubkey]
+          },
+          { closeOnEose: true }
+        );
+
+        deletionSubscription.on('event', (event: NDKEvent) => {
+          deletionEventsRef.push(event);
+        });
+
+        // Subscribe to published articles (kind 30023)
         const subscription = ndk.subscribe(
           { 
             kinds: [30023], 
@@ -61,6 +84,12 @@ const DashboardPage: React.FC = () => {
 
         subscription.on('event', (event: NDKEvent) => {
           try {
+            // Check if we've already seen this article
+            if (seenArticleIds.has(event.id)) {
+              return; // Skip duplicate
+            }
+            seenArticleIds.add(event.id);
+            
             const content = event.content;
             const tags = event.tags;
             // Extract title from tags or content
@@ -72,12 +101,20 @@ const DashboardPage: React.FC = () => {
             // Extract image from tags
             const imageTag = tags.find((tag: string[]) => tag[0] === 'image');
             const image = imageTag?.[1];
+            // Extract d-tag for versioning
+            const dTag = tags.find((tag: string[]) => tag[0] === 'd')?.[1];
 
-            // Extract other tags
-            const otherTags = tags
-              .filter((tag: string[]) => !['title', 'summary', 'image', 'd', 't'].includes(tag[0]))
+            // Extract hashtags from 't' tags
+            const hashtags = tags
+              .filter((tag: string[]) => tag[0] === 't')
               .map((tag: string[]) => tag[1])
               .filter(Boolean);
+            
+            // Extract other tags (excluding hashtags and metadata tags) - keeping for potential future use
+            // const otherTags = tags
+            //   .filter((tag: string[]) => !['title', 'summary', 'image', 'd', 't'].includes(tag[0]))
+            //   .map((tag: string[]) => tag[1])
+            //   .filter(Boolean);
             
             const article: BlogPost = {
               id: event.id,
@@ -88,7 +125,8 @@ const DashboardPage: React.FC = () => {
               summary,
               published_at: event.created_at!,
               image,
-              tags: otherTags,
+              tags: hashtags, // Use hashtags instead of otherTags
+              dTag, // Add d-tag for versioning
               author: {
                 name: currentUser.name,
                 displayName: currentUser.displayName
@@ -102,7 +140,90 @@ const DashboardPage: React.FC = () => {
 
         subscription.on('eose', () => {
           console.log('Dashboard: Found', articles.length, 'articles');
-          resolve(articles);
+          
+          // Process deletion events to filter out deleted articles
+          const deletedEventIds = new Set<string>();
+          deletionEventsRef.forEach(deletionEvent => {
+            deletionEvent.tags.forEach((tag: string[]) => {
+              if (tag[0] === 'e') {
+                deletedEventIds.add(tag[1]);
+              }
+            });
+          });
+          
+          console.log(`Dashboard: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
+          
+          // Filter out deleted articles
+          const nonDeletedArticles = articles.filter(article => {
+            const isDeleted = deletedEventIds.has(article.id);
+            if (isDeleted) {
+              console.log(`Dashboard: Removing deleted article: ${article.id} with title: ${article.title}`);
+            }
+            return !isDeleted;
+          });
+          
+          console.log(`Dashboard: Articles after filtering deletions: ${nonDeletedArticles.length}`);
+          
+          // Handle versioning - keep only the latest version of each article
+          const finalArticles = nonDeletedArticles.filter(article => {
+            // If this article has a d-tag, check if there's a newer version
+            if (article.dTag) {
+              const articlesWithSameDTag = nonDeletedArticles.filter(otherArticle => 
+                otherArticle.dTag === article.dTag
+              );
+              
+              if (articlesWithSameDTag.length > 1) {
+                const mostRecentArticle = articlesWithSameDTag.reduce((latest, current) => 
+                  current.created_at > latest.created_at ? current : latest
+                );
+                
+                if (mostRecentArticle.id !== article.id) {
+                  console.log(`Dashboard: Removing older article ${article.id} keeping newer version ${mostRecentArticle.id} with d tag ${article.dTag}`);
+                  return false;
+                }
+              }
+            }
+            
+            // Check for articles with same title but different d tags (edge case handling)
+            const articlesWithSameTitle = nonDeletedArticles.filter(otherArticle => 
+              otherArticle.title === article.title
+            );
+            
+            if (articlesWithSameTitle.length > 1) {
+              const articlesWithDTags = articlesWithSameTitle.filter(a => a.dTag);
+              const articlesWithoutDTags = articlesWithSameTitle.filter(a => !a.dTag);
+              
+              if (articlesWithDTags.length > 0) {
+                // If some articles have d tags, prefer the most recent one with a d tag
+                const mostRecentWithDTag = articlesWithDTags.reduce((latest, current) => 
+                  current.created_at > latest.created_at ? current : latest
+                );
+                
+                if (mostRecentWithDTag.id !== article.id) {
+                  console.log(`Dashboard: Removing article with same title but different d tag ${article.id} keeping version with d tag ${mostRecentWithDTag.id}`);
+                  return false;
+                }
+              } else if (articlesWithoutDTags.length > 1) {
+                // If no articles have d tags, keep the most recent one
+                const mostRecentArticle = articlesWithoutDTags.reduce((latest, current) => 
+                  current.created_at > latest.created_at ? current : latest
+                );
+                
+                if (mostRecentArticle.id !== article.id) {
+                  console.log(`Dashboard: Removing older article with same title ${article.id} keeping newer version ${mostRecentArticle.id}`);
+                  return false;
+                }
+              }
+            }
+            
+            return true;
+          });
+          
+          console.log(`Dashboard: Final articles after versioning cleanup: ${finalArticles.length}`);
+          
+          // Close subscriptions
+          deletionSubscription.stop();
+          resolve(finalArticles);
         });
 
         subscription.on('close', () => {
@@ -337,7 +458,7 @@ const DashboardPage: React.FC = () => {
 
 
   // Calculate dashboard stats
-  const calculateStats = useCallback((articleStats: Map<string, ArticleStats>): DashboardStats => {
+  const calculateStats = useCallback((articleStats: Map<string, ArticleStats>, articles: BlogPost[]): DashboardStats => {
     const statsArray = Array.from(articleStats.values());
     const totalArticles = statsArray.length;
     const totalZaps = statsArray.reduce((sum, article) => sum + article.zaps, 0);
@@ -348,9 +469,42 @@ const DashboardPage: React.FC = () => {
     const totalReposts = statsArray.reduce((sum, article) => sum + article.reposts, 0);
     
     // Sort by total engagement to get best performing articles
+    // Use creation date as secondary sort criterion to break ties
     const bestPerformingArticles = statsArray
-      .sort((a, b) => b.totalEngagement - a.totalEngagement)
+      .sort((a, b) => {
+        // Primary sort: total engagement (descending)
+        if (b.totalEngagement !== a.totalEngagement) {
+          return b.totalEngagement - a.totalEngagement;
+        }
+        // Secondary sort: creation date (newer first)
+        return b.created_at - a.created_at;
+      })
       .slice(0, 5);
+    
+    // Process hashtags from all articles
+    const hashtagCounts = new Map<string, number>();
+    articles.forEach(article => {
+      article.tags.forEach(tag => {
+        if (tag && tag.trim()) {
+          const normalizedTag = tag.toLowerCase().trim();
+          hashtagCounts.set(normalizedTag, (hashtagCounts.get(normalizedTag) || 0) + 1);
+        }
+      });
+    });
+    
+    // Convert to hashtag stats with font sizes
+    const maxCount = Math.max(...hashtagCounts.values(), 1);
+    const minFontSize = 12;
+    const maxFontSize = 30;
+    
+    const hashtags: HashtagStats[] = Array.from(hashtagCounts.entries())
+      .map(([tag, count]) => ({
+        tag,
+        count,
+        fontSize: minFontSize + ((count / maxCount) * (maxFontSize - minFontSize))
+      }))
+      .sort((a, b) => b.count - a.count)
+      //.slice(0, 30); // Limit to top 21 hashtags
     
     return {
       totalArticles,
@@ -360,7 +514,8 @@ const DashboardPage: React.FC = () => {
       totalReactions,
       totalComments,
       totalReposts,
-      bestPerformingArticles
+      bestPerformingArticles,
+      hashtags
     };
   }, []);
 
@@ -382,7 +537,7 @@ const DashboardPage: React.FC = () => {
           // Fetch interactions for articles
           const articleStats = await fetchArticleInteractions(articles);
           // Calculate dashboard stats
-          const dashboardStats = calculateStats(articleStats);
+          const dashboardStats = calculateStats(articleStats, articles);
           setStats(dashboardStats);
         } else {
           // No articles found, create empty stats
@@ -394,7 +549,8 @@ const DashboardPage: React.FC = () => {
             totalReactions: 0,
             totalComments: 0,
             totalReposts: 0,
-            bestPerformingArticles: []
+            bestPerformingArticles: [],
+            hashtags: []
           });
         }
       } catch (error: unknown) {
@@ -532,6 +688,32 @@ const DashboardPage: React.FC = () => {
           ) : (
             <div className={styles['no-articles']}>
               <p>No articles found. Start writing to see your stats!</p>
+            </div>
+          )}
+        </div>
+
+        {/* Hashtags Section */}
+        <div className={styles['hashtags-section']}>
+          <h2 className={styles['section-title']}>Hashtags</h2>
+          {stats.hashtags.length > 0 ? (
+            <div className={styles['hashtags-cloud']}>
+              {stats.hashtags.map((hashtag) => (
+                <span
+                  key={hashtag.tag}
+                  className={styles['hashtag-tag']}
+                  style={{
+                    fontSize: `${hashtag.fontSize}px`,
+                    opacity: 0.6 + (hashtag.count / Math.max(...stats.hashtags.map(h => h.count))) * 0.4
+                  }}
+                  title={`${hashtag.tag} (used ${hashtag.count} time${hashtag.count !== 1 ? 's' : ''})`}
+                >
+                  {hashtag.tag} ({hashtag.count})
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className={styles['no-hashtags']}>
+              <p>No hashtags found. Add hashtags to your articles to see them here!</p>
             </div>
           )}
         </div>
