@@ -1284,21 +1284,26 @@ export default function BlogPost() {
 
   // Function to render custom emojis and reactions as JSX
   const renderReactionContentJSX = (content: string, event?: NDKEvent) => {
-    if (!event) {
-      return <span>{content}</span>;
+    try {
+      if (!event || !content) {
+        return <span>{content || ''}</span>;
+      }
+      
+      // Extract custom emojis from the event's tags
+      const emojiMap = extractCustomEmojis(event);
+      
+      if (emojiMap.size === 0) {
+        return <span>{content}</span>;
+      }
+      
+      // Render custom emojis as JSX elements
+      const renderedParts = renderCustomEmojis(content, emojiMap);
+      
+      return <span>{renderedParts}</span>;
+    } catch (error) {
+      console.error('Error rendering reaction content:', error);
+      return <span>{content || ''}</span>;
     }
-    
-    // Extract custom emojis from the event's tags
-    const emojiMap = extractCustomEmojis(event);
-    
-    if (emojiMap.size === 0) {
-      return <span>{content}</span>;
-    }
-    
-    // Render custom emojis as JSX elements
-    const renderedParts = renderCustomEmojis(content, emojiMap);
-    
-    return <span>{renderedParts}</span>;
   };
 
 
@@ -1493,17 +1498,22 @@ export default function BlogPost() {
               components={{
                 // Custom text component to handle emojis in post content
                 text: ({ children }) => {
-                  if (!post?.event || typeof children !== 'string') {
+                  try {
+                    if (!post?.event || typeof children !== 'string') {
+                      return <span>{children}</span>;
+                    }
+                    
+                    const emojiMap = extractCustomEmojis(post.event as NDKEvent);
+                    if (emojiMap.size === 0) {
+                      return <span>{children}</span>;
+                    }
+                    
+                    const renderedParts = renderCustomEmojis(children, emojiMap);
+                    return <span>{renderedParts}</span>;
+                  } catch (error) {
+                    console.error('Error rendering emoji in text:', error);
                     return <span>{children}</span>;
                   }
-                  
-                  const emojiMap = extractCustomEmojis(post.event as NDKEvent);
-                  if (emojiMap.size === 0) {
-                    return <span>{children}</span>;
-                  }
-                  
-                  const renderedParts = renderCustomEmojis(children, emojiMap);
-                  return <span>{renderedParts}</span>;
                 },
                 img: ({ src, alt }: React.ComponentPropsWithoutRef<'img'>) => {
                   if (!src || typeof src !== 'string') return null;
@@ -1518,16 +1528,9 @@ export default function BlogPost() {
                       className={styles.markdownImage}
                       onError={(e) => {
                         console.error('Image failed to load:', src);
-                        // Fallback to regular img tag if Next.js Image fails
+                        // Just hide the failed image, don't manipulate DOM directly
                         const target = e.target as HTMLImageElement;
                         target.style.display = 'none';
-                        const fallbackImg = document.createElement('img');
-                        fallbackImg.src = src;
-                        fallbackImg.alt = alt || 'Image';
-                        fallbackImg.className = styles.markdownImage;
-                        fallbackImg.style.width = '100%';
-                        fallbackImg.style.height = 'auto';
-                        target.parentNode?.appendChild(fallbackImg);
                       }}
                       unoptimized
                     />
@@ -1550,16 +1553,9 @@ export default function BlogPost() {
                          className={styles.markdownImage}
                          onError={(e) => {
                            console.error('Image failed to load:', props.href);
-                           // Fallback to regular img tag if Next.js Image fails
+                           // Just hide the failed image, don't manipulate DOM directly
                            const target = e.target as HTMLImageElement;
                            target.style.display = 'none';
-                           const fallbackImg = document.createElement('img');
-                           fallbackImg.src = props.href!;
-                           fallbackImg.alt = props.children?.toString() || 'Image';
-                           fallbackImg.className = styles.markdownImage;
-                           fallbackImg.style.width = '100%';
-                           fallbackImg.style.height = 'auto';
-                           target.parentNode?.appendChild(fallbackImg);
                          }}
                          unoptimized
                        />

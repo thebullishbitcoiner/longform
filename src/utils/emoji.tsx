@@ -12,19 +12,24 @@ export interface CustomEmoji {
  * @returns Map of shortcode to emoji URL
  */
 export function extractCustomEmojis(event: NDKEvent): Map<string, string> {
-  const emojiMap = new Map<string, string>();
-  
-  if (!event.tags) return emojiMap;
-  
-  for (const tag of event.tags) {
-    if (tag[0] === 'emoji' && tag[1] && tag[2]) {
-      const shortcode = tag[1] as string;
-      const url = tag[2] as string;
-      emojiMap.set(shortcode, url);
+  try {
+    const emojiMap = new Map<string, string>();
+    
+    if (!event?.tags) return emojiMap;
+    
+    for (const tag of event.tags) {
+      if (tag && tag[0] === 'emoji' && tag[1] && tag[2]) {
+        const shortcode = tag[1] as string;
+        const url = tag[2] as string;
+        emojiMap.set(shortcode, url);
+      }
     }
+    
+    return emojiMap;
+  } catch (error) {
+    console.error('Error extracting custom emojis:', error);
+    return new Map<string, string>();
   }
-  
-  return emojiMap;
 }
 
 /**
@@ -34,18 +39,19 @@ export function extractCustomEmojis(event: NDKEvent): Map<string, string> {
  * @returns JSX elements with custom emojis rendered as images
  */
 export function renderCustomEmojis(content: string, emojiMap: Map<string, string>): (string | React.ReactElement)[] {
-  if (!content || emojiMap.size === 0) {
-    return [content];
-  }
+  try {
+    if (!content || emojiMap.size === 0) {
+      return [content];
+    }
 
-  const parts: (string | React.ReactElement)[] = [];
-  let lastIndex = 0;
-  
-  // Regex to match emoji shortcodes like :shortcode:
-  const emojiRegex = /:([a-zA-Z0-9_]+):/g;
-  let match;
-  
-  while ((match = emojiRegex.exec(content)) !== null) {
+    const parts: (string | React.ReactElement)[] = [];
+    let lastIndex = 0;
+    
+    // Regex to match emoji shortcodes like :shortcode:
+    const emojiRegex = /:([a-zA-Z0-9_]+):/g;
+    let match;
+    
+    while ((match = emojiRegex.exec(content)) !== null) {
     const shortcode = match[1];
     const emojiUrl = emojiMap.get(shortcode);
     
@@ -74,8 +80,8 @@ export function renderCustomEmojis(content: string, emojiMap: Map<string, string
              // Fallback to text if image fails to load
              const target = e.target as HTMLImageElement;
              target.style.display = 'none';
-             const textNode = document.createTextNode(`:${shortcode}:`);
-             target.parentNode?.appendChild(textNode);
+             // Use React state instead of direct DOM manipulation
+             console.warn(`Failed to load emoji: ${emojiUrl}`);
            }}
          />
        );
@@ -87,12 +93,16 @@ export function renderCustomEmojis(content: string, emojiMap: Map<string, string
     lastIndex = match.index + match[0].length;
   }
   
-  // Add remaining text
-  if (lastIndex < content.length) {
-    parts.push(content.slice(lastIndex));
+    // Add remaining text
+    if (lastIndex < content.length) {
+      parts.push(content.slice(lastIndex));
+    }
+    
+    return parts;
+  } catch (error) {
+    console.error('Error rendering custom emojis:', error);
+    return [content];
   }
-  
-  return parts;
 }
 
 /**
