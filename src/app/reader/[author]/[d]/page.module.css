@@ -265,7 +265,7 @@
 }
 
 .backLink:hover {
-  color: #2563eb;
+  color: rgb(147 51 234);
 }
 
 .icon {
@@ -479,7 +479,7 @@
 }
 
 .postContent a {
-  color: rgb(59 130 246);
+  color: rgb(147 51 234);
   text-decoration: underline;
   cursor: pointer;
   transition: color 0.2s ease;
@@ -490,7 +490,7 @@
 }
 
 .postContent a:hover {
-  color: rgb(37 99 235);
+  color: rgb(126 34 206);
 }
 
 .postContent .nostrLink {
@@ -502,13 +502,13 @@
 }
 
 .postContent .regularLink {
-  color: rgb(59 130 246);
+  color: rgb(147 51 234);
   text-decoration: underline;
   word-break: break-all;
 }
 
 .postContent .regularLink:hover {
-  color: rgb(37 99 235);
+  color: rgb(126 34 206);
 }
 
 .postContent img {
@@ -633,7 +633,7 @@
 }
 
 .videoLink {
-  color: rgb(161 161 170);
+  color: rgb(147 51 234);
   text-decoration: none;
   font-size: 0.875rem;
   display: block;
@@ -642,7 +642,7 @@
 }
 
 .videoLink:hover {
-  color: #2563eb;
+  color: rgb(126 34 206);
   text-decoration: underline;
 }
 
@@ -1185,6 +1185,30 @@
   font-size: 0.875rem;
   word-wrap: break-word;
   overflow-wrap: break-word;
+}
+
+/* Comment link styles */
+.commentContent a {
+  color: rgb(147 51 234);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.commentContent a:hover {
+  color: rgb(126 34 206);
+}
+
+.commentContent .nostrLink {
+  color: rgb(147 51 234);
+}
+
+.commentContent .nostrLink:hover {
+  color: rgb(126 34 206);
 }
 
 .viewMoreComments {

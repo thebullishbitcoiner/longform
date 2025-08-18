@@ -20,7 +20,7 @@ export interface BlogPost {
   tags: string[];
   author?: AuthorProfile;
   dTag?: string; // Add d tag for replaceable events
-  event?: unknown; // Store the full NDKEvent for emoji processing
+  emojiTags?: Array<{ shortcode: string; url: string }>; // Store emoji tags for processing
 }
 
 export type BlogContextType = {

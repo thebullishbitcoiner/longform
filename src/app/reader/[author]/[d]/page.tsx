@@ -577,6 +577,11 @@ export default function BlogPost() {
         const image = event.tags.find(tag => tag[0] === 'image')?.[1];
         const tags = event.tags.filter(tag => tag[0] === 't').map(tag => tag[1]);
 
+        // Extract emoji tags for custom emoji processing
+        const emojiTags = event.tags
+          .filter(tag => tag[0] === 'emoji' && tag[1] && tag[2])
+          .map(tag => ({ shortcode: tag[1], url: tag[2] }));
+
         const postData = {
           id: event.id,
           pubkey: event.pubkey,
@@ -587,7 +592,7 @@ export default function BlogPost() {
           published_at,
           image,
           tags,
-          event // Store the full event for emoji processing
+          emojiTags // Store emoji tags separately for processing
         };
 
         console.log('🔍 DEBUG: Created post data:', { 
@@ -1499,11 +1504,16 @@ export default function BlogPost() {
                 // Custom text component to handle emojis in post content
                 text: ({ children }) => {
                   try {
-                    if (!post?.event || typeof children !== 'string') {
+                    if (!post?.emojiTags || typeof children !== 'string') {
                       return <span>{children}</span>;
                     }
                     
-                    const emojiMap = extractCustomEmojis(post.event as NDKEvent);
+                    // Create emoji map from stored emoji tags
+                    const emojiMap = new Map<string, string>();
+                    post.emojiTags.forEach(tag => {
+                      emojiMap.set(tag.shortcode, tag.url);
+                    });
+                    
                     if (emojiMap.size === 0) {
                       return <span>{children}</span>;
                     }
