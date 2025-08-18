@@ -1442,18 +1442,19 @@ export default function ReaderPage() {
               </div>
             )}
             <div className={styles.postsGrid}>
-              {isLoadingPosts && follows.length > 0 && (
+              {(isLoadingPosts || (follows.length > 0 && debouncedFilteredPosts.length === 0)) && (
                 <div className={styles.loadingState}>
-                  Loading posts from {follows.length} people you follow...
+                  <div className={styles.loadingSpinner}></div>
+                  <p>Loading posts from {follows.length} people you follow...</p>
                 </div>
               )}
-              {debouncedFilteredPosts.length === 0 && !isLoadingPosts ? (
+              {debouncedFilteredPosts.length === 0 && !isLoadingPosts && follows.length === 0 ? (
                 <div className={styles.emptyState}>
-                  {follows.length === 0 ? (
-                    <>
-                      You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
-                    </>
-                  ) : filter === 'all' ? (
+                  You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
+                </div>
+              ) : debouncedFilteredPosts.length === 0 && !isLoadingPosts && follows.length > 0 ? (
+                <div className={styles.emptyState}>
+                  {filter === 'all' ? (
                     "No blog posts found from people you follow."
                   ) : filter === 'read' ? (
                     "No read posts found."

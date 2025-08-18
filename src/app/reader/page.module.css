@@ -385,6 +385,7 @@
 
 .loadingState {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   padding: 2rem;
@@ -396,6 +397,21 @@
   margin: 1rem;
   border: 1px solid rgb(39 39 42);
   grid-column: 1 / -1;
+  gap: 1rem;
+}
+
+.loadingSpinner {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid rgb(39 39 42);
+  border-top: 2px solid #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Ensure all full-width elements work properly */
