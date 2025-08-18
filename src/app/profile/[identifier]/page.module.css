@@ -375,3 +375,365 @@
 }
 
 /* Posts remain single column on all screen sizes */ 
+
+/* Tabbed Interface Styles */
+.tabsContainer {
+  border-top: 1px solid rgb(39 39 42);
+}
+
+.tabsHeader {
+  display: flex;
+  background-color: rgb(24 24 27);
+  border-bottom: 1px solid rgb(39 39 42);
+}
+
+.tabButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  background: none;
+  border: none;
+  color: rgb(161 161 170);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+  position: relative;
+}
+
+.tabButton:hover {
+  color: rgb(244 244 245);
+  background-color: rgb(39 39 42);
+}
+
+.tabButton.activeTab {
+  color: #8b5cf6;
+  border-bottom-color: #8b5cf6;
+  background-color: rgb(39 39 42);
+}
+
+.tabIcon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.tabContent {
+  padding: 2rem;
+}
+
+@media (max-width: 640px) {
+  .tabContent {
+    padding: 1.5rem 1rem;
+  }
+  
+  .tabButton {
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* Highlights Section Styles */
+.highlightsSection {
+  /* Inherits padding from tabContent */
+}
+
+.highlightsTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: rgb(244 244 245);
+  margin-bottom: 1.5rem;
+}
+
+.noHighlights {
+  text-align: center;
+  padding: 3rem 0;
+  color: rgb(161 161 170);
+}
+
+.highlightsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.highlightCard {
+  background-color: rgb(39 39 42);
+  border-radius: 0.5rem;
+  border: 1px solid rgb(63 63 70);
+  overflow: hidden;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.highlightCard:hover {
+  border-color: rgb(82 82 91);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.highlightContent {
+  padding: 1.5rem 1.5rem 0.75rem 1.5rem;
+  position: relative;
+}
+
+.highlightHeader {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+}
+
+.highlightText {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: rgb(244 244 245);
+  margin: 0 0 0.5rem 0;
+  font-style: italic;
+  position: relative;
+  padding-left: 1rem;
+  padding-right: 2rem; /* Make room for the three dots */
+}
+
+.highlightText::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(135deg, #8b5cf6, #a855f7);
+  border-radius: 2px;
+}
+
+.highlightAttribution {
+  margin-top: 1rem;
+  padding-left: 1rem;
+}
+
+.highlightAuthor {
+  color: rgb(161 161 170);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+.contextMenuButton {
+  background: none;
+  border: none;
+  color: rgb(161 161 170);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.contextMenuButton:hover {
+  color: rgb(244 244 245);
+  background-color: rgb(63 63 70);
+}
+
+.contextMenuIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Context Menu Styles */
+.contextMenu {
+  position: fixed;
+  background-color: rgb(39 39 42);
+  border: 1px solid rgb(63 63 70);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  z-index: 3000;
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.contextMenuItem {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  color: rgb(244 244 245);
+  cursor: pointer;
+  font-size: 0.875rem;
+  text-align: left;
+  transition: background-color 0.2s ease;
+}
+
+.contextMenuItem:hover {
+  background-color: rgb(63 63 70);
+}
+
+.contextMenuItem:first-child {
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.contextMenuItem:last-child {
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .highlightContent {
+    padding: 1rem;
+  }
+  
+  .highlightHeader {
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+  
+  .highlightText {
+    font-size: 0.9rem;
+    padding-left: 0.75rem;
+    padding-right: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  .highlightText::before {
+    width: 2px;
+  }
+  
+  .highlightAttribution {
+    padding-left: 0.75rem;
+  }
+  
+  .highlightMeta {
+    padding-left: 0.75rem;
+  }
+  
+  .contextMenu {
+    min-width: 100px;
+  }
+  
+  .contextMenuItem {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+} 
+
+/* Modal Styles */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.modalContent {
+  background-color: rgb(24 24 27);
+  border: 1px solid rgb(39 39 42);
+  border-radius: 0.75rem;
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 700px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgb(39 39 42);
+  background-color: rgb(39 39 42);
+}
+
+.modalHeader h3 {
+  margin: 0;
+  color: rgb(244 244 245);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.modalClose {
+  background: none;
+  border: none;
+  color: rgb(161 161 170);
+  font-size: 1.75rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.modalClose:hover {
+  color: rgb(244 244 245);
+  background-color: rgb(63 63 70);
+}
+
+.modalClose:active {
+  transform: scale(0.95);
+}
+
+.modalBody {
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: calc(90vh - 80px);
+  flex: 1;
+}
+
+.jsonDisplay {
+  background-color: rgb(39 39 42);
+  border: 1px solid rgb(63 63 70);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  color: rgb(244 244 245);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+  max-height: 60vh;
+  overflow-y: auto;
+  min-width: 100%;
+}
+
+/* Mobile-specific modal adjustments */
+@media (max-width: 768px) {
+  .modalContent {
+    width: 95vw;
+    max-height: 95vh;
+  }
+  
+  .modalHeader {
+    padding: 1rem 1.25rem;
+  }
+  
+  .modalHeader h3 {
+    font-size: 1.125rem;
+  }
+  
+  .modalBody {
+    padding: 1rem;
+  }
+  
+  .jsonDisplay {
+    font-size: 0.8rem;
+    padding: 1rem;
+  }
+} 
