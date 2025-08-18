@@ -53,11 +53,12 @@ const initializeNDK = async () => {
       console.log('NDK: Connected relays:', connectedRelays.map(r => r.url).join(', '));
       
       if (connectedRelays.length === 0) {
-        console.error('NDK: No relays connected after initialization');
-        throw new Error('No relays connected');
+        console.warn('NDK: No relays connected after initialization, but continuing...');
+        // Don't throw an error, just log a warning and continue
+        // The app can still work with a disconnected NDK for some features
+      } else {
+        console.log(`NDK: Successfully connected to ${connectedRelays.length} relays`);
       }
-
-      console.log(`NDK: Successfully connected to ${connectedRelays.length} relays`);
     } catch (error) {
       console.error('NDK: Failed to initialize:', error);
       // Log more details about the error
@@ -66,7 +67,8 @@ const initializeNDK = async () => {
         console.error('NDK: Error message:', error.message);
         console.error('NDK: Error stack:', error.stack);
       }
-      throw error;
+      // Don't throw the error, just log it and continue
+      // The app can still work with a disconnected NDK for some features
     } finally {
       isConnecting = false;
     }
@@ -78,6 +80,8 @@ const initializeNDK = async () => {
 // Start the connection immediately
 initializeNDK().catch(error => {
   console.error('NDK: Initial connection failed:', error);
+  // Don't throw, just log the error
+  // The app can continue working with a disconnected NDK
 });
 
 interface UserProfile {

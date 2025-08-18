@@ -7,7 +7,7 @@ import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { ArrowLeftIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
@@ -51,6 +51,20 @@ interface ReactionData {
   authorName?: string;
 }
 
+interface CommentData {
+  id: string;
+  pubkey: string;
+  content: string;
+  created_at: number;
+  authorName?: string;
+  authorPicture?: string;
+  kind: number; // 1111 for NIP-22 or 1 for kind 1 comments
+  event: NDKEvent; // Store the full event
+  parentId?: string; // ID of the parent comment this is replying to
+  children: CommentData[]; // Child comments (replies)
+  depth: number; // Nesting depth for indentation
+}
+
 interface ContextMenuPosition {
   x: number;
   y: number;
@@ -85,6 +99,88 @@ export default function BlogPost() {
   const [showReactionsModal, setShowReactionsModal] = useState(false);
   const [reactionData, setReactionData] = useState<ReactionData[]>([]);
   const [isLoadingReactions, setIsLoadingReactions] = useState(false);
+  
+  // Comment section state
+  const [comments, setComments] = useState<CommentData[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [showCommentJsonModal, setShowCommentJsonModal] = useState(false);
+  const [selectedCommentJson, setSelectedCommentJson] = useState<string | null>(null);
+
+  const openCommentJson = (eventId: string) => {
+    const comment = comments.find(c => c.id === eventId);
+    if (comment) {
+      const fullEvent = {
+        id: comment.event.id,
+        pubkey: comment.event.pubkey,
+        created_at: comment.event.created_at,
+        kind: comment.event.kind,
+        tags: comment.event.tags,
+        content: comment.event.content,
+        sig: comment.event.sig
+      };
+      setSelectedCommentJson(JSON.stringify(fullEvent, null, 2));
+      setShowCommentJsonModal(true);
+    }
+  };
+
+  const closeCommentJson = () => {
+    setShowCommentJsonModal(false);
+    setSelectedCommentJson(null);
+  };
+
+  // Recursive component to render threaded comments
+  const CommentThread = ({ comments, depth = 0 }: { comments: CommentData[], depth?: number }) => {
+    return (
+      <div className={styles.commentThread} style={{ marginLeft: `${depth * 20}px` }}>
+        {comments.map((comment) => (
+          <div key={comment.id} className={styles.commentItem}>
+            <div className={styles.commentHeader}>
+              <div className={styles.commentAuthor}>
+                {comment.authorPicture && (
+                  <Image 
+                    src={comment.authorPicture} 
+                    alt="Author" 
+                    width={32}
+                    height={32}
+                    className={styles.commentAuthorAvatar}
+                  />
+                )}
+                <span className={styles.commentAuthorName}>
+                  {comment.authorName || comment.pubkey.slice(0, 8) + '...'}
+                </span>
+              </div>
+              <div className={styles.commentHeaderRight}>
+                <span className={styles.commentDate}>
+                  {new Date(comment.created_at * 1000).toLocaleDateString()}
+                </span>
+                <div className={styles.commentMenuWrapper}>
+                  <button className={styles.commentMenuButton} onClick={(e) => {
+                    e.stopPropagation();
+                    const menu = (e.currentTarget.nextSibling as HTMLElement);
+                    if (menu) {
+                      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+                    }
+                  }}>
+                    <EllipsisVerticalIcon className={styles.commentMenuIcon} />
+                  </button>
+                  <div className={styles.commentMenu} onClick={(e) => e.stopPropagation()}>
+                    <button className={styles.commentMenuItem} onClick={() => openCommentJson(comment.id)}>View JSON</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className={styles.commentContent}>
+              {comment.content}
+            </div>
+            {comment.children.length > 0 && (
+              <CommentThread comments={comment.children} depth={depth + 1} />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+  
   const endOfContentRef = useRef<HTMLDivElement>(null);
   
   // Highlighting state
@@ -117,41 +213,33 @@ export default function BlogPost() {
     setReactionStats(prev => ({ ...prev, isLoading: true }));
 
     try {
+      // Build article coordinate (a tag)
+      const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+
       // Fetch reactions (kind 7)
       const reactions = await ndkToUse.fetchEvents({
         kinds: [7],
         '#e': [postId]
       });
 
-      // Fetch comments (kind 1111 - NIP-22 and kind 1 for backwards compatibility)
-      const nip22Comments = await ndkToUse.fetchEvents({
-        kinds: [1111],
-        '#e': [postId]
-      });
+      // Fetch comments (kind 1111 - NIP-22) by both '#e' and '#a'
+      const nip22ByE = await ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId] });
+      const nip22ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate] }) : new Set();
 
-      const kind1Comments = await ndkToUse.fetchEvents({
-        kinds: [1],
-        '#e': [postId]
-      });
+      // Fetch kind 1 comments (legacy) by both '#e' and '#a'
+      const kind1ByE = await ndkToUse.fetchEvents({ kinds: [1], '#e': [postId] });
+      const kind1ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate] }) : new Set();
 
-      // Filter kind 1 comments to only include those that are actually comments on this post
-      // Look for 'a' tags that reference this post as the root
-      const validKind1Comments = Array.from(kind1Comments).filter(event => {
-        return event.tags.some((tag: string[]) => 
-          tag[0] === 'a' && 
-          tag[1] && 
-          tag[1].startsWith('30023:') && 
-          tag[1].includes(postId)
-        );
-      });
-
-      const totalComments = nip22Comments.size + validKind1Comments.length;
+      // Deduplicate comment ids across sources
+      const commentIds = new Set<string>();
+      for (const ev of nip22ByE) commentIds.add(ev.id);
+      for (const ev of nip22ByA as Set<NDKEvent>) commentIds.add(ev.id);
+      for (const ev of kind1ByE) commentIds.add(ev.id);
+      for (const ev of kind1ByA as Set<NDKEvent>) commentIds.add(ev.id);
 
       // Fetch zaps (kind 9735)
-      const zaps = await ndkToUse.fetchEvents({
-        kinds: [9735],
-        '#e': [postId]
-      });
+      const zaps = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
 
       // Count positive reactions (likes)
       const positiveReactions = Array.from(reactions).filter(event => {
@@ -161,7 +249,7 @@ export default function BlogPost() {
 
       setReactionStats({
         likes: positiveReactions.length,
-        comments: totalComments,
+        comments: commentIds.size,
         zaps: zaps.size,
         isLoading: false
       });
@@ -170,7 +258,7 @@ export default function BlogPost() {
       console.error('Error fetching reaction stats:', error);
       setReactionStats(prev => ({ ...prev, isLoading: false }));
     }
-  }, [contextNdk, standaloneNdk]);
+  }, [contextNdk, standaloneNdk, post?.pubkey, params.d]);
 
   const loadAdditionalData = useCallback(async (postData: BlogPost) => {
     const ndkToUse = contextNdk || standaloneNdk;
@@ -538,6 +626,135 @@ export default function BlogPost() {
       fetchReactionDetails(post.id);
     }
   };
+
+  const fetchComments = useCallback(async (postId: string) => {
+    const ndkToUse = contextNdk || standaloneNdk;
+    if (!ndkToUse) return;
+
+    setIsLoadingComments(true);
+
+    try {
+      // Build article coordinate (a tag)
+      const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+
+      // Query both by '#e' (event id reference) and '#a' (article coordinate reference)
+      const [nip22ByE, nip22ByA, kind1ByE, kind1ByA] = await Promise.all([
+        ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId], limit: 200 }),
+        aCoordinate ? ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate], limit: 200 }) : Promise.resolve(new Set()),
+        ndkToUse.fetchEvents({ kinds: [1], '#e': [postId], limit: 500 }),
+        aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate], limit: 500 }) : Promise.resolve(new Set()),
+      ]);
+
+      // Merge and deduplicate by id
+      const combined: NDKEvent[] = [];
+      const seen = new Set<string>();
+      for (const ev of nip22ByE) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
+      for (const ev of nip22ByA as Set<NDKEvent>) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
+      for (const ev of kind1ByE) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
+      for (const ev of kind1ByA as Set<NDKEvent>) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
+
+      const allComments: CommentData[] = [];
+
+      for (const ev of combined) {
+        try {
+          // Get author profile
+          let authorName: string | undefined;
+          let authorPicture: string | undefined;
+          try {
+            const cachedProfile = getAuthorProfile(ev.pubkey);
+            if (cachedProfile) {
+              authorName = cachedProfile.displayName || cachedProfile.name;
+            } else {
+              const user = ndkToUse.getUser({ pubkey: ev.pubkey });
+              const profile = await user.fetchProfile();
+              if (profile) {
+                authorName = profile.displayName || profile.name;
+                // different libs sometimes use picture/image
+                authorPicture = profile.image || (profile as { picture?: string }).picture;
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching comment author profile:', error);
+          }
+
+          allComments.push({
+            id: ev.id,
+            pubkey: ev.pubkey,
+            content: ev.content,
+            created_at: ev.created_at,
+            authorName,
+            authorPicture,
+            kind: ev.kind,
+            event: ev,
+            parentId: ev.tags.find(tag => tag[0] === 'e')?.[1], // Assuming 'e' tag is the parent event
+            children: [],
+            depth: 0
+          });
+        } catch (error) {
+          console.error('Error processing comment event:', error);
+        }
+      }
+
+      // Sort comments by creation date (newest first)
+      allComments.sort((a, b) => b.created_at - a.created_at);
+      
+      // Build threaded structure
+      const commentMap = new Map<string, CommentData>();
+      const rootComments: CommentData[] = [];
+      
+      // First pass: create a map of all comments
+      allComments.forEach(comment => {
+        commentMap.set(comment.id, comment);
+      });
+      
+      // Second pass: organize into parent-child relationships
+      allComments.forEach(comment => {
+        if (comment.parentId && commentMap.has(comment.parentId)) {
+          // This is a reply to another comment
+          const parent = commentMap.get(comment.parentId)!;
+          parent.children.push(comment);
+          comment.depth = parent.depth + 1;
+        } else {
+          // This is a root comment
+          rootComments.push(comment);
+        }
+      });
+      
+      // Sort children by creation date (oldest first for replies)
+      const sortComments = (comments: CommentData[]) => {
+        comments.sort((a, b) => a.created_at - b.created_at);
+        comments.forEach(comment => {
+          if (comment.children.length > 0) {
+            sortComments(comment.children);
+          }
+        });
+      };
+      sortComments(rootComments);
+      
+      setComments(rootComments);
+
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }, [contextNdk, standaloneNdk, getAuthorProfile, post?.pubkey, params.d]);
+
+  const handleCommentsClick = () => {
+    // Scroll to comment section instead of opening modal
+    const commentSection = document.querySelector(`.${styles.commentSection}`);
+    if (commentSection) {
+      commentSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Fetch comments when post is loaded
+  useEffect(() => {
+    if (post?.id) {
+      fetchComments(post.id);
+    }
+  }, [post?.id, fetchComments]);
 
 
 
@@ -919,7 +1136,7 @@ export default function BlogPost() {
                 </span>
                 <span className={styles.reactionLabel}>Reactions</span>
               </div>
-              <div className={styles.reactionItem}>
+              <div className={styles.reactionItem} onClick={handleCommentsClick} style={{ cursor: 'pointer' }}>
                 <ChatBubbleLeftIcon className={styles.reactionIcon} />
                 <span className={styles.reactionCount}>
                   {reactionStats.isLoading ? '...' : reactionStats.comments}
@@ -1038,6 +1255,32 @@ export default function BlogPost() {
             <div ref={endOfContentRef} style={{ height: '1px' }} />
           </div>
         </article>
+
+        {/* Comment Section */}
+        <div className={styles.commentSection}>
+          <div className={styles.commentSectionHeader}>
+            <h3 className={styles.commentSectionTitle}>
+              Comments {reactionStats.isLoading ? '(...)' : `(${reactionStats.comments})`}
+            </h3>
+          </div>
+          
+          {isLoadingComments ? (
+            <div className={styles.commentLoading}>
+              <div className={styles.commentLoadingSpinner}></div>
+              <span>Loading comments...</span>
+            </div>
+          ) : comments.length === 0 ? (
+            <div className={styles.noComments}>
+              <ChatBubbleLeftIcon className={styles.noCommentsIcon} />
+              <p>No comments yet</p>
+              <p className={styles.noCommentsSubtext}>Be the first to share your thoughts!</p>
+            </div>
+          ) : (
+            <div className={styles.commentList}>
+              <CommentThread comments={comments} />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Zaps Modal */}
@@ -1111,6 +1354,26 @@ export default function BlogPost() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comment JSON Modal */}
+      {showCommentJsonModal && (
+        <div className={styles.modalOverlay} onClick={closeCommentJson}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Comment JSON</h2>
+              <button 
+                className={styles.modalCloseButton}
+                onClick={closeCommentJson}
+              >
+                <XMarkIcon className={styles.modalCloseIcon} />
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <pre className={styles.jsonPre}>{selectedCommentJson}</pre>
             </div>
           </div>
         </div>
