@@ -1445,7 +1445,7 @@ export default function ReaderPage() {
               {(isLoadingPosts || (follows.length > 0 && debouncedFilteredPosts.length === 0)) && (
                 <div className={styles.loadingState}>
                   <div className={styles.loadingSpinner}></div>
-                  <p>Loading posts from {follows.length} people you follow...</p>
+                  <p>Loading your reads...</p>
                 </div>
               )}
               {debouncedFilteredPosts.length === 0 && !isLoadingPosts && follows.length === 0 ? (
