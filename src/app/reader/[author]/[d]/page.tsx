@@ -7,7 +7,7 @@ import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { ArrowLeftIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
@@ -422,12 +422,61 @@ export default function BlogPost() {
       return processedContent;
     };
 
+    // Function to convert image URLs to proper markdown image syntax
+    const processImageUrls = (content: string) => {
+      let processedContent = content;
+      
+      // Pattern to match image URLs that are not already in markdown image format
+      // This matches URLs ending with common image extensions
+      const imageUrlRegex = /(?<![!])\[([^\]]*?\.(?:png|jpg|jpeg|gif|webp|svg|bmp|ico))\]\(([^)]+)\)/g;
+      
+      // Replace image URL links with proper markdown image syntax
+      processedContent = processedContent.replace(imageUrlRegex, (match, altText, url) => {
+        // If the alt text is the same as the URL, use a generic alt text
+        const finalAltText = altText === url ? 'Image' : altText;
+        return `![${finalAltText}](${url})`;
+      });
+      
+      // Also handle standalone image URLs that might be wrapped in brackets
+      const standaloneImageUrlRegex = /\[(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|ico))\]/g;
+      processedContent = processedContent.replace(standaloneImageUrlRegex, (match, url) => {
+        return `![Image](${url})`;
+      });
+      
+      // Handle cases where the image URL is the same as the link text
+      const sameUrlImageRegex = /\[(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|ico))\]\(\1\)/g;
+      processedContent = processedContent.replace(sameUrlImageRegex, (match, url) => {
+        return `![Image](${url})`;
+      });
+      
+      // Handle cases where the link text is an image URL but the URL might be slightly different
+      const imageUrlAsLinkRegex = /\[(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|ico))\]\(([^)]+)\)/g;
+      processedContent = processedContent.replace(imageUrlAsLinkRegex, (match, linkText, url) => {
+        // If the link text is an image URL, convert it to an image
+        if (linkText.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i)) {
+          return `![Image](${url})`;
+        }
+        return match; // Keep original if not an image URL
+      });
+      
+      // Handle plain image URLs that might be on their own line
+      const plainImageUrlRegex = /(?<!\()(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|ico))(?!\))/g;
+      processedContent = processedContent.replace(plainImageUrlRegex, (match, url) => {
+        return `![Image](${url})`;
+      });
+      
+      return processedContent;
+    };
+
     console.log('🔍 DEBUG: Loading additional data for post:', postData.id);
 
     try {
-      // Process content to replace npubs with usernames
-      console.log('🔍 DEBUG: Processing content for npubs');
-      const content = await processNpubs(postData.content, ndkToUse);
+      // Process content to replace npubs with usernames and convert image URLs
+      console.log('🔍 DEBUG: Processing content for npubs and images');
+      console.log('🔍 DEBUG: Original content:', postData.content.substring(0, 500) + '...');
+      let content = await processNpubs(postData.content, ndkToUse);
+      content = processImageUrls(content);
+      console.log('🔍 DEBUG: Processed content:', content.substring(0, 500) + '...');
       setProcessedContent(content);
       
       // Fetch author profile if not already available
@@ -1373,9 +1422,70 @@ export default function BlogPost() {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                img: ({ src, alt }: React.ComponentPropsWithoutRef<'img'>) => {
+                  if (!src || typeof src !== 'string') return null;
+                  
+                  return (
+                    <div className={styles.imageContainer}>
+                      <Image
+                        src={src}
+                        alt={alt || 'Image'}
+                        width={800}
+                        height={600}
+                        style={{ width: '100%', height: 'auto' }}
+                        className={styles.markdownImage}
+                        onError={(e) => {
+                          console.error('Image failed to load:', src);
+                          // Fallback to regular img tag if Next.js Image fails
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallbackImg = document.createElement('img');
+                          fallbackImg.src = src;
+                          fallbackImg.alt = alt || 'Image';
+                          fallbackImg.className = styles.markdownImage;
+                          fallbackImg.style.width = '100%';
+                          fallbackImg.style.height = 'auto';
+                          target.parentNode?.appendChild(fallbackImg);
+                        }}
+                        unoptimized
+                      />
+                    </div>
+                  );
+                },
                 a: ({ ...props }) => {
                   const isNostrLink = props.href?.includes('njump.me');
                   const isVideoLink = props.href ? isVideoUrl(props.href) : false;
+                  const isImageUrl = props.href?.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i);
+                  
+                  // If this is an image URL, render it as an image instead of a link
+                  if (isImageUrl && props.href) {
+                    return (
+                      <div className={styles.imageContainer}>
+                        <Image
+                          src={props.href}
+                          alt={props.children?.toString() || 'Image'}
+                          width={800}
+                          height={600}
+                          style={{ width: '100%', height: 'auto' }}
+                          className={styles.markdownImage}
+                          onError={(e) => {
+                            console.error('Image failed to load:', props.href);
+                            // Fallback to regular img tag if Next.js Image fails
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const fallbackImg = document.createElement('img');
+                            fallbackImg.src = props.href!;
+                            fallbackImg.alt = props.children?.toString() || 'Image';
+                            fallbackImg.className = styles.markdownImage;
+                            fallbackImg.style.width = '100%';
+                            fallbackImg.style.height = 'auto';
+                            target.parentNode?.appendChild(fallbackImg);
+                          }}
+                          unoptimized
+                        />
+                      </div>
+                    );
+                  }
                   
                   if (isVideoLink && props.href) {
                     const embedUrl = getVideoEmbedUrl(props.href);
@@ -1437,20 +1547,20 @@ export default function BlogPost() {
                   }
                   return <li {...props}>{children}</li>;
                 },
-                input: ({ checked, ...props }: React.ComponentPropsWithoutRef<'input'>) => {
-                  if (props.type === 'checkbox') {
-                    return (
-                      <input
-                        {...props}
-                        type="checkbox"
-                        checked={checked}
-                        className={styles.taskCheckbox}
-                        readOnly
-                      />
-                    );
-                  }
-                  return <input {...props} />;
-                },
+                                 input: ({ checked, type, ...props }: React.ComponentPropsWithoutRef<'input'>) => {
+                   if (type === 'checkbox') {
+                     return (
+                       <input
+                         {...props}
+                         type="checkbox"
+                         checked={checked}
+                         className={styles.taskCheckbox}
+                         readOnly
+                       />
+                     );
+                   }
+                   return <input type={type} {...props} />;
+                 },
               }}
             >
               {processedContent}
@@ -1489,6 +1599,18 @@ export default function BlogPost() {
               <CommentThread comments={comments} />
             </div>
           )}
+        </div>
+
+        {/* Back to Top Button */}
+        <div className={styles.backToTopContainer}>
+          <button 
+            className={styles.backToTopButton}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label="Back to top"
+          >
+            <ArrowUpIcon className={styles.backToTopIcon} />
+            <span>Back to Top</span>
+          </button>
         </div>
       </div>
 
