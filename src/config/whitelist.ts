@@ -48,6 +48,7 @@ export const ALPHA_WHITELIST: string[] = [
   'npub17t33l3a3852l4ajh706ngwmpg2tj03uxsd6dvy4wumupdkcf59tspayzna', //Juls
   'npub10xvczstpwsljy7gqd2cselvrh5e6mlerep09m8gff87avru0ryqsg2g437', //Eric FJ
   'npub1zqdpzty2mshxncqqxy2078qax6mlehsxmpx5095wtxw4tpepkr0s2ce6fj', //PermaNerd
+  'npub1nkfqwlz7xkhhdaa3ekz88qqqk7a0ks7jpv9zdsv0u206swxjw9rq0g2svu', //Conduit.Market
 ];
 
 // Enable/disable whitelist checking
