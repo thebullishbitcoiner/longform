@@ -1441,37 +1441,36 @@ export default function ReaderPage() {
                 </div>
               </div>
             )}
-            <div className={styles.postsGrid}>
-              {(isLoadingPosts || (follows.length > 0 && debouncedFilteredPosts.length === 0)) && (
-                <div className={styles.loadingState}>
-                  <div className={styles.loadingSpinner}></div>
-                  <p>Loading your reads...</p>
-                </div>
-              )}
-              {debouncedFilteredPosts.length === 0 && !isLoadingPosts && follows.length === 0 ? (
-                <div className={styles.emptyState}>
-                  You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
-                </div>
-              ) : debouncedFilteredPosts.length === 0 && !isLoadingPosts && follows.length > 0 ? (
-                <div className={styles.emptyState}>
-                  {filter === 'all' ? (
-                    "No blog posts found from people you follow."
-                  ) : filter === 'read' ? (
-                    "No read posts found."
-                  ) : (
-                    "No unread posts found."
-                  )}
-                </div>
-              ) : (
-                columns.map((column, columnIndex) => (
-                  <div key={`${columnIndex}-${column.length}`} className={styles.column}>
-                    {column.map((post) => (
-                      <PostCard key={post.id} post={post} onClick={handleCardClick} onHover={handleCardHover} />
-                    ))}
-                  </div>
-                ))
-              )}
-            </div>
+                         <div className={styles.postsGrid}>
+               {(isLoadingPosts || isLoadingFollows) ? (
+                 <div className={styles.loadingState}>
+                   <div className={styles.loadingSpinner}></div>
+                   <p>Loading your reads...</p>
+                 </div>
+               ) : debouncedFilteredPosts.length === 0 && follows.length === 0 ? (
+                 <div className={styles.emptyState}>
+                   You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
+                 </div>
+               ) : debouncedFilteredPosts.length === 0 && follows.length > 0 ? (
+                 <div className={styles.emptyState}>
+                   {filter === 'all' ? (
+                     "No blog posts found from people you follow."
+                   ) : filter === 'read' ? (
+                     "No read posts found."
+                   ) : (
+                     "No unread posts found."
+                   )}
+                 </div>
+               ) : (
+                 columns.map((column, columnIndex) => (
+                   <div key={`${columnIndex}-${column.length}`} className={styles.column}>
+                     {column.map((post) => (
+                       <PostCard key={post.id} post={post} onClick={handleCardClick} onHover={handleCardHover} />
+                     ))}
+                   </div>
+                 ))
+               )}
+             </div>
             
             {/* Bottom controls row */}
             {debouncedFilteredPosts.length > 0 && (
