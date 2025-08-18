@@ -513,7 +513,8 @@ export default function ReaderPage() {
       }, 50); // Small delay to prioritize navigation
       
       return () => clearTimeout(timeoutId);
-    } else {
+    } else if (!isAuthenticated || !isConnected) {
+      // Only clear follows when we're actually not authenticated or connected
       setFollows([]);
     }
   }, [isAuthenticated, isConnected, isLoading, fetchFollows]);
@@ -591,9 +592,6 @@ export default function ReaderPage() {
       subscriptionStateRef.current = 'idle';
     }
     
-    // Reset loading state to ensure we can proceed
-    setIsLoadingPosts(false);
-
     // Don't clear processed events here - only clear when follows change
     console.log('🧹 DEBUG: Setup subscription - processed events count:', processedEvents.current.size);
     
@@ -936,9 +934,32 @@ export default function ReaderPage() {
     }
   }, [router, ndk]);
 
-  if (isLoading || isLoadingFollows) {
-    return <div className={styles.loading}>Loading...</div>;
-  }
+           if (isLoading || isLoadingFollows || isLoadingPosts || subscriptionStateRef.current === 'setting_up') {
+      return (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: '#000000',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+          paddingTop: '20vh',
+          zIndex: 9999
+        }}>
+          <div className={styles.loadingSpinner}></div>
+          <p style={{
+            color: '#ffffff',
+            marginTop: '1rem',
+            fontSize: '1rem',
+            textAlign: 'center'
+          }}>Loading your reads...</p>
+        </div>
+      );
+    }
 
   if (!isAuthenticated) {
     return (
@@ -1442,12 +1463,7 @@ export default function ReaderPage() {
               </div>
             )}
                          <div className={styles.postsGrid}>
-               {(isLoadingPosts || isLoadingFollows) ? (
-                 <div className={styles.loadingState}>
-                   <div className={styles.loadingSpinner}></div>
-                   <p>Loading your reads...</p>
-                 </div>
-               ) : debouncedFilteredPosts.length === 0 && follows.length === 0 ? (
+               {debouncedFilteredPosts.length === 0 && follows.length === 0 ? (
                  <div className={styles.emptyState}>
                    You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
                  </div>
