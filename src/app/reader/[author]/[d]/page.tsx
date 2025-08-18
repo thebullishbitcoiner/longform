@@ -15,6 +15,7 @@ import NDK from '@nostr-dev-kit/ndk';
 import { resolveNip05 } from '@/utils/nostr';
 import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
+import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -49,6 +50,7 @@ interface ReactionData {
   content: string;
   created_at: number;
   authorName?: string;
+  event: NDKEvent; // Store the full event for emoji processing
 }
 
 interface CommentData {
@@ -106,6 +108,7 @@ export default function BlogPost() {
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [showCommentJsonModal, setShowCommentJsonModal] = useState(false);
   const [selectedCommentJson, setSelectedCommentJson] = useState<string | null>(null);
+  const [openReactionMenuId, setOpenReactionMenuId] = useState<string | null>(null);
 
   const openCommentJson = (eventId: string) => {
     const comment = comments.find(c => c.id === eventId);
@@ -127,6 +130,14 @@ export default function BlogPost() {
   const closeCommentJson = () => {
     setShowCommentJsonModal(false);
     setSelectedCommentJson(null);
+  };
+
+  const handleReactionMenuToggle = (reactionId: string) => {
+    setOpenReactionMenuId(openReactionMenuId === reactionId ? null : reactionId);
+  };
+
+  const closeReactionMenu = () => {
+    setOpenReactionMenuId(null);
   };
 
   // Recursive component to render threaded comments
@@ -337,11 +348,9 @@ export default function BlogPost() {
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
       const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
 
-      // Fetch reactions (kind 7)
-      const reactions = await ndkToUse.fetchEvents({
-        kinds: [7],
-        '#e': [postId]
-      });
+      // Fetch reactions (kind 7) by both '#e' and '#a' (all versions)
+      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] });
+      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : new Set();
 
       // Fetch comments (kind 1111 - NIP-22) by both '#e' and '#a'
       const nip22ByE = await ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId] });
@@ -358,19 +367,26 @@ export default function BlogPost() {
       for (const ev of kind1ByE) commentIds.add(ev.id);
       for (const ev of kind1ByA as Set<NDKEvent>) commentIds.add(ev.id);
 
-      // Fetch zaps (kind 9735)
-      const zaps = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
+      // Fetch zaps (kind 9735) by both '#e' and '#a'
+      const zapsByE = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
+      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : new Set();
+      const uniqueZapIds = new Set<string>();
+      for (const ev of zapsByE) uniqueZapIds.add(ev.id);
+      for (const ev of zapsByA as Set<NDKEvent>) uniqueZapIds.add(ev.id);
 
-      // Count positive reactions (likes)
-      const positiveReactions = Array.from(reactions).filter(event => {
+      // Count all reactions across both sources
+      const reactionsById = new Map<string, NDKEvent>();
+      for (const ev of reactionsByE) reactionsById.set(ev.id, ev);
+      for (const ev of reactionsByA as Set<NDKEvent>) reactionsById.set(ev.id, ev);
+      const allReactions = Array.from(reactionsById.values()).filter(event => {
         const content = event.content.trim();
-        return content === '+' || content === '❤️' || content === '👍' || content === 'like' || content === 'heart';
+        return content !== ''; // Only filter out empty reactions
       });
 
       setReactionStats({
-        likes: positiveReactions.length,
+        likes: allReactions.length,
         comments: commentIds.size,
-        zaps: zaps.size,
+        zaps: uniqueZapIds.size,
         isLoading: false
       });
 
@@ -570,7 +586,8 @@ export default function BlogPost() {
           summary,
           published_at,
           image,
-          tags
+          tags,
+          event // Store the full event for emoji processing
         };
 
         console.log('🔍 DEBUG: Created post data:', { 
@@ -661,15 +678,22 @@ export default function BlogPost() {
     setShowZapsModal(true);
 
     try {
-      // Fetch zaps (kind 9735)
-      const zaps = await ndkToUse.fetchEvents({
-        kinds: [9735],
-        '#e': [postId]
-      });
+      // Build article coordinate (a tag)
+      const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+
+      // Fetch zaps (kind 9735) across all versions via '#e' and '#a'
+      const zapsByE = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
+      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : new Set();
+
+      // Deduplicate
+      const uniqueZaps = new Map<string, NDKEvent>();
+      for (const ev of zapsByE) uniqueZaps.set(ev.id, ev);
+      for (const ev of zapsByA as Set<NDKEvent>) uniqueZaps.set(ev.id, ev);
 
       const zapDetails: ZapData[] = [];
 
-      for (const zap of zaps) {
+      for (const zap of uniqueZaps.values()) {
         try {
           // Parse zap event to extract amount and other details
           const amountTag = zap.tags.find(tag => tag[0] === 'amount');
@@ -735,15 +759,22 @@ export default function BlogPost() {
     setShowReactionsModal(true);
 
     try {
-      // Fetch reactions (kind 7)
-      const reactions = await ndkToUse.fetchEvents({
-        kinds: [7],
-        '#e': [postId]
-      });
+      // Build article coordinate (a tag)
+      const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+
+      // Fetch reactions (kind 7) across all versions via '#e' and '#a'
+      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] });
+      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : new Set();
+
+      // Deduplicate
+      const uniqueReactions = new Map<string, NDKEvent>();
+      for (const ev of reactionsByE) uniqueReactions.set(ev.id, ev);
+      for (const ev of reactionsByA as Set<NDKEvent>) uniqueReactions.set(ev.id, ev);
 
       const reactionDetails: ReactionData[] = [];
 
-      for (const reaction of reactions) {
+      for (const reaction of uniqueReactions.values()) {
         try {
           const content = reaction.content.trim();
           
@@ -772,7 +803,8 @@ export default function BlogPost() {
             pubkey: reaction.pubkey,
             content,
             created_at: reaction.created_at,
-            authorName
+            authorName,
+            event: reaction
           });
         } catch (error) {
           console.error('Error parsing reaction event:', error);
@@ -1083,8 +1115,10 @@ export default function BlogPost() {
 
 
   const handleClickOutside = useCallback((event: MouseEvent) => {
+    const target = event.target as Element;
+    
+    // Handle text selection context menu
     if (showContextMenu) {
-      const target = event.target as Element;
       const contextMenu = document.querySelector(`.${styles.contextMenu}`);
       
       if (!contextMenu || !contextMenu.contains(target)) {
@@ -1093,15 +1127,29 @@ export default function BlogPost() {
         window.getSelection()?.removeAllRanges();
       }
     }
-  }, [showContextMenu]);
+    
+    // Handle reaction context menus
+    if (openReactionMenuId) {
+      const reactionMenu = document.querySelector(`[data-reaction-menu="${openReactionMenuId}"]`);
+      
+      if (!reactionMenu || !reactionMenu.contains(target)) {
+        closeReactionMenu();
+      }
+    }
+  }, [showContextMenu, openReactionMenuId]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key === 'Escape' && showContextMenu) {
-      setShowContextMenu(false);
-      setSelectedText(null);
-      window.getSelection()?.removeAllRanges();
+    if (event.key === 'Escape') {
+      if (showContextMenu) {
+        setShowContextMenu(false);
+        setSelectedText(null);
+        window.getSelection()?.removeAllRanges();
+      }
+      if (openReactionMenuId) {
+        closeReactionMenu();
+      }
     }
-  }, [showContextMenu]);
+  }, [showContextMenu, openReactionMenuId]);
 
   const handleContextMenu = useCallback((event: MouseEvent) => {
     // Prevent native context menu on all devices to avoid flashing
@@ -1233,6 +1281,27 @@ export default function BlogPost() {
       observer.disconnect();
     };
   }, [post, hasMarkedAsRead, markPostAsRead, isAuthenticated]);
+
+  // Function to render custom emojis and reactions as JSX
+  const renderReactionContentJSX = (content: string, event?: NDKEvent) => {
+    if (!event) {
+      return <span>{content}</span>;
+    }
+    
+    // Extract custom emojis from the event's tags
+    const emojiMap = extractCustomEmojis(event);
+    
+    if (emojiMap.size === 0) {
+      return <span>{content}</span>;
+    }
+    
+    // Render custom emojis as JSX elements
+    const renderedParts = renderCustomEmojis(content, emojiMap);
+    
+    return <span>{renderedParts}</span>;
+  };
+
+
 
   // Function to check if a URL is a video link
   const isVideoUrl = (url: string): boolean => {
@@ -1422,34 +1491,46 @@ export default function BlogPost() {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                // Custom text component to handle emojis in post content
+                text: ({ children }) => {
+                  if (!post?.event || typeof children !== 'string') {
+                    return <span>{children}</span>;
+                  }
+                  
+                  const emojiMap = extractCustomEmojis(post.event as NDKEvent);
+                  if (emojiMap.size === 0) {
+                    return <span>{children}</span>;
+                  }
+                  
+                  const renderedParts = renderCustomEmojis(children, emojiMap);
+                  return <span>{renderedParts}</span>;
+                },
                 img: ({ src, alt }: React.ComponentPropsWithoutRef<'img'>) => {
                   if (!src || typeof src !== 'string') return null;
                   
                   return (
-                    <div className={styles.imageContainer}>
-                      <Image
-                        src={src}
-                        alt={alt || 'Image'}
-                        width={800}
-                        height={600}
-                        style={{ width: '100%', height: 'auto' }}
-                        className={styles.markdownImage}
-                        onError={(e) => {
-                          console.error('Image failed to load:', src);
-                          // Fallback to regular img tag if Next.js Image fails
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallbackImg = document.createElement('img');
-                          fallbackImg.src = src;
-                          fallbackImg.alt = alt || 'Image';
-                          fallbackImg.className = styles.markdownImage;
-                          fallbackImg.style.width = '100%';
-                          fallbackImg.style.height = 'auto';
-                          target.parentNode?.appendChild(fallbackImg);
-                        }}
-                        unoptimized
-                      />
-                    </div>
+                    <Image
+                      src={src}
+                      alt={alt || 'Image'}
+                      width={800}
+                      height={600}
+                      style={{ width: '100%', height: 'auto' }}
+                      className={styles.markdownImage}
+                      onError={(e) => {
+                        console.error('Image failed to load:', src);
+                        // Fallback to regular img tag if Next.js Image fails
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const fallbackImg = document.createElement('img');
+                        fallbackImg.src = src;
+                        fallbackImg.alt = alt || 'Image';
+                        fallbackImg.className = styles.markdownImage;
+                        fallbackImg.style.width = '100%';
+                        fallbackImg.style.height = 'auto';
+                        target.parentNode?.appendChild(fallbackImg);
+                      }}
+                      unoptimized
+                    />
                   );
                 },
                 a: ({ ...props }) => {
@@ -1457,35 +1538,33 @@ export default function BlogPost() {
                   const isVideoLink = props.href ? isVideoUrl(props.href) : false;
                   const isImageUrl = props.href?.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i);
                   
-                  // If this is an image URL, render it as an image instead of a link
-                  if (isImageUrl && props.href) {
-                    return (
-                      <div className={styles.imageContainer}>
-                        <Image
-                          src={props.href}
-                          alt={props.children?.toString() || 'Image'}
-                          width={800}
-                          height={600}
-                          style={{ width: '100%', height: 'auto' }}
-                          className={styles.markdownImage}
-                          onError={(e) => {
-                            console.error('Image failed to load:', props.href);
-                            // Fallback to regular img tag if Next.js Image fails
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const fallbackImg = document.createElement('img');
-                            fallbackImg.src = props.href!;
-                            fallbackImg.alt = props.children?.toString() || 'Image';
-                            fallbackImg.className = styles.markdownImage;
-                            fallbackImg.style.width = '100%';
-                            fallbackImg.style.height = 'auto';
-                            target.parentNode?.appendChild(fallbackImg);
-                          }}
-                          unoptimized
-                        />
-                      </div>
-                    );
-                  }
+                                     // If this is an image URL, render it as an image instead of a link
+                   if (isImageUrl && props.href) {
+                     return (
+                       <Image
+                         src={props.href}
+                         alt={props.children?.toString() || 'Image'}
+                         width={800}
+                         height={600}
+                         style={{ width: '100%', height: 'auto' }}
+                         className={styles.markdownImage}
+                         onError={(e) => {
+                           console.error('Image failed to load:', props.href);
+                           // Fallback to regular img tag if Next.js Image fails
+                           const target = e.target as HTMLImageElement;
+                           target.style.display = 'none';
+                           const fallbackImg = document.createElement('img');
+                           fallbackImg.src = props.href!;
+                           fallbackImg.alt = props.children?.toString() || 'Image';
+                           fallbackImg.className = styles.markdownImage;
+                           fallbackImg.style.width = '100%';
+                           fallbackImg.style.height = 'auto';
+                           target.parentNode?.appendChild(fallbackImg);
+                         }}
+                         unoptimized
+                       />
+                     );
+                   }
                   
                   if (isVideoLink && props.href) {
                     const embedUrl = getVideoEmbedUrl(props.href);
@@ -1672,18 +1751,60 @@ export default function BlogPost() {
               ) : reactionData.length === 0 ? (
                 <div className={styles.modalEmpty}>No reactions yet</div>
               ) : (
-                <div className={styles.reactionList}>
-                  {reactionData.map((reaction) => (
-                    <div key={reaction.id} className={styles.reactionItem}>
-                      <span className={styles.reactionAuthorName}>
-                        {reaction.authorName || reaction.pubkey.slice(0, 8) + '...'}
-                      </span>
-                      <span className={styles.reactionContent}>
-                        {reaction.content}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                                 <div className={styles.reactionList}>
+                   {reactionData.map((reaction) => (
+                     <div key={reaction.id} className={styles.reactionItem}>
+                       <div className={styles.reactionLeft}>
+                         <span className={styles.reactionIcon}>
+                           {renderReactionContentJSX(reaction.content, reaction.event)}
+                         </span>
+                         <span className={styles.reactionAuthorName}>
+                           {reaction.authorName || reaction.pubkey.slice(0, 8) + '...'}
+                         </span>
+                       </div>
+                                               <div className={styles.reactionRight}>
+                          <div className={styles.reactionMenuWrapper}>
+                            <button className={styles.reactionMenuButton} onClick={(e) => {
+                              e.stopPropagation();
+                              handleReactionMenuToggle(reaction.id);
+                            }}>
+                              <EllipsisVerticalIcon className={styles.reactionMenuIcon} />
+                            </button>
+                            <div 
+                              className={styles.reactionMenu} 
+                              style={{ display: openReactionMenuId === reaction.id ? 'block' : 'none' }}
+                              data-reaction-menu={reaction.id}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                                                           <button className={styles.reactionMenuItem} onClick={() => {
+                                // Use the full NDKEvent if available, otherwise fall back to basic data
+                                const fullEvent = reaction.event ? {
+                                  id: reaction.event.id,
+                                  pubkey: reaction.event.pubkey,
+                                  created_at: reaction.event.created_at,
+                                  kind: reaction.event.kind,
+                                  tags: reaction.event.tags || [],
+                                  content: reaction.event.content,
+                                  sig: reaction.event.sig
+                                } : {
+                                  id: reaction.id,
+                                  pubkey: reaction.pubkey,
+                                  created_at: reaction.created_at,
+                                  kind: 7,
+                                  tags: [],
+                                  content: reaction.content,
+                                  sig: ''
+                                };
+                                setSelectedCommentJson(JSON.stringify(fullEvent, null, 2));
+                                setShowCommentJsonModal(true);
+                                closeReactionMenu(); // Close the menu after opening the JSON modal
+                              }}>View JSON</button>
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
               )}
             </div>
           </div>
@@ -1695,7 +1816,7 @@ export default function BlogPost() {
         <div className={styles.modalOverlay} onClick={closeCommentJson}>
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Comment JSON</h2>
+              <h2 className={styles.modalTitle}>Event JSON</h2>
               <button 
                 className={styles.modalCloseButton}
                 onClick={closeCommentJson}

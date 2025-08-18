@@ -111,21 +111,16 @@
     transform: translateX(-50%) !important;
   }
 
-  .imageContainer {
+  .markdownImage {
     margin: 1rem 0 !important;
     border-radius: 0 !important;
     width: 100vw !important;
     max-width: none !important;
+    height: auto !important;
     position: relative !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
-  }
-
-  .markdownImage {
-    max-width: none !important;
-    width: 100vw !important;
-    height: auto !important;
-    border-radius: 0 !important;
+    display: block !important;
   }
 
   /* Comment section mobile styles */
@@ -360,6 +355,10 @@
 .reactionIcon {
   width: 1.25rem;
   height: 1.25rem;
+  line-height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
@@ -519,11 +518,7 @@
   margin: 1rem 0;
 }
 
-.imageContainer {
-  margin: 1rem 0;
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
+
 
 .markdownImage {
   max-width: 100%;
@@ -770,18 +765,96 @@
   align-items: center;
 }
 
+.reactionLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.reactionIcon {
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+}
+
+.reactionIcon img {
+  width: 1.25rem;
+  height: 1.25rem;
+  max-width: 1.25rem;
+  max-height: 1.25rem;
+  object-fit: contain;
+}
+
 .reactionAuthorName {
   font-weight: 500;
   color: rgb(244 244 245);
 }
 
-.reactionContent {
-  font-size: 1.125rem;
-  font-weight: 500;
+.reactionRight {
+  display: flex;
+  align-items: center;
+}
+
+.reactionMenuWrapper {
+  position: relative;
+}
+
+.reactionMenuButton {
+  background: none;
+  border: none;
+  color: rgb(161 161 170);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.reactionMenuButton:hover {
+  background-color: rgb(63 63 70);
   color: rgb(244 244 245);
-  max-width: 200px;
-  text-align: right;
-  word-break: break-word;
+}
+
+.reactionMenuIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.reactionMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background-color: rgb(24 24 27);
+  border: 1px solid rgb(39 39 42);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  padding: 0.5rem;
+  min-width: 120px;
+  z-index: 1000;
+  display: none;
+}
+
+.reactionMenuItem {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  color: rgb(244 244 245);
+  font-size: 0.875rem;
+  cursor: pointer;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.reactionMenuItem:hover {
+  background-color: rgb(39 39 42);
 }
 
 /* Mobile responsive modal */
@@ -810,9 +883,13 @@
     padding: 0.5rem;
   }
 
-  .reactionContent {
-    max-width: 150px;
+  .reactionLeft {
+    gap: 0.5rem;
+  }
+
+  .reactionIcon {
     font-size: 1rem;
+    min-width: 1.25rem;
   }
 
   .reactionLabel {
