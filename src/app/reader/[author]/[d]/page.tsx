@@ -103,6 +103,7 @@ export default function BlogPost() {
   // Comment section state
   const [comments, setComments] = useState<CommentData[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [showCommentJsonModal, setShowCommentJsonModal] = useState(false);
   const [selectedCommentJson, setSelectedCommentJson] = useState<string | null>(null);
 
@@ -130,6 +131,125 @@ export default function BlogPost() {
 
   // Recursive component to render threaded comments
   const CommentThread = ({ comments, depth = 0 }: { comments: CommentData[], depth?: number }) => {
+    // Function to process comment content and convert nprofile strings to links
+    const processCommentContent = (content: string) => {
+      if (!content || typeof content !== 'string') {
+        return content;
+      }
+
+      // Process the content by replacing nostr links with React elements
+      const nostrLinkRegex = /(nostr:)?(nprofile1[a-zA-Z0-9]+|npub1[a-zA-Z0-9]+|note1[a-zA-Z0-9]+|nevent1[a-zA-Z0-9]+)/g;
+      
+      const elements: (string | React.ReactElement)[] = [];
+      let lastIndex = 0;
+      let match;
+      
+      while ((match = nostrLinkRegex.exec(content)) !== null) {
+        // Add text before the match
+        if (match.index > lastIndex) {
+          elements.push(content.slice(lastIndex, match.index));
+        }
+        
+        const fullMatch = match[0]; // The full matched string (including nostr: if present)
+        const cleanPart = fullMatch.replace(/^nostr:/, ''); // Remove nostr: prefix
+        
+        try {
+          const decoded = nip19.decode(cleanPart);
+          
+          switch (decoded.type) {
+            case 'nprofile':
+              const pubkey = decoded.data.pubkey;
+              if (pubkey) {
+                const profileUrl = `/profile/${nip19.npubEncode(pubkey)}`;
+                const cachedProfile = getAuthorProfile(pubkey);
+                const displayName = cachedProfile?.displayName || cachedProfile?.name;
+                
+                elements.push(
+                  <Link 
+                    key={`nostr-${match.index}`}
+                    href={profileUrl}
+                    className={styles.nostrLink}
+                    onClick={(e) => e.stopPropagation()}
+                    title={fullMatch}
+                  >
+                    {displayName ? `@${displayName}` : `@${pubkey.slice(0, 8)}...`}
+                  </Link>
+                );
+              } else {
+                elements.push(fullMatch);
+              }
+              break;
+            
+            case 'npub':
+              const npubUrl = `/profile/${cleanPart}`;
+              const npubPubkey = decoded.data;
+              const npubCachedProfile = getAuthorProfile(npubPubkey);
+              const npubDisplayName = npubCachedProfile?.displayName || npubCachedProfile?.name;
+              
+              elements.push(
+                <Link 
+                  key={`nostr-${match.index}`}
+                  href={npubUrl}
+                  className={styles.nostrLink}
+                  onClick={(e) => e.stopPropagation()}
+                  title={fullMatch}
+                >
+                  {npubDisplayName ? `@${npubDisplayName}` : `@${npubPubkey.slice(0, 8)}...`}
+                </Link>
+              );
+              break;
+            
+            case 'note':
+              const noteUrl = `https://njump.me/${cleanPart}`;
+              elements.push(
+                <a 
+                  key={`nostr-${match.index}`}
+                  href={noteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.nostrLink}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {fullMatch}
+                </a>
+              );
+              break;
+            
+            case 'nevent':
+              const eventUrl = `https://njump.me/${cleanPart}`;
+              elements.push(
+                <a 
+                  key={`nostr-${match.index}`}
+                  href={eventUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.nostrLink}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {fullMatch}
+                </a>
+              );
+              break;
+            
+            default:
+              elements.push(fullMatch);
+          }
+        } catch (error) {
+          console.error('Error decoding nostr link:', fullMatch, error);
+          elements.push(fullMatch);
+        }
+        
+        lastIndex = match.index + fullMatch.length;
+      }
+      
+      // Add remaining text after the last match
+      if (lastIndex < content.length) {
+        elements.push(content.slice(lastIndex));
+      }
+      
+      return elements.length > 0 ? elements : content;
+    };
+
     return (
       <div className={styles.commentThread} style={{ marginLeft: `${depth * 20}px` }}>
         {comments.map((comment) => (
@@ -170,7 +290,7 @@ export default function BlogPost() {
               </div>
             </div>
             <div className={styles.commentContent}>
-              {comment.content}
+              {processCommentContent(comment.content)}
             </div>
             {comment.children.length > 0 && (
               <CommentThread comments={comment.children} depth={depth + 1} />
@@ -654,47 +774,20 @@ export default function BlogPost() {
       for (const ev of kind1ByE) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
       for (const ev of kind1ByA as Set<NDKEvent>) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
 
-      const allComments: CommentData[] = [];
-
-      for (const ev of combined) {
-        try {
-          // Get author profile
-          let authorName: string | undefined;
-          let authorPicture: string | undefined;
-          try {
-            const cachedProfile = getAuthorProfile(ev.pubkey);
-            if (cachedProfile) {
-              authorName = cachedProfile.displayName || cachedProfile.name;
-            } else {
-              const user = ndkToUse.getUser({ pubkey: ev.pubkey });
-              const profile = await user.fetchProfile();
-              if (profile) {
-                authorName = profile.displayName || profile.name;
-                // different libs sometimes use picture/image
-                authorPicture = profile.image || (profile as { picture?: string }).picture;
-              }
-            }
-          } catch (error) {
-            console.error('Error fetching comment author profile:', error);
-          }
-
-          allComments.push({
-            id: ev.id,
-            pubkey: ev.pubkey,
-            content: ev.content,
-            created_at: ev.created_at,
-            authorName,
-            authorPicture,
-            kind: ev.kind,
-            event: ev,
-            parentId: ev.tags.find(tag => tag[0] === 'e')?.[1], // Assuming 'e' tag is the parent event
-            children: [],
-            depth: 0
-          });
-        } catch (error) {
-          console.error('Error processing comment event:', error);
-        }
-      }
+      // First, create comments with basic data (no profile fetching yet)
+      const allComments: CommentData[] = combined.map(ev => ({
+        id: ev.id,
+        pubkey: ev.pubkey,
+        content: ev.content,
+        created_at: ev.created_at,
+        authorName: undefined, // Will be populated later
+        authorPicture: undefined, // Will be populated later
+        kind: ev.kind,
+        event: ev,
+        parentId: ev.tags.find(tag => tag[0] === 'e')?.[1], // Assuming 'e' tag is the parent event
+        children: [],
+        depth: 0
+      }));
 
       // Sort comments by creation date (newest first)
       allComments.sort((a, b) => b.created_at - a.created_at);
@@ -723,16 +816,69 @@ export default function BlogPost() {
       
       // Sort children by creation date (oldest first for replies)
       const sortComments = (comments: CommentData[]) => {
-        comments.sort((a, b) => a.created_at - b.created_at);
+        comments.sort((a, b) => b.created_at - a.created_at); // Sort root comments by newest first
         comments.forEach(comment => {
           if (comment.children.length > 0) {
+            // Sort replies by oldest first (standard for threaded discussions)
+            comment.children.sort((a, b) => a.created_at - b.created_at);
             sortComments(comment.children);
           }
         });
       };
       sortComments(rootComments);
       
+      // Set comments immediately with basic data (no profiles yet)
       setComments(rootComments);
+
+      // Now fetch all profiles in parallel and update comments in one batch
+      setIsLoadingProfiles(true);
+      const uniquePubkeys = new Set(allComments.map(comment => comment.pubkey));
+      const profilePromises = Array.from(uniquePubkeys).map(async (pubkey) => {
+        try {
+          const cachedProfile = getAuthorProfile(pubkey);
+          if (cachedProfile) {
+            return { pubkey, profile: cachedProfile };
+          } else {
+            const user = ndkToUse.getUser({ pubkey });
+            const profile = await user.fetchProfile();
+            return { pubkey, profile };
+          }
+        } catch (error) {
+          console.error('Error fetching profile for pubkey:', pubkey, error);
+          return { pubkey, profile: null };
+        }
+      });
+
+      // Wait for all profile fetches to complete
+      const profileResults = await Promise.all(profilePromises);
+      
+      // Create a map of pubkey to profile data
+      const profileMap = new Map<string, { displayName?: string; name?: string; image?: string; picture?: string }>();
+      profileResults.forEach(({ pubkey, profile }) => {
+        if (profile) {
+          profileMap.set(pubkey, profile);
+        }
+      });
+
+      // Update all comments with profile data in one batch
+      const updateCommentProfiles = (comments: CommentData[]) => {
+        comments.forEach(comment => {
+          const profile = profileMap.get(comment.pubkey);
+          if (profile) {
+            comment.authorName = profile.displayName || profile.name;
+            comment.authorPicture = profile.image || profile.picture;
+          }
+          if (comment.children.length > 0) {
+            updateCommentProfiles(comment.children);
+          }
+        });
+      };
+
+      updateCommentProfiles(rootComments);
+      
+      // Update the state with the complete comment data (profiles included)
+      setComments([...rootComments]);
+      setIsLoadingProfiles(false);
 
     } catch (error) {
       console.error('Error fetching comments:', error);
@@ -755,6 +901,63 @@ export default function BlogPost() {
       fetchComments(post.id);
     }
   }, [post?.id, fetchComments]);
+
+  // Fetch profiles for nostr profile links in comments
+  useEffect(() => {
+    if (comments.length === 0) return;
+
+    const ndkToUse = contextNdk || standaloneNdk;
+    if (!ndkToUse) return;
+
+    // Extract all nostr profile links from comments (both nprofile and npub)
+    const nostrProfileRegex = /(nostr:)?(nprofile1[a-zA-Z0-9]+|npub1[a-zA-Z0-9]+)/g;
+    const nostrProfileLinks = new Set<string>();
+    
+    const extractNostrProfiles = (commentList: CommentData[]) => {
+      commentList.forEach(comment => {
+        const matches = comment.content.match(nostrProfileRegex);
+        if (matches) {
+          matches.forEach(match => nostrProfileLinks.add(match));
+        }
+        if (comment.children.length > 0) {
+          extractNostrProfiles(comment.children);
+        }
+      });
+    };
+    
+    extractNostrProfiles(comments);
+
+    // Fetch profiles for nostr profile links that don't have cached profiles
+    nostrProfileLinks.forEach(nostrLink => {
+      try {
+        // Remove "nostr:" prefix if present
+        const cleanLink = nostrLink.replace(/^nostr:/, '');
+        const decoded = nip19.decode(cleanLink);
+        
+        if (decoded.type === 'nprofile') {
+          const pubkey = decoded.data.pubkey;
+          if (pubkey && !getAuthorProfile(pubkey)) {
+            // Fetch profile in background
+            const user = ndkToUse.getUser({ pubkey });
+            user.fetchProfile().catch(error => {
+              console.error('Error fetching profile for nprofile link:', error);
+            });
+          }
+        } else if (decoded.type === 'npub') {
+          const pubkey = decoded.data;
+          if (pubkey && !getAuthorProfile(pubkey)) {
+            // Fetch profile in background
+            const user = ndkToUse.getUser({ pubkey });
+            user.fetchProfile().catch(error => {
+              console.error('Error fetching profile for npub link:', error);
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error decoding nostr profile link:', error);
+      }
+    });
+  }, [comments, contextNdk, standaloneNdk, getAuthorProfile]);
 
 
 
@@ -1262,6 +1465,12 @@ export default function BlogPost() {
             <h3 className={styles.commentSectionTitle}>
               Comments {reactionStats.isLoading ? '(...)' : `(${reactionStats.comments})`}
             </h3>
+            {isLoadingProfiles && (
+              <div className={styles.profileLoadingIndicator}>
+                <div className={styles.profileLoadingSpinner}></div>
+                <span>Loading profiles...</span>
+              </div>
+            )}
           </div>
           
           {isLoadingComments ? (

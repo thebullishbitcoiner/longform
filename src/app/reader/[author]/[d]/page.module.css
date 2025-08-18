@@ -754,6 +754,23 @@
   margin: 0;
 }
 
+.profileLoadingIndicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgb(113 113 122);
+  font-size: 0.875rem;
+}
+
+.profileLoadingSpinner {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 1.5px solid rgb(113 113 122);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
 .commentLoading {
   display: flex;
   align-items: center;
@@ -985,10 +1002,22 @@
 
   .commentSectionHeader {
     padding: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 
   .commentSectionTitle {
     font-size: 1.125rem;
+  }
+
+  .profileLoadingIndicator {
+    font-size: 0.75rem;
+  }
+
+  .profileLoadingSpinner {
+    width: 0.75rem;
+    height: 0.75rem;
   }
 
   .commentItem {
