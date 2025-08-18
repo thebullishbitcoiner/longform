@@ -934,7 +934,8 @@ export default function ReaderPage() {
     }
   }, [router, ndk]);
 
-           if (isLoading || isLoadingFollows || isLoadingPosts || subscriptionStateRef.current === 'setting_up') {
+           // Show loading until everything is completely done
+           if (isLoading || isLoadingFollows || isLoadingPosts || subscriptionStateRef.current === 'setting_up' || follows.length === 0 || debouncedFilteredPosts.length === 0) {
       return (
         <div style={{
           position: 'fixed',
