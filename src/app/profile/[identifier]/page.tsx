@@ -121,7 +121,37 @@ export default function ProfilePage() {
           limit: 50,
         });
 
-        const profilePosts: ProfilePost[] = Array.from(postsQuery)
+        // Fetch deletion events (kind 5) to filter out deleted posts
+        const deletionQuery = await ndkToUse.fetchEvents({
+          kinds: [5],
+          authors: [pubkey],
+          limit: 100,
+        });
+
+        // Create a set of deleted event IDs
+        const deletedEventIds = new Set<string>();
+        deletionQuery.forEach(deletionEvent => {
+          deletionEvent.tags.forEach((tag: string[]) => {
+            if (tag[0] === 'e') {
+              deletedEventIds.add(tag[1]);
+            }
+          });
+        });
+
+        console.log(`Profile: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
+
+        const allPosts = Array.from(postsQuery);
+        console.log(`Profile: Found ${allPosts.length} total posts`);
+
+        const profilePosts: ProfilePost[] = allPosts
+          .filter(event => {
+            // Filter out deleted posts
+            const isDeleted = deletedEventIds.has(event.id);
+            if (isDeleted) {
+              console.log(`Profile: Removing deleted post: ${event.id}`);
+            }
+            return !isDeleted;
+          })
           .map(event => {
             const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
             const summary = event.tags.find(tag => tag[0] === 'summary')?.[1] || '';
@@ -144,6 +174,7 @@ export default function ProfilePage() {
           })
           .sort((a, b) => b.published_at - a.published_at);
 
+        console.log(`Profile: Posts after filtering deletions: ${profilePosts.length}`);
         setPosts(profilePosts);
         setLoading(false);
 
