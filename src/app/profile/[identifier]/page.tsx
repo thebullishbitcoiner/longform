@@ -6,7 +6,7 @@ import { useNostr } from '@/contexts/NostrContext';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
 import NDK from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
-import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, BookmarkIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 import styles from './page.module.css';
 
@@ -568,13 +568,6 @@ export default function ProfilePage() {
   return (
     <div className={styles.container}>
       <div className={styles.mainContent}>
-        {isAuthenticated && (
-          <Link href="/" className={styles.backLink}>
-            <ArrowLeftIcon className={styles.icon} />
-            Back to home
-          </Link>
-        )}
-
         <div className={styles.profile}>
           <div className={styles.profileHeader}>
             <div className={styles.profileImage}>
@@ -635,7 +628,7 @@ export default function ProfilePage() {
                 className={`${styles.tabButton} ${activeTab === 'highlights' ? styles.activeTab : ''}`}
                 onClick={() => setActiveTab('highlights')}
               >
-                <BookmarkIcon className={styles.tabIcon} />
+                <PencilIcon className={styles.tabIcon} />
                 Highlights ({highlights.length})
               </button>
             </div>
