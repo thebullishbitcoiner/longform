@@ -937,27 +937,26 @@ export default function ReaderPage() {
            // Show loading until everything is completely done
            if (isLoading || isLoadingFollows || isLoadingPosts || subscriptionStateRef.current === 'setting_up' || follows.length === 0 || debouncedFilteredPosts.length === 0) {
       return (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: '#000000',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-start',
-          alignItems: 'center',
-          paddingTop: '20vh',
-          zIndex: 9999
-        }}>
-          <div className={styles.loadingSpinner}></div>
-          <p style={{
-            color: '#ffffff',
-            marginTop: '1rem',
-            fontSize: '1rem',
-            textAlign: 'center'
-          }}>Loading your reads...</p>
+        <div className={styles.container}>
+          <div className={styles.content}>
+                         <div style={{
+               display: 'flex',
+               flexDirection: 'column',
+               justifyContent: 'center',
+               alignItems: 'center',
+               minHeight: '20vh',
+               padding: '2rem',
+               gap: '1rem'
+             }}>
+              <div className={styles.loadingSpinner}></div>
+              <p style={{
+                color: '#ffffff',
+                marginTop: '1rem',
+                fontSize: '1rem',
+                textAlign: 'center'
+              }}>Loading your reads...</p>
+            </div>
+          </div>
         </div>
       );
     }
