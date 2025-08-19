@@ -566,29 +566,22 @@ const DashboardPage: React.FC = () => {
 
 
 
-  if (isLoading) {
-    return (
-      <main>
-        <div className={styles['dashboard-loading']}>
-          <div className={styles['loading-spinner']}></div>
-          <p>Loading your dashboard...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!stats) {
-    return (
-      <main>
-        <div className={styles['dashboard-error']}>
-          <p>Failed to load dashboard data.</p>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <AuthGuard>
+      {isLoading ? (
+        <main>
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <p className="loading-text">Loading your dashboard...</p>
+          </div>
+        </main>
+      ) : !stats ? (
+        <main>
+          <div className={styles['dashboard-error']}>
+            <p>Failed to load dashboard data.</p>
+          </div>
+        </main>
+      ) : (
       <main>
         <div className={styles.dashboard}>
         <div className={styles['dashboard-header']}>
@@ -719,6 +712,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
     </main>
+      )}
     </AuthGuard>
   );
 };

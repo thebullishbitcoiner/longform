@@ -38,30 +38,7 @@
   color: currentColor;
 }
 
-.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 20vh;
-  color: rgb(161 161 170);
-  gap: 1rem;
-}
 
-.loadingSpinner {
-  width: 2rem;
-  height: 2rem;
-  border: 2px solid rgb(39 39 42);
-  border-top: 2px solid #8b5cf6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 .error {
   text-align: center;

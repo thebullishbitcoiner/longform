@@ -146,6 +146,16 @@
   color: #8b5cf6;
 }
 
+/* Make buttons with menu-link class look identical to links */
+.menu-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+
+
 .menu-version {
   font-size: 0.75rem;
   color: #6b7280;

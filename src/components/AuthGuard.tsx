@@ -7,10 +7,11 @@ import { useNostr } from '@/contexts/NostrContext';
 interface AuthGuardProps {
   children: React.ReactNode;
   requireAuth?: boolean;
+  requireConnection?: boolean;
 }
 
-export function AuthGuard({ children, requireAuth = true }: AuthGuardProps) {
-  const { isAuthenticated, isLoading } = useNostr();
+export function AuthGuard({ children, requireAuth = true, requireConnection = false }: AuthGuardProps) {
+  const { isAuthenticated, isConnected, isLoading } = useNostr();
   const router = useRouter();
 
   useEffect(() => {
@@ -21,24 +22,46 @@ export function AuthGuard({ children, requireAuth = true }: AuthGuardProps) {
     if (requireAuth && !isAuthenticated) {
       console.log('🔒 AuthGuard: User not authenticated, redirecting to home');
       router.push('/');
+      return;
     }
-  }, [isAuthenticated, isLoading, requireAuth, router]);
+  }, [isAuthenticated, isConnected, isLoading, requireAuth, requireConnection, router]);
 
   // Show loading state while checking authentication
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <div className="loading-fullscreen">
+        <div className="loading-content">
+          <div className="loading-spinner"></div>
+          <p className="loading-text">Checking authentication...</p>
         </div>
       </div>
     );
   }
 
-  // If authentication is required and user is not authenticated, don't render children
+  // If authentication is required and user is not authenticated, show a loading state
+  // while redirecting (this prevents flash of content)
   if (requireAuth && !isAuthenticated) {
-    return null;
+    return (
+      <div className="loading-fullscreen">
+        <div className="loading-content">
+          <div className="loading-spinner"></div>
+          <p className="loading-text">Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If connection is required and user is not connected, show a connection message
+  if (requireConnection && isAuthenticated && !isConnected) {
+    return (
+      <div className="loading-fullscreen">
+        <div className="loading-content">
+          <div className="loading-spinner"></div>
+          <p className="loading-text">Connecting to Nostr network...</p>
+          <p className="loading-subtext">Please wait while we establish a connection.</p>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;

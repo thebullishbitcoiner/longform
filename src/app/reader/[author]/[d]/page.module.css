@@ -1,7 +1,7 @@
 .container {
   min-height: 100vh;
-  background-color: #111 !important;
-  color: white;
+  background-color: var(--background);
+  color: var(--text);
 }
 
 .mainContent {
@@ -13,7 +13,7 @@
 @media (max-width: 640px) {
   .mainContent {
     max-width: 100%;
-    padding: 1rem 0;
+    padding: 0;
   }
 
   .header {
@@ -253,26 +253,7 @@
   }
 }
 
-.backLink {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #fff;
-  text-decoration: none;
-  margin-bottom: 1.5rem;
-  margin-left: 0.5rem;
-  white-space: nowrap;
-}
 
-.backLink:hover {
-  color: rgb(147 51 234);
-}
-
-.icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  color: currentColor;
-}
 
 .notFound {
   text-align: center;
@@ -280,9 +261,9 @@
 }
 
 .post {
-  background-color: rgb(24 24 27);
+  background-color: var(--background-secondary);
   border-radius: 0.75rem;
-  border: 1px solid rgb(39 39 42);
+  border: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -301,13 +282,13 @@
 
 .header {
   padding: 2rem;
-  border-bottom: 1px solid rgb(39 39 42);
+  border-bottom: 1px solid var(--border);
 }
 
 .title {
   font-size: 2rem;
   font-weight: 700;
-  color: rgb(244 244 245);
+  color: var(--text);
   margin-bottom: 1rem;
   line-height: 1.3;
 }
@@ -318,11 +299,11 @@
   align-items: center;
   margin-bottom: 1rem;
   font-size: 0.875rem;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
 }
 
 .label {
-  color: rgb(113 113 122);
+  color: var(--text-secondary);
   font-weight: 500;
   margin-right: 0.5rem;
 }
@@ -344,12 +325,12 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
   transition: color 0.2s ease;
 }
 
 .reactionItem:hover {
-  color: rgb(244 244 245);
+  color: var(--text);
 }
 
 .reactionIcon {
@@ -365,14 +346,14 @@
 .reactionCount {
   font-weight: 600;
   font-size: 1rem;
-  color: rgb(244 244 245);
+  color: var(--text);
   min-width: 1.5rem;
   text-align: center;
 }
 
 .reactionLabel {
   font-size: 0.875rem;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
 }
 
 .tags {
@@ -383,24 +364,25 @@
 }
 
 .tag {
-  background-color: rgb(39 39 42);
-  color: rgb(161 161 170);
+  background-color: var(--background-secondary);
+  color: var(--text-secondary);
   padding: 0.25rem 0.5rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
+  border: 1px solid var(--border);
 }
 
 .summary {
   padding: 2rem;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
   font-size: 1.125rem;
   line-height: 1.6;
-  border-bottom: 1px solid rgb(39 39 42);
+  border-bottom: 1px solid var(--border);
 }
 
 .postContent {
   padding: 2rem;
-  color: rgb(228 228 231);
+  color: var(--text);
   line-height: 1.8;
   font-size: 1.125rem;
 }
@@ -416,7 +398,7 @@
   margin-bottom: 1rem;
   font-weight: 600;
   line-height: 1.25;
-  color: rgb(244 244 245);
+  color: var(--text);
 }
 
 .postContent h1 {
@@ -452,25 +434,27 @@
 .postContent blockquote {
   margin: 1.5rem 0;
   padding-left: 1rem;
-  border-left: 4px solid rgb(39 39 42);
-  color: rgb(161 161 170);
+  border-left: 4px solid var(--border);
+  color: var(--text-secondary);
 }
 
 .postContent code {
-  background-color: rgb(39 39 42);
+  background-color: var(--background-secondary);
   padding: 0.2rem 0.4rem;
   border-radius: 0.25rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.875em;
-  color: rgb(244 244 245);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .postContent pre {
-  background-color: rgb(39 39 42);
+  background-color: var(--background-secondary);
   padding: 1rem;
   border-radius: 0.5rem;
   overflow-x: auto;
   margin: 1.5rem 0;
+  border: 1px solid var(--border);
 }
 
 .postContent pre code {
@@ -479,7 +463,7 @@
 }
 
 .postContent a {
-  color: rgb(147 51 234);
+  color: #8b5cf6;
   text-decoration: underline;
   cursor: pointer;
   transition: color 0.2s ease;
@@ -490,25 +474,25 @@
 }
 
 .postContent a:hover {
-  color: rgb(126 34 206);
+  color: #7c3aed;
 }
 
 .postContent .nostrLink {
-  color: rgb(147 51 234);
+  color: #8b5cf6;
 }
 
 .postContent .nostrLink:hover {
-  color: rgb(126 34 206);
+  color: #7c3aed;
 }
 
 .postContent .regularLink {
-  color: rgb(147 51 234);
+  color: #8b5cf6;
   text-decoration: underline;
   word-break: break-all;
 }
 
 .postContent .regularLink:hover {
-  color: rgb(126 34 206);
+  color: #7c3aed;
 }
 
 .postContent img {
@@ -549,11 +533,7 @@
   accent-color: rgb(34 197 94);
 }
 
-.loading {
-  text-align: center;
-  padding: 2rem;
-  color: rgb(161 161 170);
-}
+
 
 /* Loading indicators for background operations */
 .loadingIndicator {
@@ -563,13 +543,13 @@
 }
 
 .processingIndicator {
-  background-color: rgb(39 39 42);
-  color: rgb(161 161 170);
+  background-color: var(--background-secondary);
+  color: var(--text-secondary);
   padding: 0.5rem 1rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
   margin-bottom: 1rem;
-  border: 1px solid rgb(63 63 70);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -579,7 +559,7 @@
   content: '';
   width: 0.75rem;
   height: 0.75rem;
-  border: 2px solid rgb(161 161 170);
+  border: 2px solid var(--text-secondary);
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -596,8 +576,8 @@
   margin: 1.5rem 0;
   border-radius: 0 !important;
   overflow: hidden;
-  background-color: rgb(39 39 42);
-  border: 1px solid rgb(63 63 70);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border);
 }
 
 .videoEmbed {
@@ -621,19 +601,19 @@
   width: 100%;
   max-height: 500px;
   border-radius: 0;
-  background-color: rgb(24 24 27);
+  background-color: var(--background);
 }
 
 .videoCaption {
   padding: 1rem;
-  border-top: 1px solid rgb(63 63 70);
-  background-color: rgb(39 39 42);
+  border-top: 1px solid var(--border);
+  background-color: var(--background-secondary);
   width: 100%;
   box-sizing: border-box;
 }
 
 .videoLink {
-  color: rgb(147 51 234);
+  color: #8b5cf6;
   text-decoration: none;
   font-size: 0.875rem;
   display: block;
@@ -642,7 +622,7 @@
 }
 
 .videoLink:hover {
-  color: rgb(126 34 206);
+  color: #7c3aed;
   text-decoration: underline;
 }
 
@@ -662,8 +642,8 @@
 }
 
 .modalContent {
-  background-color: rgb(24 24 27);
-  border: 1px solid rgb(39 39 42);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
   max-width: 500px;
   width: 100%;
@@ -678,20 +658,20 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid rgb(39 39 42);
+  border-bottom: 1px solid var(--border);
 }
 
 .modalTitle {
   font-size: 1.25rem;
   font-weight: 600;
-  color: rgb(244 244 245);
+  color: var(--text);
   margin: 0;
 }
 
 .modalCloseButton {
   background: none;
   border: none;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0.5rem;
   border-radius: 0.375rem;
@@ -699,8 +679,8 @@
 }
 
 .modalCloseButton:hover {
-  background-color: rgb(39 39 42);
-  color: rgb(244 244 245);
+  background-color: var(--hover);
+  color: var(--text);
 }
 
 .modalCloseIcon {
@@ -717,7 +697,7 @@
 .modalLoading,
 .modalEmpty {
   text-align: center;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
   padding: 2rem;
 }
 
@@ -729,9 +709,9 @@
 
 .zapItem {
   padding: 1rem;
-  background-color: rgb(39 39 42);
+  background-color: var(--background-secondary);
   border-radius: 0.5rem;
-  border: 1px solid rgb(63 63 70);
+  border: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -739,7 +719,7 @@
 
 .zapAuthorName {
   font-weight: 500;
-  color: rgb(244 244 245);
+  color: var(--text);
 }
 
 .zapAmount {
@@ -757,9 +737,9 @@
 
 .reactionItem {
   padding: 0.75rem;
-  background-color: rgb(39 39 42);
+  background-color: var(--background-secondary);
   border-radius: 0.5rem;
-  border: 1px solid rgb(63 63 70);
+  border: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -790,7 +770,7 @@
 
 .reactionAuthorName {
   font-weight: 500;
-  color: rgb(244 244 245);
+  color: var(--text);
 }
 
 .reactionRight {
@@ -805,7 +785,7 @@
 .reactionMenuButton {
   background: none;
   border: none;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0.25rem;
   border-radius: 0.25rem;
@@ -816,8 +796,8 @@
 }
 
 .reactionMenuButton:hover {
-  background-color: rgb(63 63 70);
-  color: rgb(244 244 245);
+  background-color: var(--hover);
+  color: var(--text);
 }
 
 .reactionMenuIcon {
@@ -829,8 +809,8 @@
   position: absolute;
   top: 100%;
   right: 0;
-  background-color: rgb(24 24 27);
-  border: 1px solid rgb(39 39 42);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   padding: 0.5rem;
@@ -845,7 +825,7 @@
   padding: 0.5rem 0.75rem;
   background: none;
   border: none;
-  color: rgb(244 244 245);
+  color: var(--text);
   font-size: 0.875rem;
   cursor: pointer;
   border-radius: 0.375rem;
@@ -854,7 +834,7 @@
 }
 
 .reactionMenuItem:hover {
-  background-color: rgb(39 39 42);
+  background-color: var(--hover);
 }
 
 /* Mobile responsive modal */
@@ -902,8 +882,8 @@
   position: fixed;
   z-index: 1001;
   transform: translateX(-50%);
-  background-color: rgb(24 24 27);
-  border: 1px solid rgb(39 39 42);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   padding: 0.5rem;
@@ -918,7 +898,7 @@
   padding: 0.5rem 0.75rem;
   background: none;
   border: none;
-  color: rgb(244 244 245);
+  color: var(--text);
   font-size: 0.875rem;
   cursor: pointer;
   border-radius: 0.375rem;
@@ -926,7 +906,7 @@
 }
 
 .contextMenuButton:hover:not(:disabled) {
-  background-color: rgb(39 39 42);
+  background-color: var(--hover);
 }
 
 .contextMenuButton:disabled {
@@ -942,7 +922,7 @@
 
 .contextMenuMessage {
   padding: 0.5rem 0.75rem;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
   font-size: 0.875rem;
   text-align: center;
 }
@@ -979,9 +959,9 @@
 /* Comment Section Styles */
 .commentSection {
   margin-top: 2rem;
-  background-color: rgb(24 24 27);
+  background-color: var(--background-secondary);
   border-radius: 0.75rem;
-  border: 1px solid rgb(39 39 42);
+  border: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -990,14 +970,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem 2rem;
-  border-bottom: 1px solid rgb(39 39 42);
-  background-color: rgb(39 39 42);
+  border-bottom: 1px solid var(--border);
+  background-color: var(--hover);
 }
 
 .commentSectionTitle {
   font-size: 1.25rem;
   font-weight: 600;
-  color: rgb(244 244 245);
+  color: var(--text);
   margin: 0;
 }
 
@@ -1005,14 +985,14 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgb(113 113 122);
+  color: var(--text-secondary);
   font-size: 0.875rem;
 }
 
 .profileLoadingSpinner {
   width: 0.875rem;
   height: 0.875rem;
-  border: 1.5px solid rgb(113 113 122);
+  border: 1.5px solid var(--text-secondary);
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -1024,13 +1004,13 @@
   justify-content: center;
   gap: 0.75rem;
   padding: 3rem 2rem;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
 }
 
 .commentLoadingSpinner {
   width: 1.25rem;
   height: 1.25rem;
-  border: 2px solid rgb(161 161 170);
+  border: 2px solid var(--text-secondary);
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -1043,13 +1023,13 @@
   justify-content: center;
   padding: 3rem 2rem;
   text-align: center;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
 }
 
 .noCommentsIcon {
   width: 3rem;
   height: 3rem;
-  color: rgb(113 113 122);
+  color: var(--text-secondary);
   margin-bottom: 1rem;
 }
 
@@ -1060,7 +1040,7 @@
 
 .noCommentsSubtext {
   font-size: 0.875rem !important;
-  color: rgb(113 113 122) !important;
+  color: var(--text-secondary) !important;
 }
 
 .commentList {
@@ -1069,7 +1049,7 @@
 
 .commentItem {
   padding: 1.5rem 2rem;
-  border-bottom: 1px solid rgb(39 39 42);
+  border-bottom: 1px solid var(--border);
   transition: background-color 0.2s ease;
   margin-bottom: 0.5rem;
 }
@@ -1080,7 +1060,7 @@
 }
 
 .commentItem:hover {
-  background-color: rgb(39 39 42);
+  background-color: var(--hover);
 }
 
 .commentHeader {
@@ -1109,15 +1089,15 @@
 .commentMenuButton {
   background: none;
   border: none;
-  color: rgb(161 161 170);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0.25rem;
   border-radius: 0.375rem;
 }
 
 .commentMenuButton:hover {
-  background-color: rgb(39 39 42);
-  color: rgb(244 244 245);
+  background-color: var(--hover);
+  color: var(--text);
 }
 
 .commentMenuIcon {
@@ -1130,8 +1110,8 @@
   position: absolute;
   right: 0;
   top: 100%;
-  background-color: rgb(24 24 27);
-  border: 1px solid rgb(39 39 42);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   padding: 0.25rem;
@@ -1144,14 +1124,14 @@
   text-align: left;
   background: none;
   border: none;
-  color: rgb(244 244 245);
+  color: var(--text);
   padding: 0.5rem 0.75rem;
   border-radius: 0.375rem;
   cursor: pointer;
 }
 
 .commentMenuItem:hover {
-  background-color: rgb(39 39 42);
+  background-color: var(--hover);
 }
 
 .commentAuthor {
@@ -1170,17 +1150,17 @@
 
 .commentAuthorName {
   font-weight: 600;
-  color: rgb(244 244 245);
+  color: var(--text);
   font-size: 0.875rem;
 }
 
 .commentDate {
   font-size: 0.75rem;
-  color: rgb(113 113 122);
+  color: var(--text-secondary);
 }
 
 .commentContent {
-  color: rgb(228 228 231);
+  color: var(--text);
   line-height: 1.6;
   font-size: 0.875rem;
   word-wrap: break-word;
@@ -1189,7 +1169,7 @@
 
 /* Comment link styles */
 .commentContent a {
-  color: rgb(147 51 234);
+  color: #8b5cf6;
   text-decoration: underline;
   cursor: pointer;
   transition: color 0.2s ease;
@@ -1200,27 +1180,27 @@
 }
 
 .commentContent a:hover {
-  color: rgb(126 34 206);
+  color: #7c3aed;
 }
 
 .commentContent .nostrLink {
-  color: rgb(147 51 234);
+  color: #8b5cf6;
 }
 
 .commentContent .nostrLink:hover {
-  color: rgb(126 34 206);
+  color: #7c3aed;
 }
 
 .viewMoreComments {
   padding: 1.5rem 2rem;
-  border-top: 1px solid rgb(39 39 42);
+  border-top: 1px solid var(--border);
   text-align: center;
 }
 
 .viewMoreButton {
   background: none;
-  border: 1px solid rgb(63 63 70);
-  color: rgb(161 161 170);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   padding: 0.75rem 1.5rem;
   border-radius: 0.5rem;
   font-size: 0.875rem;
@@ -1229,16 +1209,16 @@
 }
 
 .viewMoreButton:hover {
-  background-color: rgb(39 39 42);
-  color: rgb(244 244 245);
-  border-color: rgb(113 113 122);
+  background-color: var(--hover);
+  color: var(--text);
+  border-color: var(--text-secondary);
 }
 
 /* Comment Modal Styles */
 .commentList .commentItem {
   padding: 1rem;
   margin: 0;
-  border-bottom: 1px solid rgb(63 63 70);
+  border-bottom: 1px solid var(--border);
 }
 
 .commentList .commentItem:last-child {
@@ -1360,9 +1340,9 @@
 }
 
 .jsonPre {
-  background-color: rgb(24 24 27);
-  color: rgb(244 244 245);
-  border: 1px solid rgb(39 39 42);
+  background-color: var(--background-secondary);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 1rem;
   overflow: auto;
@@ -1371,18 +1351,18 @@
 }
 
 .commentThread {
-  border-left: 2px solid rgb(39 39 42);
+  border-left: 2px solid var(--border);
   margin-left: 0;
   padding-left: 1rem;
 }
 
 .commentThread .commentThread {
-  border-left-color: rgb(63 63 70);
+  border-left-color: var(--text-secondary);
   margin-top: 0.5rem;
 }
 
 .commentThread .commentThread .commentThread {
-  border-left-color: rgb(82 82 91);
+  border-left-color: var(--text-secondary);
 }
 
 /* Back to Top Button */
@@ -1390,16 +1370,16 @@
   display: flex;
   justify-content: center;
   padding: 2rem 0;
-  border-top: 1px solid rgb(39 39 42);
+  border-top: 1px solid var(--border);
 }
 
 .backToTopButton {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background-color: rgb(39 39 42);
-  color: rgb(161 161 170);
-  border: 1px solid rgb(63 63 70);
+  background-color: var(--background-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
   padding: 0.75rem 1.5rem;
   border-radius: 0.5rem;
   font-size: 0.875rem;
@@ -1409,9 +1389,9 @@
 }
 
 .backToTopButton:hover {
-  background-color: rgb(63 63 70);
-  color: rgb(244 244 245);
-  border-color: rgb(113 113 122);
+  background-color: var(--hover);
+  color: var(--text);
+  border-color: var(--text-secondary);
 }
 
 .backToTopIcon {
