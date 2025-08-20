@@ -63,6 +63,8 @@ export default function ProfilePage() {
   const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [highlights, setHighlights] = useState<ProfileHighlight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [highlightsLoading, setHighlightsLoading] = useState(false);
+  const [highlightsLoaded, setHighlightsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [standaloneNdk, setStandaloneNdk] = useState<NDK | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('posts');
@@ -102,6 +104,157 @@ export default function ProfilePage() {
       document.removeEventListener('click', handleClickOutside);
     };
   }, [contextMenu.visible]);
+
+  // Load highlights data when highlights tab is activated
+  const loadHighlights = async () => {
+    if (highlightsLoaded || highlightsLoading || !profile) return;
+
+    setHighlightsLoading(true);
+    const ndkToUse = contextNdk || standaloneNdk;
+    
+    if (!ndkToUse) {
+      setHighlightsLoading(false);
+      return;
+    }
+
+    try {
+      // Fetch user's highlights (kind 9802)
+      const highlightsQuery = await ndkToUse.fetchEvents({
+        kinds: [9802],
+        authors: [profile.pubkey],
+        limit: 100,
+      });
+
+      const highlightsArray = Array.from(highlightsQuery);
+      console.log(`Profile: Found ${highlightsArray.length} highlights`);
+
+      // Update count immediately when we get the raw highlights
+      setHighlights(() => {
+        const tempHighlights = highlightsArray.map(event => ({
+          id: event.id,
+          content: event.content,
+          created_at: event.created_at * 1000,
+          postId: event.tags.find(tag => tag[0] === 'e')?.[1] || '',
+          postAuthor: event.tags.find(tag => tag[0] === 'p')?.[1] || '',
+          postAuthorDisplayName: undefined,
+          postAuthorNip05: undefined,
+          postDTag: undefined,
+          startOffset: event.tags.find(tag => tag[0] === 'start')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'start')?.[1] || '0') : undefined,
+          endOffset: event.tags.find(tag => tag[0] === 'end')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'end')?.[1] || '0') : undefined,
+        }));
+        return tempHighlights.sort((a, b) => b.created_at - a.created_at);
+      });
+
+      // Get unique author pubkeys from highlights
+      const authorPubkeys = new Set<string>();
+      highlightsArray.forEach(event => {
+        const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1];
+        if (postAuthor) {
+          authorPubkeys.add(postAuthor);
+        }
+      });
+
+      // Fetch profiles for all authors
+      const authorProfiles = new Map<string, { name?: string; displayName?: string; nip05?: string }>();
+      for (const authorPubkey of authorPubkeys) {
+        try {
+          const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
+          const authorProfile = await authorUser.fetchProfile();
+          authorProfiles.set(authorPubkey, {
+            name: authorProfile?.name,
+            displayName: authorProfile?.displayName,
+            nip05: authorProfile?.nip05,
+          });
+        } catch (error) {
+          console.error(`Failed to fetch profile for author ${authorPubkey}:`, error);
+        }
+      }
+
+      // Fetch the original posts to get their d tags
+      const postIds = new Set<string>();
+      highlightsArray.forEach(event => {
+        const postId = event.tags.find(tag => tag[0] === 'e')?.[1];
+        if (postId) {
+          postIds.add(postId);
+        }
+      });
+
+      // Fetch the original posts to get their d tags
+      const postsMap = new Map<string, { dTag?: string; author: string }>();
+      if (postIds.size > 0) {
+        const postsQuery = await ndkToUse.fetchEvents({
+          kinds: [30023],
+          ids: Array.from(postIds),
+          limit: 100,
+        });
+
+        postsQuery.forEach(post => {
+          const dTag = post.tags.find(tag => tag[0] === 'd')?.[1];
+          postsMap.set(post.id, {
+            dTag,
+            author: post.pubkey,
+          });
+        });
+      }
+
+      // Now update with full data
+      const profileHighlights: ProfileHighlight[] = highlightsArray
+        .map(event => {
+          const postId = event.tags.find(tag => tag[0] === 'e')?.[1] || '';
+          const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
+          const startOffset = event.tags.find(tag => tag[0] === 'start')?.[1];
+          const endOffset = event.tags.find(tag => tag[0] === 'end')?.[1];
+
+          // Get author display name
+          const authorProfile = authorProfiles.get(postAuthor);
+          const postAuthorDisplayName = authorProfile?.displayName || authorProfile?.name || postAuthor.slice(0, 8) + '...';
+
+          // Get post info for link generation
+          const postInfo = postsMap.get(postId);
+
+          return {
+            id: event.id,
+            content: event.content,
+            created_at: event.created_at * 1000, // Convert seconds to milliseconds
+            postId,
+            postAuthor,
+            postAuthorDisplayName,
+            postAuthorNip05: authorProfile?.nip05,
+            postDTag: postInfo?.dTag,
+            startOffset: startOffset ? parseInt(startOffset) : undefined,
+            endOffset: endOffset ? parseInt(endOffset) : undefined,
+          };
+        })
+        .sort((a, b) => b.created_at - a.created_at);
+
+      console.log('Profile: Updating highlights with full data:', profileHighlights.length, 'highlights');
+      console.log('Profile: Sample highlight with author data:', profileHighlights[0]);
+      
+      setHighlights(profileHighlights);
+      setHighlightsLoaded(true);
+    } catch (error) {
+      console.error('Error loading highlights:', error);
+    } finally {
+      setHighlightsLoading(false);
+    }
+  };
+
+  // Handle tab change
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+  };
+
+  // Load highlights in background after initial page load
+  useEffect(() => {
+    if (profile && !highlightsLoaded && !highlightsLoading) {
+      // Use setTimeout to ensure this runs after the initial render
+      const timer = setTimeout(() => {
+        loadHighlights();
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [profile, highlightsLoaded, highlightsLoading]);
 
   // Resolve identifier and fetch profile
   useEffect(() => {
@@ -218,99 +371,6 @@ export default function ProfilePage() {
         console.log(`Profile: Posts after filtering deletions: ${profilePosts.length}`);
         setPosts(profilePosts);
 
-        // Fetch user's highlights (kind 9802)
-        const highlightsQuery = await ndkToUse.fetchEvents({
-          kinds: [9802],
-          authors: [pubkey],
-          limit: 100,
-        });
-
-        const highlightsArray = Array.from(highlightsQuery);
-        console.log(`Profile: Found ${highlightsArray.length} highlights`);
-
-        // Get unique author pubkeys from highlights
-        const authorPubkeys = new Set<string>();
-        highlightsArray.forEach(event => {
-          const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1];
-          if (postAuthor) {
-            authorPubkeys.add(postAuthor);
-          }
-        });
-
-        // Fetch profiles for all authors
-        const authorProfiles = new Map<string, { name?: string; displayName?: string; nip05?: string }>();
-        for (const authorPubkey of authorPubkeys) {
-          try {
-            const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
-            const authorProfile = await authorUser.fetchProfile();
-            authorProfiles.set(authorPubkey, {
-              name: authorProfile?.name,
-              displayName: authorProfile?.displayName,
-              nip05: authorProfile?.nip05,
-            });
-          } catch (error) {
-            console.error(`Failed to fetch profile for author ${authorPubkey}:`, error);
-          }
-        }
-
-        // Fetch the original posts to get their d tags
-        const postIds = new Set<string>();
-        highlightsArray.forEach(event => {
-          const postId = event.tags.find(tag => tag[0] === 'e')?.[1];
-          if (postId) {
-            postIds.add(postId);
-          }
-        });
-
-        // Fetch the original posts to get their d tags
-        const postsMap = new Map<string, { dTag?: string; author: string }>();
-        if (postIds.size > 0) {
-          const postsQuery = await ndkToUse.fetchEvents({
-            kinds: [30023],
-            ids: Array.from(postIds),
-            limit: 100,
-          });
-
-          postsQuery.forEach(post => {
-            const dTag = post.tags.find(tag => tag[0] === 'd')?.[1];
-            postsMap.set(post.id, {
-              dTag,
-              author: post.pubkey,
-            });
-          });
-        }
-
-        const profileHighlights: ProfileHighlight[] = highlightsArray
-          .map(event => {
-            const postId = event.tags.find(tag => tag[0] === 'e')?.[1] || '';
-            const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
-            const startOffset = event.tags.find(tag => tag[0] === 'start')?.[1];
-            const endOffset = event.tags.find(tag => tag[0] === 'end')?.[1];
-
-            // Get author display name
-            const authorProfile = authorProfiles.get(postAuthor);
-            const postAuthorDisplayName = authorProfile?.displayName || authorProfile?.name || postAuthor.slice(0, 8) + '...';
-
-            // Get post info for link generation
-            const postInfo = postsMap.get(postId);
-
-            return {
-              id: event.id,
-              content: event.content,
-              created_at: event.created_at * 1000, // Convert seconds to milliseconds
-              postId,
-              postAuthor,
-              postAuthorDisplayName,
-              postAuthorNip05: authorProfile?.nip05,
-              postDTag: postInfo?.dTag,
-              startOffset: startOffset ? parseInt(startOffset) : undefined,
-              endOffset: endOffset ? parseInt(endOffset) : undefined,
-            };
-          })
-          .sort((a, b) => b.created_at - a.created_at);
-
-        setHighlights(profileHighlights);
-
         setLoading(false);
 
       } catch (error) {
@@ -327,9 +387,9 @@ export default function ProfilePage() {
     return (
       <div className={styles.container}>
         <div className={styles.mainContent}>
-          <div className={styles.loading}>
-            <div className={styles.loadingSpinner}></div>
-            <p>Loading profile...</p>
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <p className="loading-text">Loading profile...</p>
           </div>
         </div>
       </div>
@@ -494,11 +554,25 @@ export default function ProfilePage() {
           <p>No highlights found for this user.</p>
         </div>
       ) : (
-        <div className={styles.highlightsGrid}>
-          {highlights.map((highlight) => {
+        <>
+          <div className={styles.highlightsGrid}>
+            {highlights.map((highlight) => {
             // Generate the correct link using NIP-05 and d tag
             const authorIdentifier = highlight.postAuthorNip05 || highlight.postAuthor;
             const postIdentifier = highlight.postDTag || highlight.postId;
+            
+            // Debug logging for first highlight
+            if (highlight.id === highlights[0]?.id) {
+              console.log('Profile: Rendering highlight with data:', {
+                id: highlight.id,
+                postAuthor: highlight.postAuthor,
+                postAuthorNip05: highlight.postAuthorNip05,
+                postDTag: highlight.postDTag,
+                postId: highlight.postId,
+                authorIdentifier,
+                postIdentifier
+              });
+            }
             
             return (
               <Link 
@@ -537,30 +611,31 @@ export default function ProfilePage() {
             );
           })}
         </div>
-      )}
 
-      {/* Context Menu */}
-      {contextMenu.visible && (
-        <div 
-          className={styles.contextMenu}
-          style={{ 
-            left: contextMenu.x, 
-            top: contextMenu.y 
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button 
-            className={styles.contextMenuItem}
-            onClick={() => {
-              const highlight = highlights.find(h => h.id === contextMenu.highlightId);
-              if (highlight) {
-                openHighlightJson(highlight);
-              }
+        {/* Context Menu */}
+        {contextMenu.visible && (
+          <div 
+            className={styles.contextMenu}
+            style={{ 
+              left: contextMenu.x, 
+              top: contextMenu.y 
             }}
+            onClick={(e) => e.stopPropagation()}
           >
-            View JSON
-          </button>
-        </div>
+            <button 
+              className={styles.contextMenuItem}
+              onClick={() => {
+                const highlight = highlights.find(h => h.id === contextMenu.highlightId);
+                if (highlight) {
+                  openHighlightJson(highlight);
+                }
+              }}
+            >
+              View JSON
+            </button>
+          </div>
+                 )}
+        </>
       )}
     </>
   );
@@ -619,14 +694,14 @@ export default function ProfilePage() {
             <div className={styles.tabsHeader}>
               <button
                 className={`${styles.tabButton} ${activeTab === 'posts' ? styles.activeTab : ''}`}
-                onClick={() => setActiveTab('posts')}
+                onClick={() => handleTabChange('posts')}
               >
                 <DocumentTextIcon className={styles.tabIcon} />
                 Posts ({posts.length})
               </button>
               <button
                 className={`${styles.tabButton} ${activeTab === 'highlights' ? styles.activeTab : ''}`}
-                onClick={() => setActiveTab('highlights')}
+                onClick={() => handleTabChange('highlights')}
               >
                 <PencilIcon className={styles.tabIcon} />
                 Highlights ({highlights.length})

@@ -10,6 +10,7 @@ import { NDKSubscription } from '@nostr-dev-kit/ndk';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useRouter } from 'next/navigation';
 import { generateNip05Url, getUserIdentifier } from '@/utils/nostr';
+import { AuthGuard } from '@/components/AuthGuard';
 
 // Configuration: Specify which relays to use for contact list queries
 // You can modify this list to use only the relays you trust
@@ -934,57 +935,6 @@ export default function ReaderPage() {
     }
   }, [router, ndk]);
 
-           // Show loading until everything is completely done
-           if (isLoading || isLoadingFollows || isLoadingPosts || subscriptionStateRef.current === 'setting_up' || follows.length === 0 || debouncedFilteredPosts.length === 0) {
-      return (
-        <div className={styles.container}>
-          <div className={styles.content}>
-                         <div style={{
-               display: 'flex',
-               flexDirection: 'column',
-               justifyContent: 'center',
-               alignItems: 'center',
-               minHeight: '20vh',
-               padding: '2rem',
-               gap: '1rem'
-             }}>
-              <div className={styles.loadingSpinner}></div>
-              <p style={{
-                color: '#ffffff',
-                marginTop: '1rem',
-                fontSize: '1rem',
-                textAlign: 'center'
-              }}>Loading your reads...</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-  if (!isAuthenticated) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.content}>
-          <div className={styles.emptyState}>
-            Please login with Nostr to read longform content from people you follow.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isConnected) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.content}>
-          <div className={styles.emptyState}>
-            Connecting to Nostr network... Please wait.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Add error handling for the main render logic
   try {
     console.log('🔍 DEBUG: Filtered posts:', {
@@ -996,12 +946,23 @@ export default function ReaderPage() {
     });
 
     return (
-      <ErrorBoundary>
-        <div className={styles.container}>
-          <div className={styles.content}>
-            <div className={styles.header}>
-              <h1 className={styles.title}>Reads</h1>
-              <div className={styles.filterButtons}>
+      <AuthGuard requireConnection={true}>
+        <ErrorBoundary>
+          {isLoading || isLoadingFollows || isLoadingPosts || (subscriptionStateRef.current as string) === 'setting_up' || follows.length === 0 || debouncedFilteredPosts.length === 0 ? (
+            <div className={styles.container}>
+              <div className={styles.content}>
+                <div className="loading-content">
+                  <div className="loading-spinner"></div>
+                  <p className="loading-text">Loading your reads...</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.container}>
+            <div className={styles.content}>
+              <div className={styles.header}>
+                <h1 className={styles.title}>Reads</h1>
+                <div className={styles.filterButtons}>
                 {process.env.NODE_ENV !== 'production' && (
                   <>
                     <button
@@ -1513,44 +1474,39 @@ export default function ReaderPage() {
                 )}
                 
                 {/* Load More Button */}
-                {(() => {
-                  const hasMorePosts = totalAvailablePosts.length > postsToShow;
-                  
-                  if (hasMorePosts) {
-                    return (
-                      <button
-                        onClick={() => setPostsToShow(prev => prev + 21)}
-                        style={{
-                          padding: '0.625rem 1.25rem',
-                          background: '#ffffff',
-                          color: '#000000',
-                          border: 'none',
-                          borderRadius: '0.375rem',
-                          cursor: 'pointer',
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.background = '#f4f4f5';
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.background = '#ffffff';
-                          e.currentTarget.style.transform = 'translateY(0)';
-                        }}
-                      >
-                        Load More
-                      </button>
-                    );
-                  }
-                  return null;
-                })()}
+                {totalAvailablePosts.length > postsToShow && (
+                  <button
+                    onClick={() => setPostsToShow(prev => prev + 21)}
+                    style={{
+                      padding: '0.625rem 1.25rem',
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: 'none',
+                      borderRadius: '0.375rem',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#f4f4f5';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = '#ffffff';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    Load More
+                  </button>
+                )}
               </div>
             )}
           </div>
         </div>
-      </ErrorBoundary>
+          )}
+        </ErrorBoundary>
+      </AuthGuard>
     );
   } catch (error) {
     // Log the error and show a user-friendly error message
@@ -1558,36 +1514,38 @@ export default function ReaderPage() {
     setRenderError((error as Error).message);
     
     return (
-      <ErrorBoundary>
-        <div className={styles.container}>
-          <div className={styles.content}>
-            <div style={{ 
-              padding: '20px', 
-              background: '#fee', 
-              border: '1px solid #fcc', 
-              borderRadius: '8px',
-              margin: '20px 0'
-            }}>
-              <h2>Something went wrong</h2>
-              <p>An error occurred while loading the page. Please try refreshing.</p>
-              <p><strong>Error:</strong> {renderError}</p>
-              <button 
-                onClick={() => window.location.reload()} 
-                style={{
-                  padding: '10px 20px',
-                  background: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                Refresh Page
-              </button>
+      <AuthGuard requireConnection={true}>
+        <ErrorBoundary>
+          <div className={styles.container}>
+            <div className={styles.content}>
+              <div style={{ 
+                padding: '20px', 
+                background: '#fee', 
+                border: '1px solid #fcc', 
+                borderRadius: '8px',
+                margin: '20px 0'
+              }}>
+                <h2>Something went wrong</h2>
+                <p>An error occurred while loading the page. Please try refreshing.</p>
+                <p><strong>Error:</strong> {renderError}</p>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  style={{
+                    padding: '10px 20px',
+                    background: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Refresh Page
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </ErrorBoundary>
+        </ErrorBoundary>
+      </AuthGuard>
     );
   }
 } 

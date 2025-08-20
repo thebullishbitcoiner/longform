@@ -7,7 +7,7 @@ import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { ArrowLeftIcon, ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
@@ -1375,7 +1375,16 @@ export default function BlogPost() {
   };
 
   if (loading) {
-    return <div className={styles.loading}>Loading...</div>;
+    return (
+      <div className={styles.container}>
+        <div className={styles.mainContent}>
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <p className="loading-text">Loading post...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!post) {
@@ -1390,12 +1399,7 @@ export default function BlogPost() {
               <li>The post has been deleted or moved</li>
               <li>The NIP-05 identifier could not be resolved</li>
             </ul>
-            {isAuthenticated && (
-              <Link href="/reader" className={styles.backLink}>
-                <ArrowLeftIcon className={styles.icon} />
-                Back to reader
-              </Link>
-            )}
+
           </div>
         </div>
       </div>
@@ -1405,12 +1409,7 @@ export default function BlogPost() {
   return (
     <div className={styles.container}>
       <div className={styles.mainContent}>
-        {isAuthenticated && (
-          <Link href="/reader" className={styles.backLink}>
-            <ArrowLeftIcon className={styles.icon} />
-            Back to reader
-          </Link>
-        )}
+
 
         <article className={styles.post}>
           {post.image && (
@@ -1424,7 +1423,11 @@ export default function BlogPost() {
             <div className={styles.metadata}>
               <div className={styles.author}>
                 <span className={styles.label}>Author:</span>
-                <span className={styles.authorValue}>
+                <Link 
+                  href={`/profile/${nip19.npubEncode(post.pubkey)}`}
+                  className={styles.authorValue}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
                   {(() => {
                     // First check if we have author info in the post itself
                     if (post.author?.displayName || post.author?.name) {
@@ -1440,7 +1443,7 @@ export default function BlogPost() {
                     // Fallback to truncated pubkey
                     return post.pubkey.slice(0, 8) + '...';
                   })()}
-                </span>
+                </Link>
                 {isLoadingAdditionalData && !post.author && !getAuthorProfile(post.pubkey) && (
                   <span className={styles.loadingIndicator}> (loading...)</span>
                 )}

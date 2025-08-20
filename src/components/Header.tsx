@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { XMarkIcon, UserIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import { APP_VERSION } from '../config/version';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useNostr } from '@/contexts/NostrContext';
 import Image from 'next/image';
 import './Header.css';
@@ -11,7 +12,8 @@ import './Header.css';
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const { isAuthenticated, currentUser } = useNostr();
+  const { isAuthenticated, currentUser, logout } = useNostr();
+  const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
@@ -19,6 +21,12 @@ const Header: React.FC = () => {
 
   const handleLinkClick = () => {
     setIsMenuOpen(false);
+  };
+
+  const handleLogout = () => {
+    setIsMenuOpen(false);
+    logout();
+    router.replace('/');
   };
 
   // Get the user's profile identifier (NIP-05 or npub)
@@ -91,6 +99,11 @@ const Header: React.FC = () => {
             <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
               Reader
             </Link>
+            {isAuthenticated && (
+              <button onClick={handleLogout} className="menu-link">
+                Logout
+              </button>
+            )}
             {mounted && <div className="menu-version">v{APP_VERSION}</div>}
           </div>
         </div>

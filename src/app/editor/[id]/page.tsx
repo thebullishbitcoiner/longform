@@ -981,21 +981,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     }
   };
 
-  if (isLoading) {
-    return (
-      <main className="container">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>Loading draft...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!draft) return null;
-
   return (
     <AuthGuard>
+      {isLoading ? (
+        <main className="container">
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <p className="loading-text">Loading draft...</p>
+          </div>
+        </main>
+      ) : !draft ? null : (
       <main className="container">
       {isWidescreen ? (
         <>
@@ -1357,6 +1352,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         message={`You have an unsaved draft from ${lastDraft ? new Date(lastDraft.lastModified).toLocaleString() : ''}. Would you like to restore it?`}
       />
     </main>
+      )}
     </AuthGuard>
   );
 } 

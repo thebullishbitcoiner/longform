@@ -344,14 +344,13 @@ export default function SettingsPage() {
 
 
 
-    // Show full-page loading when either relay list is loading
-    if (isLoading || isLoadingRelayList) {
-        return (
-            <AuthGuard>
+    return (
+        <AuthGuard>
+            {isLoading || isLoadingRelayList ? (
                 <main className="container">
-                    <div className="loading-container">
+                    <div className="loading-content">
                         <div className="loading-spinner"></div>
-                        <p>
+                        <p className="loading-text">
                             {isLoading && isLoadingRelayList 
                                 ? "Loading kinds 30078 and 10002..." 
                                 : isLoading 
@@ -361,12 +360,7 @@ export default function SettingsPage() {
                         </p>
                     </div>
                 </main>
-            </AuthGuard>
-        );
-    }
-
-    return (
-        <AuthGuard>
+            ) : (
             <main className="container">
             <div className="settings-header">
                 <h1>Settings</h1>
@@ -772,6 +766,7 @@ export default function SettingsPage() {
                 </div>
             )}
         </main>
+            )}
         </AuthGuard>
     );
 } 
