@@ -674,7 +674,7 @@ export default function SettingsPage() {
                                 <li><strong>Read & Write:</strong> Both send and receive private events with this relay</li>
                             </ul>
                             <p>
-                                This setting only affects private events (kind 4). Public events will continue to use your default relay configuration.
+                                This setting only affects your draft events (kind 30024). Public events will continue to use your relay lists configuration.
                             </p>
                         </div>
                     </div>
