@@ -991,7 +991,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           </div>
         </main>
       ) : !draft ? null : (
-      <main className="container">
+      <main className="container editor-page">
       {isWidescreen ? (
         <>
           {/* Back button and title for fullscreen layout */}

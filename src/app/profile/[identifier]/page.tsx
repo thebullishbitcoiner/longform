@@ -11,6 +11,7 @@ import Image from 'next/image';
 import styles from './page.module.css';
 import { getCachedHighlights, cacheUserHighlights } from '@/utils/storage';
 import { useBlog } from '@/contexts/BlogContext';
+import { isWhitelisted } from '@/config/whitelist';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -514,6 +515,9 @@ export default function ProfilePage() {
 
   const displayName = profile.displayName || profile.name || profile.npub.slice(0, 8) + '...';
 
+  // Check if the profile being viewed belongs to a whitelisted user
+  const isProfileWhitelisted = profile && isWhitelisted(profile.pubkey);
+
   const handleCopyNpub = async () => {
     try {
       await navigator.clipboard.writeText(profile.npub);
@@ -764,7 +768,12 @@ export default function ProfilePage() {
             </div>
             
             <div className={styles.profileInfo}>
-              <h1 className={styles.profileName}>{displayName}</h1>
+                             <h1 className={styles.profileName}>
+                 {displayName}
+                 {isProfileWhitelisted && (
+                   <span className={styles.alphaBadge}>ALPHA</span>
+                 )}
+               </h1>
               <div className={styles.npubSection}>
                 <span className={styles.npubValue}>{profile.npub}</span>
                 <button 
