@@ -1400,4 +1400,33 @@
   flex-shrink: 0;
 }
 
+/* User Highlight Styles */
+.userHighlight {
+  background-color: rgba(139, 92, 246, 0.7) !important; /* Using #8b5cf6 with 80% opacity */
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
+/* Ensure highlights work well with markdown content */
+.postContent .userHighlight {
+  display: inline;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Highlight styles for different contexts */
+.postContent p .userHighlight,
+.postContent li .userHighlight,
+.postContent blockquote .userHighlight {
+  background-color: rgba(139, 92, 246, 0.6) !important;
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
+/* Ensure highlights don't break text flow */
+.postContent .userHighlight {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
  

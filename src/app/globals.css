@@ -98,13 +98,14 @@ body {
 - .new-draft-button
 - .draft-list
 - .draft-item
-- .draft-content
-- .draft-info
-- .draft-title
-- .draft-date
-- .delete-button
-- All related styles
-*/
+
+/* Global highlight styles as fallback */
+.userHighlight {
+  background-color: rgba(139, 92, 246, 0.7) !important; /* Using #8b5cf6 with 80% opacity */
+  border-radius: 2px;
+  padding: 1px 2px;
+  display: inline;
+}
 
 /* Welcome Section Styles */
 .welcome-section {

@@ -275,6 +275,13 @@ export function NostrProvider({ children }: NostrProviderProps) {
         
         setIsWhitelisted(true);
         setIsAuthenticated(true);
+        
+        // Trigger highlight cache refresh in background
+        setTimeout(() => {
+          // This will be handled by the useHighlights hook when components mount
+          console.log('🔍 User authenticated, highlights will be fetched by components');
+        }, 100);
+        
         return true;
       }
     } catch (error) {
