@@ -16,6 +16,7 @@ import { resolveNip05 } from '@/utils/nostr';
 import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
+import { useHighlights, highlightTextInElement } from '@/utils/highlights';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -83,6 +84,7 @@ export default function BlogPost() {
   const params = useParams();
   const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce } = useBlog();
   const { ndk: contextNdk, isAuthenticated } = useNostr();
+  const { getHighlightsForPost, addHighlight } = useHighlights();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [processedContent, setProcessedContent] = useState('');
@@ -1234,6 +1236,27 @@ export default function BlogPost() {
       
       console.log('Highlight created successfully:', ndkEvent.id);
       
+      // Add the new highlight to our cache and local state
+      const newHighlight = {
+        id: ndkEvent.id,
+        content: cleanText,
+        created_at: Date.now(),
+        postId: post.id,
+        postAuthor: post.pubkey,
+        startOffset: selectedText.startOffset,
+        endOffset: selectedText.endOffset,
+        eventTags: ndkEvent.tags
+      };
+      
+      // Add to highlights cache
+      addHighlight(newHighlight);
+      
+      // Re-apply highlights to the content
+      if (postContentRef.current) {
+        const postHighlights = getHighlightsForPost(post.id);
+        highlightTextInElement(postContentRef.current, postHighlights, styles.userHighlight);
+      }
+      
       // Show success message (you can replace this with a toast notification)
       alert('Highlight created successfully!');
       
@@ -1286,6 +1309,23 @@ export default function BlogPost() {
       observer.disconnect();
     };
   }, [post, hasMarkedAsRead, markPostAsRead, isAuthenticated]);
+
+  // Apply highlights to post content when it's loaded and highlights are available
+  useEffect(() => {
+    if (!post || !postContentRef.current || !isAuthenticated) return;
+
+    // Small delay to ensure content is fully rendered
+    const timer = setTimeout(() => {
+      const postHighlights = getHighlightsForPost(post.id);
+      
+      if (postHighlights.length > 0) {
+        console.log(`🔍 Applied ${postHighlights.length} highlights to post content`);
+        highlightTextInElement(postContentRef.current!, postHighlights, styles.userHighlight);
+      }
+    }, 1000); // Delay to ensure content is fully rendered
+
+    return () => clearTimeout(timer);
+  }, [post, getHighlightsForPost, isAuthenticated]);
 
   // Function to render custom emojis and reactions as JSX
   const renderReactionContentJSX = (content: string, event?: NDKEvent) => {
@@ -1865,6 +1905,8 @@ export default function BlogPost() {
            )}
          </div>
        )}
+
+
     </div>
   );
 } 

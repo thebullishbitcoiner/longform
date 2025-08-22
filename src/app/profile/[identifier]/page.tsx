@@ -9,6 +9,8 @@ import Link from 'next/link';
 import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 import styles from './page.module.css';
+import { getCachedHighlights, cacheUserHighlights } from '@/utils/storage';
+import { useBlog } from '@/contexts/BlogContext';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -59,6 +61,7 @@ type TabType = 'posts' | 'highlights';
 export default function ProfilePage() {
   const params = useParams();
   const { ndk: contextNdk, isAuthenticated } = useNostr();
+  const { getAuthorProfile, fetchProfileOnce } = useBlog();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [highlights, setHighlights] = useState<ProfileHighlight[]>([]);
@@ -118,7 +121,85 @@ export default function ProfilePage() {
     }
 
     try {
-      // Fetch user's highlights (kind 9802)
+      // Check cache first
+      const cachedHighlights = getCachedHighlights(profile.pubkey);
+      if (cachedHighlights && cachedHighlights.length > 0) {
+        console.log(`Profile: Using cached highlights (${cachedHighlights.length} items)`);
+        
+        // Convert cached highlights to ProfileHighlight format (without author info initially)
+        const profileHighlights = cachedHighlights.map(highlight => ({
+          id: highlight.id,
+          content: highlight.content,
+          created_at: highlight.created_at,
+          postId: highlight.postId,
+          postAuthor: highlight.postAuthor,
+          postAuthorDisplayName: undefined,
+          postAuthorNip05: highlight.postAuthorNip05,
+          postDTag: highlight.postDTag,
+          startOffset: highlight.startOffset,
+          endOffset: highlight.endOffset,
+        })).sort((a, b) => b.created_at - a.created_at);
+        
+        setHighlights(profileHighlights);
+        setHighlightsLoaded(true);
+        setHighlightsLoading(false);
+        
+        // Background fetch author info for cached highlights using existing cache system
+        setTimeout(async () => {
+          try {
+            const authorPubkeys = new Set<string>();
+            cachedHighlights.forEach(highlight => {
+              if (highlight.postAuthor) {
+                authorPubkeys.add(highlight.postAuthor);
+              }
+            });
+
+            // Fetch profiles using the existing cached system
+            for (const authorPubkey of authorPubkeys) {
+              // Check if already cached
+              const cachedProfile = getAuthorProfile(authorPubkey);
+              if (!cachedProfile) {
+                // Fetch and cache the profile
+                await fetchProfileOnce(authorPubkey, async () => {
+                  const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
+                  const profile = await authorUser.fetchProfile();
+                  if (profile) {
+                    return {
+                      name: profile.name,
+                      displayName: profile.displayName,
+                      nip05: profile.nip05,
+                    };
+                  }
+                  return null;
+                });
+              }
+            }
+
+            // Update highlights with author info from cache
+            setHighlights(prevHighlights => 
+              prevHighlights.map(highlight => {
+                const authorProfile = getAuthorProfile(highlight.postAuthor);
+                const postAuthorDisplayName = authorProfile?.displayName || authorProfile?.name || highlight.postAuthor.slice(0, 8) + '...';
+                
+                return {
+                  ...highlight,
+                  postAuthorDisplayName,
+                  postAuthorNip05: authorProfile?.nip05,
+                };
+              })
+            );
+            
+            console.log(`Profile: Updated cached highlights with author info for ${authorPubkeys.size} authors`);
+          } catch (error) {
+            console.error('Error fetching author profiles for cached highlights:', error);
+          }
+        }, 100); // Small delay to ensure UI shows immediately
+        
+        return;
+      }
+
+      // Fetch user's highlights (kind 9802) if no cache available
+      console.log(`Profile: Fetching highlights from network for ${profile.pubkey}`);
       const highlightsQuery = await ndkToUse.fetchEvents({
         kinds: [9802],
         authors: [profile.pubkey],
@@ -229,6 +310,22 @@ export default function ProfilePage() {
 
       console.log('Profile: Updating highlights with full data:', profileHighlights.length, 'highlights');
       console.log('Profile: Sample highlight with author data:', profileHighlights[0]);
+      
+      // Cache the highlights for faster future loading
+      const highlightsForCache = profileHighlights.map(highlight => ({
+        id: highlight.id,
+        content: highlight.content,
+        created_at: highlight.created_at,
+        postId: highlight.postId,
+        postAuthor: highlight.postAuthor,
+        postAuthorNip05: highlight.postAuthorNip05,
+        postDTag: highlight.postDTag,
+        startOffset: highlight.startOffset,
+        endOffset: highlight.endOffset,
+        eventTags: [] // We don't have the full event tags here, but this is ok for profile display
+      }));
+      cacheUserHighlights(profile.pubkey, highlightsForCache);
+      console.log(`Profile: Cached ${highlightsForCache.length} highlights for future use`);
       
       setHighlights(profileHighlights);
       setHighlightsLoaded(true);

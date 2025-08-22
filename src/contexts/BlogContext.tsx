@@ -6,6 +6,7 @@ import { safeSetItem, STORAGE_KEYS } from '@/utils/storage';
 interface AuthorProfile {
   name?: string;
   displayName?: string;
+  nip05?: string;
 }
 
 export interface BlogPost {

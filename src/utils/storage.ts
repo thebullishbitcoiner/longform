@@ -19,6 +19,8 @@ const STORAGE_KEYS = {
   POSTS: 'longform_posts',
   READ_POSTS: 'longform_readPosts',
   AUTHOR_PROFILES: 'longform_authorProfiles',
+  USER_HIGHLIGHTS: 'longform_userHighlights',
+  HIGHLIGHT_CACHE_TIMESTAMP: 'longform_highlightCacheTimestamp',
   RELAY_LIST_PREFIX: 'longform_relay_list_'
 };
 
@@ -166,6 +168,100 @@ export function clearLastDraft(): void {
 export function hasUnsavedDraft(): boolean {
   if (typeof window === 'undefined') return false;
   return localStorage.getItem(STORAGE_KEYS.LAST_DRAFT) !== null;
+}
+
+// Highlight caching functions
+export interface CachedHighlight {
+  id: string;
+  content: string;
+  created_at: number;
+  postId: string;
+  postAuthor: string;
+  postAuthorNip05?: string;
+  postDTag?: string;
+  startOffset?: number;
+  endOffset?: number;
+  eventTags: string[][];
+}
+
+// Cache user highlights
+export function cacheUserHighlights(pubkey: string, highlights: CachedHighlight[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const highlightsData = {
+      pubkey,
+      highlights,
+      timestamp: Date.now()
+    };
+    
+    const success = safeSetItem(STORAGE_KEYS.USER_HIGHLIGHTS, JSON.stringify(highlightsData));
+    if (!success) {
+      console.warn('Failed to cache highlights due to storage constraints');
+    }
+  } catch (error) {
+    console.error('Error caching highlights:', error);
+  }
+}
+
+// Get cached highlights for a user
+export function getCachedHighlights(pubkey: string): CachedHighlight[] | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const cached = localStorage.getItem(STORAGE_KEYS.USER_HIGHLIGHTS);
+    if (!cached) return null;
+    
+    const data = JSON.parse(cached);
+    
+    // Check if cache is for the same user
+    if (data.pubkey !== pubkey) return null;
+    
+    // Check if cache is fresh (less than 1 hour old)
+    const cacheAge = Date.now() - data.timestamp;
+    if (cacheAge > 60 * 60 * 1000) { // 1 hour
+      console.log('Highlight cache expired, will refresh');
+      return null;
+    }
+    
+    return data.highlights || [];
+  } catch (error) {
+    console.error('Error reading cached highlights:', error);
+    return null;
+  }
+}
+
+// Add a new highlight to cache
+export function addHighlightToCache(pubkey: string, highlight: CachedHighlight): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const existing = getCachedHighlights(pubkey) || [];
+    
+    // Check if highlight already exists
+    const exists = existing.some(h => h.id === highlight.id);
+    if (exists) return;
+    
+    // Add new highlight to the beginning (most recent first)
+    const updated = [highlight, ...existing];
+    
+    cacheUserHighlights(pubkey, updated);
+  } catch (error) {
+    console.error('Error adding highlight to cache:', error);
+  }
+}
+
+// Clear highlight cache
+export function clearHighlightCache(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEYS.USER_HIGHLIGHTS);
+  localStorage.removeItem(STORAGE_KEYS.HIGHLIGHT_CACHE_TIMESTAMP);
+}
+
+// Get highlights for a specific post
+export function getHighlightsForPost(pubkey: string, postId: string): CachedHighlight[] {
+  const highlights = getCachedHighlights(pubkey) || [];
+  return highlights.filter(h => h.postId === postId);
 }
 
 // Export storage utilities for other components
