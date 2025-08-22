@@ -99,6 +99,9 @@ const Header: React.FC = () => {
             <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
               Reader
             </Link>
+            <Link href="/support" className="menu-link" onClick={handleLinkClick}>
+              Support
+            </Link>
             {isAuthenticated && (
               <button onClick={handleLogout} className="menu-link">
                 Logout

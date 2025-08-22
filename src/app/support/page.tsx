@@ -1,0 +1,126 @@
+'use client';
+
+import { useState } from 'react';
+import { CheckIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { useNostr } from '@/contexts/NostrContext';
+import './page.css';
+
+const SupportPage: React.FC = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { currentUser } = useNostr();
+
+  const handleSubscribe = () => {
+    setIsSubmitting(true);
+
+    // Get the user's npub or use 'Anon' as fallback
+    const npub = currentUser?.npub || 'Anon';
+    
+    // Construct the payerdata JSON
+    const payerdata = JSON.stringify({ npub });
+    
+    // Construct the subscription URL
+    const subscriptionUrl = new URL('https://zapplanner.albylabs.com/confirm');
+    subscriptionUrl.searchParams.set('amount', '1000');
+    subscriptionUrl.searchParams.set('recipient', 'bullish@getalby.com');
+    subscriptionUrl.searchParams.set('timeframe', '30d');
+    subscriptionUrl.searchParams.set('comment', ' Longform PRO subscription');
+    subscriptionUrl.searchParams.set('payerdata', payerdata);
+
+    // Open in new tab/window
+    window.open(subscriptionUrl.toString(), '_blank');
+
+    // Reset loading state after a short delay
+    setTimeout(() => {
+      setIsSubmitting(false);
+    }, 1000);
+  };
+
+  const benefits = [
+    'A PRO badge on your profile page',
+    'Dashboard with stats and insights',
+    'Priority customer support',
+    'Early access to new features',
+    'Bragging rights on Nostr',
+  ];
+
+  return (
+    <main>
+      <div className="support-container">
+        <div className="support-content">
+          <div className="support-header">
+            <h1 className="support-title">Support</h1>
+            <p className="support-subtitle">
+              Help us build the future of decentralized longform content
+            </p>
+          </div>
+
+          <div className="pro-card">
+            <div className="pro-header">
+              <h2 className="pro-title">Longform PRO</h2>
+              <div className="pro-price">
+                <span className="price-amount">1000</span>
+                <span className="price-currency">sats</span>
+                <span className="price-period">/month</span>
+              </div>
+            </div>
+
+            <div className="pro-benefits">
+              <h3 className="benefits-title">PRO Benefits</h3>
+              <ul className="benefits-list">
+                {benefits.map((benefit, index) => (
+                  <li key={index} className="benefit-item">
+                    <CheckIcon className="check-icon" />
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="subscription-form">
+              <button
+                onClick={handleSubscribe}
+                disabled={isSubmitting}
+                className="subscribe-button"
+              >
+                {isSubmitting ? (
+                  <div className="loading-spinner" />
+                ) : (
+                  <>
+                    <span>Subscribe to PRO</span>
+                    <ArrowTopRightOnSquareIcon className="button-icon" />
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="pro-note">
+              <p>
+                Please allow 21 hours for your subscription to take effect. Subscribers are currently managed manually while an automated solution is being worked on.
+              </p>
+            </div>
+          </div>
+
+          <div className="support-info">
+            <h3>Why Support Longform?</h3>
+            <div className="info-grid">
+              <div className="info-item">
+                <h4>Decentralized Future</h4>
+                <p>We&apos;re building the future of content creation on Nostr, free from centralized control.</p>
+              </div>
+              <div className="info-item">
+                <h4>Community Driven</h4>
+                <p>Your support directly funds development and helps us prioritize features that matter to you.</p>
+              </div>
+              <div className="info-item">
+                <h4>Sustainable Development</h4>
+                <p>PRO subscriptions ensure we can continue building and maintaining Longform for blocks to come.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+};
+
+export default SupportPage;
