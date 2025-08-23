@@ -44,11 +44,10 @@
 
 /* PRO Status Section */
 .pro-status-section {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.01);
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
   min-height: 80px;
   transition: all 0.2s ease-in-out;
 }
@@ -68,15 +67,20 @@
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: 0.5rem;
+}
+
+.pro-status-buffer {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 146, 60, 0.1) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .pro-badge {
   width: 2rem;
   height: 2rem;
-  color: #22c55e;
+  color: #8b5cf6;
   flex-shrink: 0;
 }
 
@@ -84,13 +88,26 @@
   margin: 0 0 0.25rem 0;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #22c55e;
+  color: #8b5cf6;
+}
+
+.payment-info {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
 }
 
 .expiration-info {
   margin: 0;
   font-size: 0.875rem;
   color: var(--text-secondary);
+}
+
+.expired-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #ef4444;
 }
 
 .expiring-soon {
@@ -105,11 +122,17 @@
   height: 1rem;
 }
 
+.buffer-info {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.875rem;
+  color: #f59e0b;
+  font-weight: 500;
+}
+
 .pro-status-inactive {
   text-align: center;
   padding: 1rem;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.5rem;
 }
 
@@ -128,9 +151,8 @@
 
 .pro-header {
   text-align: center;
-  margin-bottom: 2rem;
-  padding-bottom: 2rem;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
 }
 
 .pro-title {
@@ -280,12 +302,12 @@
 }
 
 .renew-button {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
 }
 
 .renew-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.3);
 }
 
 .button-icon {
@@ -352,8 +374,6 @@
 
 .info-item:hover {
   background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(139, 92, 246, 0.3);
-  transform: translateY(-2px);
 }
 
 .info-item h4 {

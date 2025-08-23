@@ -86,6 +86,9 @@ const Header: React.FC = () => {
                 Profile
               </Link>
             )}
+            <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
+              Reader
+            </Link>
             {isAuthenticated && (
               <Link href="/settings" className="menu-link" onClick={handleLinkClick}>
                 Settings
@@ -96,9 +99,6 @@ const Header: React.FC = () => {
                 Dashboard
               </Link>
             )}
-            <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
-              Reader
-            </Link>
             <Link href="/support" className="menu-link" onClick={handleLinkClick}>
               Support
             </Link>

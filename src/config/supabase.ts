@@ -32,4 +32,5 @@ export interface ProStatus {
   isPro: boolean;
   lastPayment?: string;
   expiresAt?: string;
+  isInBuffer?: boolean;
 }

@@ -12,6 +12,7 @@ export function useProStatus() {
   const isPro = proStatus?.isPro || false;
   const expiresAt = proStatus?.expiresAt;
   const lastPayment = proStatus?.lastPayment;
+  const isInBuffer = proStatus?.isInBuffer || false;
 
   return {
     // Status
@@ -19,6 +20,7 @@ export function useProStatus() {
     isLoading,
     expiresAt,
     lastPayment,
+    isInBuffer,
     
     // Functions
     checkProStatus,

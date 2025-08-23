@@ -114,3 +114,25 @@ export function isExpiringSoon(expiresAt: string): boolean {
   
   return expirationDate <= sevenDaysFromNow;
 }
+
+/**
+ * Check if a user is in the buffer period (14 days after expiration)
+ */
+export function isInBufferPeriod(expiresAt: string): boolean {
+  const expirationDate = new Date(expiresAt);
+  const now = new Date();
+  const bufferEndDate = new Date(expirationDate.getTime() + (14 * 24 * 60 * 60 * 1000));
+  
+  return now > expirationDate && now <= bufferEndDate;
+}
+
+/**
+ * Check if a subscription is fully expired (beyond buffer period)
+ */
+export function isFullyExpired(expiresAt: string): boolean {
+  const expirationDate = new Date(expiresAt);
+  const now = new Date();
+  const bufferEndDate = new Date(expirationDate.getTime() + (14 * 24 * 60 * 60 * 1000));
+  
+  return now > bufferEndDate;
+}

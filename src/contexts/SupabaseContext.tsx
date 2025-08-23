@@ -62,17 +62,21 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       const lastPayment = new Date(subscriber.last_payment);
       const now = new Date();
       
-      // Check if the last payment was within the last 30 days
-      const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-      const isPro = lastPayment > thirtyDaysAgo;
-      
       // Calculate expiration date (30 days from last payment)
       const expiresAt = new Date(lastPayment.getTime() + (30 * 24 * 60 * 60 * 1000));
+      
+      // Check if the user is in the buffer period (14 days after expiration)
+      const bufferEndDate = new Date(expiresAt.getTime() + (14 * 24 * 60 * 60 * 1000));
+      const isInBuffer = now > expiresAt && now <= bufferEndDate;
+      
+      // User is PRO if they're within the 30-day period OR in the buffer period
+      const isPro = now <= bufferEndDate;
 
       const status: ProStatus = {
         isPro,
         lastPayment: subscriber.last_payment,
-        expiresAt: expiresAt.toISOString()
+        expiresAt: expiresAt.toISOString(),
+        isInBuffer
       };
 
       return status;
@@ -119,17 +123,21 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       const lastPayment = new Date(subscriber.last_payment);
       const now = new Date();
       
-      // Check if the last payment was within the last 30 days
-      const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-      const isPro = lastPayment > thirtyDaysAgo;
-      
       // Calculate expiration date (30 days from last payment)
       const expiresAt = new Date(lastPayment.getTime() + (30 * 24 * 60 * 60 * 1000));
+      
+      // Check if the user is in the buffer period (14 days after expiration)
+      const bufferEndDate = new Date(expiresAt.getTime() + (14 * 24 * 60 * 60 * 1000));
+      const isInBuffer = now > expiresAt && now <= bufferEndDate;
+      
+      // User is PRO if they're within the 30-day period OR in the buffer period
+      const isPro = now <= bufferEndDate;
 
       const status: ProStatus = {
         isPro,
         lastPayment: subscriber.last_payment,
-        expiresAt: expiresAt.toISOString()
+        expiresAt: expiresAt.toISOString(),
+        isInBuffer
       };
 
       setProStatus(status);

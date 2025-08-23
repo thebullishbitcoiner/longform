@@ -69,20 +69,35 @@ const SupportPage: React.FC = () => {
                     <span>Checking PRO status...</span>
                   </div>
                 ) : proStatus?.isPro ? (
-                  <div className="pro-status-active">
+                  <div className={`pro-status-active ${proStatus.isInBuffer ? 'pro-status-buffer' : ''}`}>
                     <StarIcon className="pro-badge" />
                     <div className="pro-status-info">
-                      <h3>PRO Active</h3>
+                      <h3>{proStatus.isInBuffer ? 'PRO Expired' : 'PRO Active'}</h3>
+                      {proStatus.lastPayment && (
+                        <p className="payment-info">
+                          Last payment: {formatExpirationDate(proStatus.lastPayment)}
+                        </p>
+                      )}
                       {proStatus.expiresAt && (
                         <p className="expiration-info">
-                          {isExpiringSoon(proStatus.expiresAt) ? (
+                          {proStatus.isInBuffer ? (
+                            <span className="expired-status">
+                              <ExclamationTriangleIcon className="warning-icon" />
+                              Expired on: {formatExpirationDate(proStatus.expiresAt)}
+                            </span>
+                          ) : isExpiringSoon(proStatus.expiresAt) ? (
                             <span className="expiring-soon">
                               <ExclamationTriangleIcon className="warning-icon" />
-                              Expires {formatExpirationDate(proStatus.expiresAt)}
+                              Expires: {formatExpirationDate(proStatus.expiresAt)}
                             </span>
                           ) : (
-                            <span>Expires {formatExpirationDate(proStatus.expiresAt)}</span>
+                            <span>Expires: {formatExpirationDate(proStatus.expiresAt)}</span>
                           )}
+                        </p>
+                      )}
+                      {proStatus.isInBuffer && (
+                        <p className="buffer-info">
+                          You have 14 days to renew before losing PRO access
                         </p>
                       )}
                     </div>
@@ -153,7 +168,7 @@ const SupportPage: React.FC = () => {
 
             <div className="pro-note">
               <p>
-                Please allow 21 hours for your subscription to take effect. Subscribers are currently managed manually while an automated solution is being worked on.
+                NOTE: Clicking the button will bring you to ZapPlanner to set up a subscription. Please allow 21 hours for it to take effect. Subscribers are currently managed manually while an automated solution is in the works.
               </p>
             </div>
           </div>
