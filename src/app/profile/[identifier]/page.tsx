@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
+import { useSupabase } from '@/contexts/SupabaseContext';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
 import NDK from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
@@ -11,7 +12,6 @@ import Image from 'next/image';
 import styles from './page.module.css';
 import { getCachedHighlights, cacheUserHighlights } from '@/utils/storage';
 import { useBlog } from '@/contexts/BlogContext';
-import { isWhitelisted } from '@/config/whitelist';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -63,6 +63,7 @@ export default function ProfilePage() {
   const params = useParams();
   const { ndk: contextNdk, isAuthenticated } = useNostr();
   const { getAuthorProfile, fetchProfileOnce } = useBlog();
+  const { checkProStatus } = useSupabase();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [highlights, setHighlights] = useState<ProfileHighlight[]>([]);
@@ -82,6 +83,7 @@ export default function ProfilePage() {
     x: 0,
     y: 0
   });
+  const [isProfilePro, setIsProfilePro] = useState(false);
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -406,6 +408,15 @@ export default function ProfilePage() {
 
         setProfile(profileData);
 
+        // Check PRO status for this profile
+        try {
+          const proStatus = await checkProStatus(npub);
+          setIsProfilePro(proStatus.isPro);
+        } catch (error) {
+          console.error('Error checking PRO status:', error);
+          setIsProfilePro(false);
+        }
+
         // Fetch user's blog posts (kind 30023)
         const postsQuery = await ndkToUse.fetchEvents({
           kinds: [30023],
@@ -514,9 +525,6 @@ export default function ProfilePage() {
   }
 
   const displayName = profile.displayName || profile.name || profile.npub.slice(0, 8) + '...';
-
-  // Check if the profile being viewed belongs to a whitelisted user
-  const isProfileWhitelisted = profile && isWhitelisted(profile.pubkey);
 
   const handleCopyNpub = async () => {
     try {
@@ -770,8 +778,8 @@ export default function ProfilePage() {
             <div className={styles.profileInfo}>
                              <h1 className={styles.profileName}>
                  {displayName}
-                 {isProfileWhitelisted && (
-                   <span className={styles.alphaBadge}>ALPHA</span>
+                 {isProfilePro && (
+                   <span className={styles.proBadge}>PRO</span>
                  )}
                </h1>
               <div className={styles.npubSection}>

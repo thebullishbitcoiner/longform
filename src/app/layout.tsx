@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import Header from "@/components/Header";
 import { NostrProvider } from "@/contexts/NostrContext";
 import { BlogProvider } from "@/contexts/BlogContext";
+import { SupabaseProvider } from "@/contexts/SupabaseContext";
 import { NostrLoginProvider } from "@/components/NostrLoginProvider";
 import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import "./globals.css";
@@ -38,12 +39,13 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <NostrProvider>
-          <BlogProvider>
-            <GlobalErrorHandler />
-            <NostrLoginProvider />
-            <Header />
-            {children}
-            <Toaster
+          <SupabaseProvider>
+            <BlogProvider>
+              <GlobalErrorHandler />
+              <NostrLoginProvider />
+              <Header />
+              {children}
+              <Toaster
               position="bottom-left"
               toastOptions={{
                 style: {
@@ -65,7 +67,8 @@ export default function RootLayout({
                 },
               }}
             />
-          </BlogProvider>
+            </BlogProvider>
+          </SupabaseProvider>
         </NostrProvider>
       </body>
     </html>

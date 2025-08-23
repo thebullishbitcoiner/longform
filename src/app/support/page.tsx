@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, ArrowTopRightOnSquareIcon, StarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
+import { useSupabase } from '@/contexts/SupabaseContext';
+import { formatExpirationDate, isExpiringSoon } from '@/utils/supabase';
 import './page.css';
 
 const SupportPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { currentUser } = useNostr();
+  const { proStatus, isLoading } = useSupabase();
 
   const handleSubscribe = () => {
     setIsSubmitting(true);
@@ -35,6 +38,8 @@ const SupportPage: React.FC = () => {
     }, 1000);
   };
 
+
+
   const benefits = [
     'A PRO badge on your profile page',
     'Dashboard with stats and insights',
@@ -55,6 +60,42 @@ const SupportPage: React.FC = () => {
           </div>
 
           <div className="pro-card">
+            {/* PRO Status Display */}
+            {currentUser && (
+              <div className="pro-status-section">
+                {isLoading && !proStatus ? (
+                  <div className="pro-status-loading">
+                    <div className="loading-spinner" />
+                    <span>Checking PRO status...</span>
+                  </div>
+                ) : proStatus?.isPro ? (
+                  <div className="pro-status-active">
+                    <StarIcon className="pro-badge" />
+                    <div className="pro-status-info">
+                      <h3>PRO Active</h3>
+                      {proStatus.expiresAt && (
+                        <p className="expiration-info">
+                          {isExpiringSoon(proStatus.expiresAt) ? (
+                            <span className="expiring-soon">
+                              <ExclamationTriangleIcon className="warning-icon" />
+                              Expires {formatExpirationDate(proStatus.expiresAt)}
+                            </span>
+                          ) : (
+                            <span>Expires {formatExpirationDate(proStatus.expiresAt)}</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pro-status-inactive">
+                    <h3>Not a PRO subscriber</h3>
+                    <p>Subscribe to unlock all PRO features</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="pro-header">
               <h2 className="pro-title">Longform PRO</h2>
               <div className="pro-price">
@@ -77,20 +118,37 @@ const SupportPage: React.FC = () => {
             </div>
 
             <div className="subscription-form">
-              <button
-                onClick={handleSubscribe}
-                disabled={isSubmitting}
-                className="subscribe-button"
-              >
-                {isSubmitting ? (
-                  <div className="loading-spinner" />
-                ) : (
-                  <>
-                    <span>Subscribe to PRO</span>
-                    <ArrowTopRightOnSquareIcon className="button-icon" />
-                  </>
-                )}
-              </button>
+              {proStatus?.isPro ? (
+                <button
+                  onClick={handleSubscribe}
+                  disabled={isSubmitting}
+                  className="subscribe-button renew-button"
+                >
+                  {isSubmitting ? (
+                    <div className="loading-spinner" />
+                  ) : (
+                    <>
+                      <span>Renew PRO Subscription</span>
+                      <ArrowTopRightOnSquareIcon className="button-icon" />
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubscribe}
+                  disabled={isSubmitting}
+                  className="subscribe-button"
+                >
+                  {isSubmitting ? (
+                    <div className="loading-spinner" />
+                  ) : (
+                    <>
+                      <span>Subscribe to PRO</span>
+                      <ArrowTopRightOnSquareIcon className="button-icon" />
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             <div className="pro-note">

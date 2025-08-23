@@ -8,6 +8,7 @@ import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 import { ChatBubbleLeftIcon, BoltIcon, ArrowPathIcon, DocumentTextIcon, HandThumbUpIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
+import { ProFeature } from '@/components/ProFeature';
 import styles from './page.module.css';
 
 
@@ -710,6 +711,30 @@ const DashboardPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* PRO Feature Example */}
+        <ProFeature showUpgradePrompt>
+          <div className={styles['pro-feature-section']}>
+            <h2 className={styles['section-title']}>Advanced Analytics (PRO)</h2>
+            <div className={styles['pro-content']}>
+              <p>This is an example of a PRO-only feature. PRO subscribers get access to advanced analytics, detailed insights, and more.</p>
+              <div className={styles['pro-stats']}>
+                <div className={styles['pro-stat']}>
+                  <h4>Engagement Rate</h4>
+                  <span>12.5%</span>
+                </div>
+                <div className={styles['pro-stat']}>
+                  <h4>Growth Trend</h4>
+                  <span>+23%</span>
+                </div>
+                <div className={styles['pro-stat']}>
+                  <h4>Audience Reach</h4>
+                  <span>1,234</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ProFeature>
       </div>
     </main>
       )}
