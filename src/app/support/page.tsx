@@ -38,13 +38,12 @@ const SupportPage: React.FC = () => {
     }, 1000);
   };
 
-
-
   const benefits = [
-    'A PRO badge on your profile page',
+    'PRO badge on your profile page',
     'Dashboard with stats and insights',
-    'Priority customer support',
+    'Publish/share articles to list(s)',
     'Early access to new features',
+    'Priority customer support',
     'Bragging rights on Nostr',
   ];
 
@@ -62,17 +61,21 @@ const SupportPage: React.FC = () => {
           <div className="pro-card">
             {/* PRO Status Display */}
             {currentUser && (
-              <div className="pro-status-section">
+              <>
                 {isLoading && !proStatus ? (
-                  <div className="pro-status-loading">
-                    <div className="loading-spinner" />
-                    <span>Checking PRO status...</span>
+                  <div className="pro-status-section">
+                    <div className="pro-status-loading">
+                      <div className="loading-spinner" />
+                      <span>Checking PRO status...</span>
+                    </div>
                   </div>
                 ) : proStatus?.isPro ? (
                   <div className={`pro-status-active ${proStatus.isInBuffer ? 'pro-status-buffer' : ''}`}>
-                    <StarIcon className="pro-badge" />
-                    <div className="pro-status-info">
+                    <div className="pro-status-header">
+                      <StarIcon className="pro-badge" />
                       <h3>{proStatus.isInBuffer ? 'PRO Expired' : 'PRO Active'}</h3>
+                    </div>
+                    <div className="pro-status-details">
                       {proStatus.lastPayment && (
                         <p className="payment-info">
                           Last payment: {formatExpirationDate(proStatus.lastPayment)}
@@ -103,12 +106,14 @@ const SupportPage: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="pro-status-inactive">
-                    <h3>Not a PRO subscriber</h3>
-                    <p>Subscribe to unlock all PRO features</p>
+                  <div className="pro-status-section">
+                    <div className="pro-status-inactive">
+                      <h3>Not a PRO subscriber</h3>
+                      <p>Subscribe to unlock all PRO features</p>
+                    </div>
                   </div>
                 )}
-              </div>
+              </>
             )}
 
             <div className="pro-header">
@@ -121,7 +126,7 @@ const SupportPage: React.FC = () => {
             </div>
 
             <div className="pro-benefits">
-              <h3 className="benefits-title">PRO Benefits</h3>
+              <h3 className="benefits-title">What do you get with PRO?</h3>
               <ul className="benefits-list">
                 {benefits.map((benefit, index) => (
                   <li key={index} className="benefit-item">
