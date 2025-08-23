@@ -1080,6 +1080,92 @@ export default function BlogPost() {
       return;
     }
 
+    // Calculate absolute position within the post content
+    let absoluteStartOffset = 0;
+    let absoluteEndOffset = 0;
+    
+    if (postContentRef.current) {
+      const walker = document.createTreeWalker(
+        postContentRef.current,
+        NodeFilter.SHOW_TEXT,
+        null
+      );
+
+      let currentNode: Text | null;
+      let currentOffset = 0;
+      let startFound = false;
+      let endFound = false;
+
+      console.log('🔍 Calculating absolute position for selection:', {
+        selectedText: selectedTextString,
+        rangeStartOffset: range.startOffset,
+        rangeEndOffset: range.endOffset,
+        startContainer: range.startContainer,
+        endContainer: range.endContainer
+      });
+
+      while (currentNode = walker.nextNode() as Text) {
+        const nodeLength = currentNode.textContent?.length || 0;
+        
+        // Check if this node contains the start of the selection
+        if (currentNode === range.startContainer) {
+          absoluteStartOffset = currentOffset + range.startOffset;
+          startFound = true;
+          console.log('🔍 Found start position:', {
+            nodeText: currentNode.textContent?.substring(0, 50) + '...',
+            currentOffset,
+            rangeStartOffset: range.startOffset,
+            absoluteStartOffset
+          });
+        }
+        
+        // Check if this node contains the end of the selection
+        if (currentNode === range.endContainer) {
+          absoluteEndOffset = currentOffset + range.endOffset;
+          endFound = true;
+          console.log('🔍 Found end position:', {
+            nodeText: currentNode.textContent?.substring(0, 50) + '...',
+            currentOffset,
+            rangeEndOffset: range.endOffset,
+            absoluteEndOffset
+          });
+          break; // We found both start and end, so we can stop
+        }
+        
+        currentOffset += nodeLength;
+      }
+
+      // If we didn't find the exact nodes, fall back to text content matching
+      if (!startFound || !endFound) {
+        console.log('🔍 Falling back to text content matching');
+        const postText = postContentRef.current.textContent || '';
+        const startIndex = postText.indexOf(selectedTextString);
+        if (startIndex !== -1) {
+          absoluteStartOffset = startIndex;
+          absoluteEndOffset = startIndex + selectedTextString.length;
+          console.log('🔍 Text matching found positions:', {
+            startIndex,
+            absoluteStartOffset,
+            absoluteEndOffset
+          });
+        } else {
+          // Fallback to relative offsets if text matching fails
+          absoluteStartOffset = range.startOffset;
+          absoluteEndOffset = range.endOffset;
+          console.log('🔍 Using fallback relative offsets:', {
+            absoluteStartOffset,
+            absoluteEndOffset
+          });
+        }
+      }
+
+      console.log('🔍 Final calculated positions:', {
+        absoluteStartOffset,
+        absoluteEndOffset,
+        selectedTextLength: selectedTextString.length
+      });
+    }
+
     // Get the position for the context menu
     const rect = range.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
@@ -1106,8 +1192,8 @@ export default function BlogPost() {
 
     setSelectedText({
       text: selectedTextString,
-      startOffset: range.startOffset,
-      endOffset: range.endOffset,
+      startOffset: absoluteStartOffset,
+      endOffset: absoluteEndOffset,
       container: range.commonAncestorContainer
     });
 
@@ -1220,6 +1306,13 @@ export default function BlogPost() {
       if (selectedText.startOffset !== undefined && selectedText.endOffset !== undefined) {
         ndkEvent.tags.push(['start', selectedText.startOffset.toString()]);
         ndkEvent.tags.push(['end', selectedText.endOffset.toString()]);
+        console.log('🔍 Adding position tags to Nostr event:', {
+          start: selectedText.startOffset,
+          end: selectedText.endOffset,
+          selectedText: selectedText.text
+        });
+      } else {
+        console.log('🔍 No position information available for highlight');
       }
 
       ndkEvent.created_at = Math.floor(Date.now() / 1000);

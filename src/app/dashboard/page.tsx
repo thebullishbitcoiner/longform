@@ -8,7 +8,6 @@ import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 import { ChatBubbleLeftIcon, BoltIcon, ArrowPathIcon, DocumentTextIcon, HandThumbUpIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
-import { ProFeature } from '@/components/ProFeature';
 import styles from './page.module.css';
 
 
@@ -263,8 +262,16 @@ const DashboardPage: React.FC = () => {
 
           try {
         return new Promise<Map<string, ArticleStats>>((resolve) => {
+          // Build article coordinates for comment fetching
+          const articleCoordinates = articles.map(article => {
+            if (article.dTag) {
+              return `30023:${article.pubkey}:${article.dTag}`;
+            }
+            return null;
+          }).filter(Boolean) as string[];
+
           let completedSubscriptions = 0;
-          const totalSubscriptions = 5;
+          const totalSubscriptions = articleCoordinates.length > 0 ? 7 : 6; // Extra subscriptions if we have article coordinates (reactions + comments)
           const subscriptions: NDKSubscription[] = [];
 
           const checkComplete = () => {
@@ -287,8 +294,8 @@ const DashboardPage: React.FC = () => {
             resolve(articleStats);
           }, 30000); // 30 second timeout
 
-          // Fetch reactions (kind 7 - likes, hearts, etc.)
-          const reactionsSubscription = ndk.subscribe(
+          // Fetch reactions (kind 7 - likes, hearts, etc.) by event ID
+          const reactionsByESubscription = ndk.subscribe(
             { 
               kinds: [7], 
               '#e': articleIds,
@@ -296,25 +303,87 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
-          subscriptions.push(reactionsSubscription);
+          subscriptions.push(reactionsByESubscription);
 
-          reactionsSubscription.on('event', (event: NDKEvent) => {
-            const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+          // Fetch reactions by article coordinate (#a tags)
+          const reactionsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
+            { 
+              kinds: [7], 
+              '#a': articleCoordinates,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          ) : null;
+          
+          if (reactionsByASubscription) {
+            subscriptions.push(reactionsByASubscription);
+          }
+
+          // Track reaction IDs to avoid duplicates
+          const reactionIds = new Set<string>();
+
+          const processReaction = (event: NDKEvent) => {
+            // Skip if we've already counted this reaction
+            if (reactionIds.has(event.id)) {
+              return;
+            }
+            reactionIds.add(event.id);
+            
+            // Filter out empty reactions (same as blog post page)
+            if (event.content.trim() === '') {
+              return;
+            }
+            
+            // Try to find article by event ID first
+            let articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+            let targetArticle: BlogPost | undefined;
+            
             if (articleId && articleStats.has(articleId)) {
+              targetArticle = articles.find(article => article.id === articleId);
+            } else {
+              // Try to find article by coordinate
+              const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
+              if (aTag) {
+                targetArticle = articles.find(article => 
+                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                );
+                if (targetArticle) {
+                  articleId = targetArticle.id;
+                }
+              }
+            }
+            
+            if (articleId && targetArticle && articleStats.has(articleId)) {
               const stats = articleStats.get(articleId)!;
               stats.reactions++;
               stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
             }
-          });
+          };
 
-          reactionsSubscription.on('eose', () => {
-            console.log('Dashboard: Reactions subscription EOSE');
+          reactionsByESubscription.on('event', processReaction);
+          if (reactionsByASubscription) {
+            reactionsByASubscription.on('event', processReaction);
+          }
+
+          reactionsByESubscription.on('eose', () => {
+            console.log('Dashboard: Reactions by E subscription EOSE');
             checkComplete();
           });
 
-          reactionsSubscription.on('close', () => {
-            console.log('Dashboard: Reactions subscription closed');
+          reactionsByESubscription.on('close', () => {
+            console.log('Dashboard: Reactions by E subscription closed');
           });
+
+          if (reactionsByASubscription) {
+            reactionsByASubscription.on('eose', () => {
+              console.log('Dashboard: Reactions by A subscription EOSE');
+              checkComplete();
+            });
+
+            reactionsByASubscription.on('close', () => {
+              console.log('Dashboard: Reactions by A subscription closed');
+            });
+          }
 
 
 
@@ -391,34 +460,91 @@ const DashboardPage: React.FC = () => {
             console.log('Dashboard: Zap receipts subscription closed');
           });
 
-          // Fetch comments (kind 1 that reference articles)
-          const commentsSubscription = ndk.subscribe(
+          // Fetch comments (kind 1 and kind 1111 that reference articles by event ID)
+          const commentsByESubscription = ndk.subscribe(
             { 
-              kinds: [1], 
+              kinds: [1, 1111], 
               '#e': articleIds,
               limit: 1000 
             },
             { closeOnEose: true }
           );
-          subscriptions.push(commentsSubscription);
+          subscriptions.push(commentsByESubscription);
 
-          commentsSubscription.on('event', (event: NDKEvent) => {
-            const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+          // Fetch comments that reference articles by coordinate (#a tags)
+          const commentsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
+            { 
+              kinds: [1, 1111], 
+              '#a': articleCoordinates,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          ) : null;
+          
+          if (commentsByASubscription) {
+            subscriptions.push(commentsByASubscription);
+          }
+
+          // Track comment IDs to avoid duplicates
+          const commentIds = new Set<string>();
+
+          const processComment = (event: NDKEvent) => {
+            // Skip if we've already counted this comment
+            if (commentIds.has(event.id)) {
+              return;
+            }
+            commentIds.add(event.id);
+            
+            // Try to find article by event ID first
+            let articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+            let targetArticle: BlogPost | undefined;
+            
             if (articleId && articleStats.has(articleId)) {
+              targetArticle = articles.find(article => article.id === articleId);
+            } else {
+              // Try to find article by coordinate
+              const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
+              if (aTag) {
+                targetArticle = articles.find(article => 
+                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                );
+                if (targetArticle) {
+                  articleId = targetArticle.id;
+                }
+              }
+            }
+            
+            if (articleId && targetArticle && articleStats.has(articleId)) {
               const stats = articleStats.get(articleId)!;
               stats.comments++;
               stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
             }
-          });
+          };
 
-          commentsSubscription.on('eose', () => {
-            console.log('Dashboard: Comments subscription EOSE');
+          commentsByESubscription.on('event', processComment);
+          if (commentsByASubscription) {
+            commentsByASubscription.on('event', processComment);
+          }
+
+          commentsByESubscription.on('eose', () => {
+            console.log('Dashboard: Comments by E subscription EOSE');
             checkComplete();
           });
 
-          commentsSubscription.on('close', () => {
-            console.log('Dashboard: Comments subscription closed');
+          commentsByESubscription.on('close', () => {
+            console.log('Dashboard: Comments by E subscription closed');
           });
+
+          if (commentsByASubscription) {
+            commentsByASubscription.on('eose', () => {
+              console.log('Dashboard: Comments by A subscription EOSE');
+              checkComplete();
+            });
+
+            commentsByASubscription.on('close', () => {
+              console.log('Dashboard: Comments by A subscription closed');
+            });
+          }
 
           // Fetch reposts (kind 6)
           const repostsSubscription = ndk.subscribe(
@@ -712,29 +838,7 @@ const DashboardPage: React.FC = () => {
           )}
         </div>
 
-        {/* PRO Feature Example */}
-        <ProFeature showUpgradePrompt>
-          <div className={styles['pro-feature-section']}>
-            <h2 className={styles['section-title']}>Advanced Analytics (PRO)</h2>
-            <div className={styles['pro-content']}>
-              <p>This is an example of a PRO-only feature. PRO subscribers get access to advanced analytics, detailed insights, and more.</p>
-              <div className={styles['pro-stats']}>
-                <div className={styles['pro-stat']}>
-                  <h4>Engagement Rate</h4>
-                  <span>12.5%</span>
-                </div>
-                <div className={styles['pro-stat']}>
-                  <h4>Growth Trend</h4>
-                  <span>+23%</span>
-                </div>
-                <div className={styles['pro-stat']}>
-                  <h4>Audience Reach</h4>
-                  <span>1,234</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ProFeature>
+
       </div>
     </main>
       )}

@@ -152,109 +152,36 @@ export function highlightTextInElement(
     }
   });
 
-  // Apply new highlights using text content matching
+  // Apply new highlights using a safer approach
   highlights.forEach((highlight) => {
-    
-    // Get all text nodes in the element
-    const walker = document.createTreeWalker(
-      element,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    const textNodes: Text[] = [];
-    let textNode: Text | null;
-    while (textNode = walker.nextNode() as Text) {
-      textNodes.push(textNode);
-    }
-
-    // Try to find the highlight text in the content
     const highlightText = highlight.content.trim();
     if (!highlightText) {
       return;
     }
 
-    // Search for the highlight text across all text nodes
-    let found = false;
-    for (let i = 0; i < textNodes.length; i++) {
-      const node = textNodes[i];
-      const nodeText = node.textContent || '';
-      
-      // Look for the highlight text in this node
-      const startIndex = nodeText.indexOf(highlightText);
-      if (startIndex !== -1) {
-        
-        // Split the text node
-        const beforeText = nodeText.substring(0, startIndex);
-        const afterText = nodeText.substring(startIndex + highlightText.length);
-        
-        // Create new nodes
-        const beforeNode = document.createTextNode(beforeText);
-        const highlightSpan = document.createElement('span');
-        highlightSpan.className = highlightClass;
-        highlightSpan.textContent = highlightText;
-
-        const afterNode = document.createTextNode(afterText);
-        
-        // Replace the original text node
-        const parent = node.parentNode;
-        if (parent) {
-          if (beforeText) parent.insertBefore(beforeNode, node);
-          parent.insertBefore(highlightSpan, node);
-          if (afterText) parent.insertBefore(afterNode, node);
-          parent.removeChild(node);
-        }
-        
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      // Fallback: try to find partial matches
-      const words = highlightText.split(/\s+/).filter(word => word.length > 3);
-      if (words.length > 0) {
-        
-        for (const word of words) {
-          for (let i = 0; i < textNodes.length; i++) {
-            const node = textNodes[i];
-            const nodeText = node.textContent || '';
-            const startIndex = nodeText.indexOf(word);
-            
-                         if (startIndex !== -1) {
-              
-              // Split the text node
-              const beforeText = nodeText.substring(0, startIndex);
-              const afterText = nodeText.substring(startIndex + word.length);
-              
-                             // Create new nodes
-               const beforeNode = document.createTextNode(beforeText);
-               const highlightSpan = document.createElement('span');
-               highlightSpan.className = highlightClass;
-               highlightSpan.textContent = word;
-
-               const afterNode = document.createTextNode(afterText);
-              
-              // Replace the original text node
-              const parent = node.parentNode;
-              if (parent) {
-                if (beforeText) parent.insertBefore(beforeNode, node);
-                parent.insertBefore(highlightSpan, node);
-                if (afterText) parent.insertBefore(afterNode, node);
-                parent.removeChild(node);
-              }
-              
-                             found = true;
-               break;
-            }
-          }
-          if (found) break;
-        }
-      }
-    }
-
-
+    // Use a simple text replacement approach that's more reliable
+    applySimpleHighlight(element, highlightText, highlightClass);
   });
+}
 
-
+// Simple and safe highlighting function
+function applySimpleHighlight(
+  element: HTMLElement,
+  highlightText: string,
+  highlightClass: string
+) {
+  // Use a more robust approach: work with the element's HTML content
+  const originalHTML = element.innerHTML;
+  
+  // Escape the highlight text for regex
+  const escapedText = highlightText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedText})`, 'gi');
+  
+  // Replace the text with highlighted version
+  const highlightedHTML = originalHTML.replace(regex, `<span class="${highlightClass}">$1</span>`);
+  
+  // Only update if there were changes
+  if (highlightedHTML !== originalHTML) {
+    element.innerHTML = highlightedHTML;
+  }
 }

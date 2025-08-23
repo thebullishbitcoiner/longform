@@ -4,7 +4,7 @@ import Longform from '@/components/Longform';
 import { useNostr } from '@/contexts/NostrContext';
 
 export default function Home() {
-  const { isAuthenticated, isWhitelisted } = useNostr();
+  const { isAuthenticated } = useNostr();
 
   const handleLogin = () => {
     // Launch nostr-login welcome screen
@@ -26,11 +26,10 @@ export default function Home() {
             >
               Login with Nostr
             </button>
-            {isAuthenticated === false && !isWhitelisted && (
-              <div className="whitelist-notice">
-                <p>⚠️ This app is currently in alpha testing. Access is restricted to approved testers.</p>
-              </div>
-            )}
+            <div className="beta-notice">
+              <p>This app is currently in beta testing.</p>
+              <p>If you have any issues, submit it on <a href="https://github.com/thebullishbitcoiner/longform/issues" target="_blank" rel="noopener noreferrer">GitHub</a> or @ me on <a href="https://njump.me/npub15ypxpg429uyjmp0zczuza902chuvvr4pn35wfzv8rx6cej4z8clq6jmpcx" target="_blank" rel="noopener noreferrer">Nostr</a>.</p>
+            </div>
           </div>
         </div>
       </main>
