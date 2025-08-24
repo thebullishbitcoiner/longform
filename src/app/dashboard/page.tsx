@@ -271,7 +271,7 @@ const DashboardPage: React.FC = () => {
           }).filter(Boolean) as string[];
 
           let completedSubscriptions = 0;
-          const totalSubscriptions = articleCoordinates.length > 0 ? 7 : 6; // Extra subscriptions if we have article coordinates (reactions + comments)
+          const totalSubscriptions = articleCoordinates.length > 0 ? 15 : 10; // Extra subscriptions if we have article coordinates (reactions + comments + zaps + reposts)
           const subscriptions: NDKSubscription[] = [];
 
           const checkComplete = () => {
@@ -387,8 +387,8 @@ const DashboardPage: React.FC = () => {
 
 
 
-          // Fetch zap requests (kind 9734 - contains amount) and receipts (kind 9735)
-          const zapRequestsSubscription = ndk.subscribe(
+          // Fetch zap requests (kind 9734 - contains amount) by event ID
+          const zapRequestsByESubscription = ndk.subscribe(
             { 
               kinds: [9734], 
               '#e': articleIds,
@@ -396,9 +396,24 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
-          subscriptions.push(zapRequestsSubscription);
+          subscriptions.push(zapRequestsByESubscription);
 
-          const zapReceiptsSubscription = ndk.subscribe(
+          // Fetch zap requests by article coordinate (#a tags)
+          const zapRequestsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
+            { 
+              kinds: [9734], 
+              '#a': articleCoordinates,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          ) : null;
+          
+          if (zapRequestsByASubscription) {
+            subscriptions.push(zapRequestsByASubscription);
+          }
+
+          // Fetch zap receipts (kind 9735) by event ID
+          const zapReceiptsByESubscription = ndk.subscribe(
             { 
               kinds: [9735], 
               '#e': articleIds,
@@ -406,13 +421,52 @@ const DashboardPage: React.FC = () => {
             },
             { closeOnEose: true }
           );
-          subscriptions.push(zapReceiptsSubscription);
+          subscriptions.push(zapReceiptsByESubscription);
+
+          // Fetch zap receipts by article coordinate (#a tags)
+          const zapReceiptsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
+            { 
+              kinds: [9735], 
+              '#a': articleCoordinates,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          ) : null;
+          
+          if (zapReceiptsByASubscription) {
+            subscriptions.push(zapReceiptsByASubscription);
+          }
 
           // Track zap amounts from requests
           const zapAmounts = new Map<string, number>();
+          const zapRequestIds = new Set<string>();
 
-          zapRequestsSubscription.on('event', (event: NDKEvent) => {
-            const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+          const processZapRequest = (event: NDKEvent) => {
+            // Skip if we've already processed this zap request
+            if (zapRequestIds.has(event.id)) {
+              return;
+            }
+            zapRequestIds.add(event.id);
+            
+            // Try to find article by event ID first
+            let articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+            let targetArticle: BlogPost | undefined;
+            
+            if (articleId && articleStats.has(articleId)) {
+              targetArticle = articles.find(article => article.id === articleId);
+            } else {
+              // Try to find article by coordinate
+              const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
+              if (aTag) {
+                targetArticle = articles.find(article => 
+                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                );
+                if (targetArticle) {
+                  articleId = targetArticle.id;
+                }
+              }
+            }
+            
             if (articleId) {
               // Extract zap amount from the amount tag (NIP-57)
               try {
@@ -426,11 +480,37 @@ const DashboardPage: React.FC = () => {
                 console.error('Error parsing zap amount:', error);
               }
             }
-          });
+          };
 
-          zapReceiptsSubscription.on('event', (event: NDKEvent) => {
-            const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+          const zapReceiptIds = new Set<string>();
+
+          const processZapReceipt = (event: NDKEvent) => {
+            // Skip if we've already processed this zap receipt
+            if (zapReceiptIds.has(event.id)) {
+              return;
+            }
+            zapReceiptIds.add(event.id);
+            
+            // Try to find article by event ID first
+            let articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+            let targetArticle: BlogPost | undefined;
+            
             if (articleId && articleStats.has(articleId)) {
+              targetArticle = articles.find(article => article.id === articleId);
+            } else {
+              // Try to find article by coordinate
+              const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
+              if (aTag) {
+                targetArticle = articles.find(article => 
+                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                );
+                if (targetArticle) {
+                  articleId = targetArticle.id;
+                }
+              }
+            }
+            
+            if (articleId && targetArticle && articleStats.has(articleId)) {
               const stats = articleStats.get(articleId)!;
               stats.zaps++;
               
@@ -440,25 +520,59 @@ const DashboardPage: React.FC = () => {
               
               stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
             }
-          });
+          };
 
-          zapRequestsSubscription.on('eose', () => {
-            console.log('Dashboard: Zap requests subscription EOSE');
+          // Set up event handlers for zap requests
+          zapRequestsByESubscription.on('event', processZapRequest);
+          if (zapRequestsByASubscription) {
+            zapRequestsByASubscription.on('event', processZapRequest);
+          }
+
+          zapRequestsByESubscription.on('eose', () => {
+            console.log('Dashboard: Zap requests by E subscription EOSE');
             checkComplete();
           });
 
-          zapRequestsSubscription.on('close', () => {
-            console.log('Dashboard: Zap requests subscription closed');
+          zapRequestsByESubscription.on('close', () => {
+            console.log('Dashboard: Zap requests by E subscription closed');
           });
 
-          zapReceiptsSubscription.on('eose', () => {
-            console.log('Dashboard: Zap receipts subscription EOSE');
+          if (zapRequestsByASubscription) {
+            zapRequestsByASubscription.on('eose', () => {
+              console.log('Dashboard: Zap requests by A subscription EOSE');
+              checkComplete();
+            });
+
+            zapRequestsByASubscription.on('close', () => {
+              console.log('Dashboard: Zap requests by A subscription closed');
+            });
+          }
+
+          // Set up event handlers for zap receipts
+          zapReceiptsByESubscription.on('event', processZapReceipt);
+          if (zapReceiptsByASubscription) {
+            zapReceiptsByASubscription.on('event', processZapReceipt);
+          }
+
+          zapReceiptsByESubscription.on('eose', () => {
+            console.log('Dashboard: Zap receipts by E subscription EOSE');
             checkComplete();
           });
 
-          zapReceiptsSubscription.on('close', () => {
-            console.log('Dashboard: Zap receipts subscription closed');
+          zapReceiptsByESubscription.on('close', () => {
+            console.log('Dashboard: Zap receipts by E subscription closed');
           });
+
+          if (zapReceiptsByASubscription) {
+            zapReceiptsByASubscription.on('eose', () => {
+              console.log('Dashboard: Zap receipts by A subscription EOSE');
+              checkComplete();
+            });
+
+            zapReceiptsByASubscription.on('close', () => {
+              console.log('Dashboard: Zap receipts by A subscription closed');
+            });
+          }
 
           // Fetch comments (kind 1 and kind 1111 that reference articles by event ID)
           const commentsByESubscription = ndk.subscribe(
@@ -546,34 +660,144 @@ const DashboardPage: React.FC = () => {
             });
           }
 
-          // Fetch reposts (kind 6)
-          const repostsSubscription = ndk.subscribe(
+          // Fetch reposts (kind 6 - standard reposts, kind 16 - generic reposts) by event ID
+          const repostsByESubscription = ndk.subscribe(
             { 
-              kinds: [6], 
+              kinds: [6, 16], 
               '#e': articleIds,
               limit: 1000 
             },
             { closeOnEose: true }
           );
-          subscriptions.push(repostsSubscription);
+          subscriptions.push(repostsByESubscription);
 
-          repostsSubscription.on('event', (event: NDKEvent) => {
-            const articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+          // Fetch reposts by article coordinate (#a tags)
+          const repostsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
+            { 
+              kinds: [6, 16], 
+              '#a': articleCoordinates,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          ) : null;
+          
+          if (repostsByASubscription) {
+            subscriptions.push(repostsByASubscription);
+          }
+
+          // Fetch quote reposts (kind 1 with q tags) by event ID
+          const quoteRepostsByESubscription = ndk.subscribe(
+            { 
+              kinds: [1], 
+              '#q': articleIds,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          );
+          subscriptions.push(quoteRepostsByESubscription);
+
+          // Fetch quote reposts by article coordinate (#a tags)
+          const quoteRepostsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
+            { 
+              kinds: [1], 
+              '#q': articleCoordinates,
+              limit: 1000 
+            },
+            { closeOnEose: true }
+          ) : null;
+          
+          if (quoteRepostsByASubscription) {
+            subscriptions.push(quoteRepostsByASubscription);
+          }
+
+          // Track repost IDs to avoid duplicates
+          const repostIds = new Set<string>();
+
+          const processRepost = (event: NDKEvent) => {
+            // Skip if we've already counted this repost
+            if (repostIds.has(event.id)) {
+              return;
+            }
+            repostIds.add(event.id);
+            
+            // Try to find article by event ID first (e tag for standard reposts, q tag for quote reposts)
+            let articleId = (event.tags.find((tag: string[]) => tag[0] === 'e')?.[1]) as string | undefined;
+            if (!articleId) {
+              articleId = (event.tags.find((tag: string[]) => tag[0] === 'q')?.[1]) as string | undefined;
+            }
+            
+            let targetArticle: BlogPost | undefined;
+            
             if (articleId && articleStats.has(articleId)) {
+              targetArticle = articles.find(article => article.id === articleId);
+            } else {
+              // Try to find article by coordinate
+              const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
+              if (aTag) {
+                targetArticle = articles.find(article => 
+                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                );
+                if (targetArticle) {
+                  articleId = targetArticle.id;
+                }
+              }
+            }
+            
+            if (articleId && targetArticle && articleStats.has(articleId)) {
               const stats = articleStats.get(articleId)!;
               stats.reposts++;
               stats.totalEngagement = stats.reactions + stats.comments + stats.zaps + stats.reposts;
             }
-          });
+          };
 
-          repostsSubscription.on('eose', () => {
-            console.log('Dashboard: Reposts subscription EOSE');
+          repostsByESubscription.on('event', processRepost);
+          if (repostsByASubscription) {
+            repostsByASubscription.on('event', processRepost);
+          }
+          quoteRepostsByESubscription.on('event', processRepost);
+          if (quoteRepostsByASubscription) {
+            quoteRepostsByASubscription.on('event', processRepost);
+          }
+
+          repostsByESubscription.on('eose', () => {
+            console.log('Dashboard: Reposts by E subscription EOSE');
             checkComplete();
           });
 
-          repostsSubscription.on('close', () => {
-            console.log('Dashboard: Reposts subscription closed');
+          repostsByESubscription.on('close', () => {
+            console.log('Dashboard: Reposts by E subscription closed');
           });
+
+          if (repostsByASubscription) {
+            repostsByASubscription.on('eose', () => {
+              console.log('Dashboard: Reposts by A subscription EOSE');
+              checkComplete();
+            });
+
+            repostsByASubscription.on('close', () => {
+              console.log('Dashboard: Reposts by A subscription closed');
+            });
+          }
+
+          quoteRepostsByESubscription.on('eose', () => {
+            console.log('Dashboard: Quote reposts by E subscription EOSE');
+            checkComplete();
+          });
+
+          quoteRepostsByESubscription.on('close', () => {
+            console.log('Dashboard: Quote reposts by E subscription closed');
+          });
+
+          if (quoteRepostsByASubscription) {
+            quoteRepostsByASubscription.on('eose', () => {
+              console.log('Dashboard: Quote reposts by A subscription EOSE');
+              checkComplete();
+            });
+
+            quoteRepostsByASubscription.on('close', () => {
+              console.log('Dashboard: Quote reposts by A subscription closed');
+            });
+          }
         });
     } catch (error: unknown) {
       console.error('Dashboard: Error fetching interactions:', error);

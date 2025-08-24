@@ -63,7 +63,7 @@ export default function ProfilePage() {
   const params = useParams();
   const { ndk: contextNdk, isAuthenticated } = useNostr();
   const { getAuthorProfile, fetchProfileOnce } = useBlog();
-  const { checkProStatus } = useSupabase();
+  const { checkProStatus, checkLegendStatus } = useSupabase();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [highlights, setHighlights] = useState<ProfileHighlight[]>([]);
@@ -84,6 +84,7 @@ export default function ProfilePage() {
     y: 0
   });
   const [isProfilePro, setIsProfilePro] = useState(false);
+  const [isProfileLegend, setIsProfileLegend] = useState(false);
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -415,6 +416,15 @@ export default function ProfilePage() {
         } catch (error) {
           console.error('Error checking PRO status:', error);
           setIsProfilePro(false);
+        }
+
+        // Check Legend status for this profile
+        try {
+          const isLegend = await checkLegendStatus(npub);
+          setIsProfileLegend(isLegend);
+        } catch (error) {
+          console.error('Error checking Legend status:', error);
+          setIsProfileLegend(false);
         }
 
         // Fetch user's blog posts (kind 30023)
@@ -761,7 +771,7 @@ export default function ProfilePage() {
                   alt={displayName}
                   width={120}
                   height={120}
-                  className={styles.avatar}
+                  className={`${styles.avatar} ${isProfileLegend ? styles.legendAvatar : ''}`}
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.nextElementSibling?.classList.remove(styles.hidden);
@@ -769,19 +779,24 @@ export default function ProfilePage() {
                 />
               ) : null}
               {(!profile.picture || profile.picture === '') && (
-                <div className={`${styles.avatarPlaceholder} ${profile.picture ? styles.hidden : ''}`}>
+                <div className={`${styles.avatarPlaceholder} ${profile.picture ? styles.hidden : ''} ${isProfileLegend ? styles.legendAvatar : ''}`}>
                   <UserIcon className={styles.placeholderIcon} />
                 </div>
               )}
             </div>
             
             <div className={styles.profileInfo}>
-                             <h1 className={styles.profileName}>
-                 {displayName}
-                 {isProfilePro && (
-                   <span className={styles.proBadge}>PRO</span>
-                 )}
-               </h1>
+              <div className={styles.profileNameContainer}>
+                <h1 className={styles.profileName}>
+                  {displayName}
+                </h1>
+                {isProfileLegend && (
+                  <span className={styles.legendBadge}>Legend</span>
+                )}
+                {!isProfileLegend && isProfilePro && (
+                  <span className={styles.proBadge}>PRO</span>
+                )}
+              </div>
               <div className={styles.npubSection}>
                 <span className={styles.npubValue}>{profile.npub}</span>
                 <button 

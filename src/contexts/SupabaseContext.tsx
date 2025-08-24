@@ -8,6 +8,7 @@ interface SupabaseContextType {
   proStatus: ProStatus | null;
   isLoading: boolean;
   checkProStatus: (npub: string) => Promise<ProStatus>;
+  checkLegendStatus: (npub: string) => Promise<boolean>;
   refreshProStatus: () => Promise<void>;
 }
 
@@ -15,6 +16,7 @@ const SupabaseContext = createContext<SupabaseContextType>({
   proStatus: null,
   isLoading: false,
   checkProStatus: async () => ({ isPro: false }),
+  checkLegendStatus: async () => false,
   refreshProStatus: async () => {}
 });
 
@@ -85,6 +87,41 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       return { isPro: false };
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const checkLegendStatus = async (npub: string): Promise<boolean> => {
+    try {
+      console.log('Checking Legend status for npub:', npub);
+      
+      // Query the legends table for the given npub
+      const { data, error } = await supabase
+        .from('legends')
+        .select('*')
+        .eq('npub', npub)
+        .single();
+
+      console.log('Legends query result:', { data, error });
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows returned - user is not a legend
+          console.log('No legend found for npub:', npub);
+          return false;
+        }
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      if (!data) {
+        return false;
+      }
+
+      // User is a legend if they exist in the legends table
+      return true;
+    } catch (error) {
+      console.error('Error checking Legend status:', error);
+      return false;
     }
   };
 
@@ -164,6 +201,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       proStatus,
       isLoading,
       checkProStatus,
+      checkLegendStatus,
       refreshProStatus
     }}>
       {children}

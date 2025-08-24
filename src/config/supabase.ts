@@ -34,3 +34,8 @@ export interface ProStatus {
   expiresAt?: string;
   isInBuffer?: boolean;
 }
+
+export interface Legend {
+  npub: string;
+  created_at: string;
+}

@@ -2,7 +2,7 @@
 
 import NDK from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
-import { isWhitelisted as checkWhitelist, ALPHA_WHITELIST } from '@/config/whitelist';
+
 import { NostrLoginSigner } from '@/utils/nostrLoginSigner';
 
 // Create a singleton NDK instance without signer initially
@@ -98,7 +98,6 @@ interface NostrContextType {
   isLoading: boolean;
   isConnected: boolean;
   isAuthenticated: boolean;
-  isWhitelisted: boolean;
   currentUser: UserProfile | null;
   checkAuthentication: () => Promise<boolean>;
   logout: () => void;
@@ -109,7 +108,6 @@ const NostrContext = createContext<NostrContextType>({
   isLoading: true,
   isConnected: false,
   isAuthenticated: false,
-  isWhitelisted: false,
   currentUser: null,
   checkAuthentication: async () => false,
   logout: () => {}
@@ -125,7 +123,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isWhitelisted, setIsWhitelisted] = useState(false);
+
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   
   // Add refs to prevent multiple simultaneous authentication checks
@@ -136,7 +134,6 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const logout = () => {
     console.log('🚪 Logging out user');
     setIsAuthenticated(false);
-    setIsWhitelisted(false);
     setCurrentUser(null);
     ndkInstance.signer = undefined;
   };
@@ -175,7 +172,6 @@ export function NostrProvider({ children }: NostrProviderProps) {
       if (!nostr) {
         console.log('❌ window.nostr not available - nostr-login may not be initialized');
         setIsAuthenticated(false);
-        setIsWhitelisted(false);
         setCurrentUser(null);
         return false;
       }
@@ -186,7 +182,6 @@ export function NostrProvider({ children }: NostrProviderProps) {
       if (!pubkey) {
         console.log('❌ No user found - Authentication failed');
         setIsAuthenticated(false);
-        setIsWhitelisted(false);
         setCurrentUser(null);
         return false;
       }
@@ -210,84 +205,64 @@ export function NostrProvider({ children }: NostrProviderProps) {
       
       console.log('🔐 Authentication check - User public key:', npub);
       
-      // Check if the user's public key is whitelisted
-      const whitelisted = checkWhitelist(npub);
-      console.log('📋 Whitelist check result:', whitelisted);
-      
-      if (!whitelisted) {
-        console.warn('🚫 Access denied - User not in whitelist:', {
-          npub: npub,
-          whitelistEnabled: true,
-          whitelistKeys: ALPHA_WHITELIST.length
+      // Set up NDK signer using nostr-login
+      ndkInstance.signer = new NostrLoginSigner(ndkInstance);
+        
+      // Update NDK instance with preferred relays for private events
+      try {
+        const preferredRelays = await ndkInstance.fetchEvents({
+          kinds: [10013 as number],
+          authors: [pubkey],
+          limit: 1
         });
-        setIsAuthenticated(false);
-        setIsWhitelisted(false);
-        setCurrentUser(null);
-        return false;
-      } else {
-        console.log('✅ Access granted - User is whitelisted');
         
-        // Set up NDK signer using nostr-login
-        ndkInstance.signer = new NostrLoginSigner(ndkInstance);
-        
-        // Update NDK instance with preferred relays for private events
-        try {
-          const preferredRelays = await ndkInstance.fetchEvents({
-            kinds: [10013 as number],
-            authors: [pubkey],
-            limit: 1
-          });
-          
-          if (preferredRelays.size > 0) {
-            console.log('Found preferred relays, updating NDK configuration');
-            // Note: In a real implementation, you might want to recreate the NDK instance
-            // with preferred relays, but for now we'll keep the current approach
-          }
-        } catch (error) {
-          console.warn('Failed to fetch preferred relays for NDK configuration:', error);
+        if (preferredRelays.size > 0) {
+          console.log('Found preferred relays, updating NDK configuration');
+          // Note: In a real implementation, you might want to recreate the NDK instance
+          // with preferred relays, but for now we'll keep the current approach
         }
-        
-        // Fetch and cache the user's profile
-        try {
-          const ndkUser = ndkInstance.getUser({ pubkey: pubkey });
-          const profile = await ndkUser.fetchProfile();
-          
-          const userProfile: UserProfile = {
-            pubkey: pubkey,
-            npub: npub,
-            nip05: profile?.nip05,
-            name: profile?.name,
-            displayName: profile?.displayName,
-            picture: profile?.image
-          };
-          
-          console.log('👤 Cached user profile:', userProfile);
-          setCurrentUser(userProfile);
-        } catch (profileError) {
-          console.warn('⚠️ Failed to fetch user profile, using basic info:', profileError);
-          // Still cache basic user info even if profile fetch fails
-          const userProfile: UserProfile = {
-            pubkey: pubkey,
-            npub: npub
-          };
-          setCurrentUser(userProfile);
-        }
-        
-        setIsWhitelisted(true);
-        setIsAuthenticated(true);
-        
-        // Trigger highlight cache refresh in background
-        setTimeout(() => {
-          // This will be handled by the useHighlights hook when components mount
-          console.log('🔍 User authenticated, highlights will be fetched by components');
-        }, 100);
-        
-        return true;
+      } catch (error) {
+        console.warn('Failed to fetch preferred relays for NDK configuration:', error);
       }
+      
+      // Fetch and cache the user's profile
+      try {
+        const ndkUser = ndkInstance.getUser({ pubkey: pubkey });
+        const profile = await ndkUser.fetchProfile();
+        
+        const userProfile: UserProfile = {
+          pubkey: pubkey,
+          npub: npub,
+          nip05: profile?.nip05,
+          name: profile?.name,
+          displayName: profile?.displayName,
+          picture: profile?.image
+        };
+        
+        console.log('👤 Cached user profile:', userProfile);
+        setCurrentUser(userProfile);
+      } catch (profileError) {
+        console.warn('⚠️ Failed to fetch user profile, using basic info:', profileError);
+        // Still cache basic user info even if profile fetch fails
+        const userProfile: UserProfile = {
+          pubkey: pubkey,
+          npub: npub
+        };
+        setCurrentUser(userProfile);
+      }
+      
+      setIsAuthenticated(true);
+      
+      // Trigger highlight cache refresh in background
+      setTimeout(() => {
+        // This will be handled by the useHighlights hook when components mount
+        console.log('🔍 User authenticated, highlights will be fetched by components');
+      }, 100);
+      
+      return true;
     } catch (error) {
       console.error('NDK Provider: Error checking authentication:', error);
       setIsAuthenticated(false);
-      setIsWhitelisted(false);
       setCurrentUser(null);
       return false;
     } finally {
@@ -330,7 +305,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   }, []);
 
   return (
-    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, isWhitelisted, currentUser, checkAuthentication, logout }}>
+    <NostrContext.Provider value={{ ndk: ndkInstance, isLoading, isConnected, isAuthenticated, currentUser, checkAuthentication, logout }}>
       {children}
     </NostrContext.Provider>
   );

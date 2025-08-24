@@ -7,7 +7,7 @@ import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
@@ -33,6 +33,7 @@ interface ReactionStats {
   likes: number;
   comments: number;
   zaps: number;
+  reposts: number;
   isLoading: boolean;
 }
 
@@ -52,6 +53,16 @@ interface ReactionData {
   created_at: number;
   authorName?: string;
   event: NDKEvent; // Store the full event for emoji processing
+}
+
+interface RepostData {
+  id: string;
+  pubkey: string;
+  created_at: number;
+  authorName?: string;
+  authorPicture?: string;
+  kind: number; // 6 for standard reposts, 16 for generic reposts, 1 for quote reposts
+  event: NDKEvent; // Store the full event
 }
 
 interface CommentData {
@@ -95,7 +106,8 @@ export default function BlogPost() {
     likes: 0,
     comments: 0,
     zaps: 0,
-    isLoading: true
+    reposts: 0,
+    isLoading: false
   });
   const [showZapsModal, setShowZapsModal] = useState(false);
   const [zapData, setZapData] = useState<ZapData[]>([]);
@@ -103,6 +115,14 @@ export default function BlogPost() {
   const [showReactionsModal, setShowReactionsModal] = useState(false);
   const [reactionData, setReactionData] = useState<ReactionData[]>([]);
   const [isLoadingReactions, setIsLoadingReactions] = useState(false);
+  const [showRepostsModal, setShowRepostsModal] = useState(false);
+  const [repostData, setRepostData] = useState<RepostData[]>([]);
+  const [isLoadingReposts, setIsLoadingReposts] = useState(false);
+  
+  // Cache refs for modal data (using refs to avoid dependency issues)
+  const zapDataCacheRef = useRef<Map<string, ZapData[]>>(new Map());
+  const reactionDataCacheRef = useRef<Map<string, ReactionData[]>>(new Map());
+  const repostDataCacheRef = useRef<Map<string, RepostData[]>>(new Map());
   
   // Comment section state
   const [comments, setComments] = useState<CommentData[]>([]);
@@ -140,6 +160,110 @@ export default function BlogPost() {
 
   const closeReactionMenu = () => {
     setOpenReactionMenuId(null);
+  };
+
+  const fetchRepostDetails = useCallback(async (postId: string) => {
+    const ndkToUse = contextNdk || standaloneNdk;
+    if (!ndkToUse) return;
+
+    // Check cache first
+    const cachedReposts = repostDataCacheRef.current.get(postId);
+    if (cachedReposts) {
+      setRepostData(cachedReposts);
+      setShowRepostsModal(true);
+      return;
+    }
+
+    setIsLoadingReposts(true);
+    setShowRepostsModal(true);
+
+    try {
+      // Build article coordinate (a tag)
+      const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+
+      // Fetch reposts (kind 6 - standard reposts, kind 16 - generic reposts) by both '#e' and '#a'
+      const repostsByE = await ndkToUse.fetchEvents({ kinds: [6, 16], '#e': [postId] });
+      const repostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [6, 16], '#a': [aCoordinate] }) : new Set();
+      
+      // Fetch quote reposts (kind 1 with q tags) by both '#e' and '#a'
+      const quoteRepostsByE = await ndkToUse.fetchEvents({ kinds: [1], '#q': [postId] });
+      const quoteRepostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1], '#q': [aCoordinate] }) : new Set();
+
+      // Merge and deduplicate all reposts
+      const repostsById = new Map<string, NDKEvent>();
+      for (const ev of repostsByE) repostsById.set(ev.id, ev);
+      for (const ev of repostsByA as Set<NDKEvent>) repostsById.set(ev.id, ev);
+      for (const ev of quoteRepostsByE) repostsById.set(ev.id, ev);
+      for (const ev of quoteRepostsByA as Set<NDKEvent>) repostsById.set(ev.id, ev);
+
+      const allReposts = Array.from(repostsById.values());
+
+      // Convert to RepostData format
+      const repostData: RepostData[] = allReposts.map(event => ({
+        id: event.id,
+        pubkey: event.pubkey,
+        created_at: event.created_at || 0,
+        kind: event.kind || 6,
+        event: event
+      }));
+
+      // Sort by creation date (newest first)
+      repostData.sort((a, b) => b.created_at - a.created_at);
+
+      setRepostData(repostData);
+
+      // Fetch profiles for repost authors
+      const uniquePubkeys = new Set(repostData.map(repost => repost.pubkey));
+      const profilePromises = Array.from(uniquePubkeys).map(async (pubkey) => {
+        try {
+          const cachedProfile = getAuthorProfile(pubkey);
+          if (cachedProfile) {
+            return { pubkey, profile: cachedProfile };
+          } else {
+            const user = ndkToUse.getUser({ pubkey });
+            const profile = await user.fetchProfile();
+            return { pubkey, profile };
+          }
+        } catch (error) {
+          console.error('Error fetching profile for pubkey:', pubkey, error);
+          return { pubkey, profile: null };
+        }
+      });
+
+      const profileResults = await Promise.all(profilePromises);
+      
+      // Update repost data with profile information
+      const updatedRepostData = repostData.map(repost => {
+        const profileResult = profileResults.find(r => r.pubkey === repost.pubkey);
+        if (profileResult && profileResult.profile) {
+                  const profile = profileResult.profile;
+        const authorPicture = 'image' in profile ? profile.image : 'picture' in profile ? profile.picture : undefined;
+        return {
+          ...repost,
+          authorName: profile.displayName || profile.name,
+          authorPicture
+        };
+        }
+        return repost;
+      });
+
+      setRepostData(updatedRepostData);
+      
+      // Cache the results
+      repostDataCacheRef.current.set(postId, updatedRepostData);
+
+    } catch (error) {
+      console.error('Error fetching repost details:', error);
+    } finally {
+      setIsLoadingReposts(false);
+    }
+  }, [contextNdk, standaloneNdk, getAuthorProfile, post?.pubkey, params.d]);
+
+  const handleRepostsClick = () => {
+    if (post?.id) {
+      fetchRepostDetails(post.id);
+    }
   };
 
   // Recursive component to render threaded comments
@@ -339,62 +463,248 @@ export default function BlogPost() {
 
 
 
-  const fetchReactionStats = useCallback(async (postId: string) => {
+  const fetchReactionStatsInBackground = useCallback(async (postId: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) return;
-
-    setReactionStats(prev => ({ ...prev, isLoading: true }));
 
     try {
       // Build article coordinate (a tag)
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
       const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
 
-      // Fetch reactions (kind 7) by both '#e' and '#a' (all versions)
-      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] });
-      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : new Set();
+      // Fetch each type of event in parallel and update stats incrementally
+      const fetchPromises = [
+        // Reactions
+        Promise.all([
+          ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] }),
+          aCoordinate ? ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : Promise.resolve(new Set())
+        ]).then(async ([reactionsByE, reactionsByA]) => {
+          const reactionsById = new Map<string, NDKEvent>();
+          for (const ev of reactionsByE) reactionsById.set(ev.id, ev);
+          for (const ev of reactionsByA as Set<NDKEvent>) reactionsById.set(ev.id, ev);
+          const allReactions = Array.from(reactionsById.values()).filter(event => {
+            const content = event.content.trim();
+            return content !== '';
+          });
+          
+          // Cache reaction details
+          const reactionDetails: ReactionData[] = allReactions.map(reaction => ({
+            id: reaction.id,
+            pubkey: reaction.pubkey,
+            content: reaction.content.trim(),
+            created_at: reaction.created_at,
+            event: reaction
+          }));
+          
+          // Fetch profiles for reaction authors in background
+          const uniqueReactionPubkeys = new Set(reactionDetails.map(reaction => reaction.pubkey));
+          const reactionProfilePromises = Array.from(uniqueReactionPubkeys).map(async (pubkey) => {
+            try {
+              const cachedProfile = getAuthorProfile(pubkey);
+              if (cachedProfile) {
+                return { pubkey, profile: cachedProfile };
+              } else {
+                const user = ndkToUse.getUser({ pubkey });
+                const profile = await user.fetchProfile();
+                return { pubkey, profile };
+              }
+            } catch (error) {
+              console.error('Error fetching reaction author profile:', error);
+              return { pubkey, profile: null };
+            }
+          });
+          
+          // Update reaction details with profile information
+          const reactionProfileResults = await Promise.all(reactionProfilePromises);
+          const updatedReactionDetails = reactionDetails.map(reaction => {
+            const profileResult = reactionProfileResults.find(r => r.pubkey === reaction.pubkey);
+            if (profileResult && profileResult.profile) {
+              return {
+                ...reaction,
+                authorName: profileResult.profile.displayName || profileResult.profile.name
+              };
+            }
+            return reaction;
+          });
+          
+          reactionDataCacheRef.current.set(postId, updatedReactionDetails.sort((a, b) => b.created_at - a.created_at));
+          
+          setReactionStats(prev => ({ ...prev, likes: allReactions.length }));
+        }),
 
-      // Fetch comments (kind 1111 - NIP-22) by both '#e' and '#a'
-      const nip22ByE = await ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId] });
-      const nip22ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate] }) : new Set();
+        // Comments
+        Promise.all([
+          ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId] }),
+          aCoordinate ? ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate] }) : Promise.resolve(new Set()),
+          ndkToUse.fetchEvents({ kinds: [1], '#e': [postId] }),
+          aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate] }) : Promise.resolve(new Set())
+        ]).then(([nip22ByE, nip22ByA, kind1ByE, kind1ByA]) => {
+          const commentIds = new Set<string>();
+          for (const ev of nip22ByE) commentIds.add(ev.id);
+          for (const ev of nip22ByA as Set<NDKEvent>) commentIds.add(ev.id);
+          for (const ev of kind1ByE) commentIds.add(ev.id);
+          for (const ev of kind1ByA as Set<NDKEvent>) commentIds.add(ev.id);
+          
+          setReactionStats(prev => ({ ...prev, comments: commentIds.size }));
+        }),
 
-      // Fetch kind 1 comments (legacy) by both '#e' and '#a'
-      const kind1ByE = await ndkToUse.fetchEvents({ kinds: [1], '#e': [postId] });
-      const kind1ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate] }) : new Set();
+        // Zaps
+        Promise.all([
+          ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] }),
+          aCoordinate ? ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : Promise.resolve(new Set())
+        ]).then(async ([zapsByE, zapsByA]) => {
+          const uniqueZapIds = new Set<string>();
+          const allZaps: NDKEvent[] = [];
+          for (const ev of zapsByE) {
+            uniqueZapIds.add(ev.id);
+            allZaps.push(ev);
+          }
+          for (const ev of zapsByA as Set<NDKEvent>) {
+            if (!uniqueZapIds.has(ev.id)) {
+              uniqueZapIds.add(ev.id);
+              allZaps.push(ev);
+            }
+          }
+          
+          // Cache zap details
+          const zapDetails: ZapData[] = allZaps.map(zap => {
+            const amountTag = zap.tags.find(tag => tag[0] === 'amount');
+            const descriptionTag = zap.tags.find(tag => tag[0] === 'description');
+            let amount = 0;
+            if (amountTag && amountTag[1]) {
+              amount = parseInt(amountTag[1]) / 1000;
+            }
+            return {
+              id: zap.id,
+              pubkey: zap.pubkey,
+              amount,
+              content: descriptionTag?.[1] || zap.content,
+              created_at: zap.created_at
+            };
+          });
+          
+          // Fetch profiles for zap authors in background
+          const uniqueZapPubkeys = new Set(zapDetails.map(zap => zap.pubkey));
+          const zapProfilePromises = Array.from(uniqueZapPubkeys).map(async (pubkey) => {
+            try {
+              const cachedProfile = getAuthorProfile(pubkey);
+              if (cachedProfile) {
+                return { pubkey, profile: cachedProfile };
+              } else {
+                const user = ndkToUse.getUser({ pubkey });
+                const profile = await user.fetchProfile();
+                return { pubkey, profile };
+              }
+            } catch (error) {
+              console.error('Error fetching zap author profile:', error);
+              return { pubkey, profile: null };
+            }
+          });
+          
+          // Update zap details with profile information
+          const zapProfileResults = await Promise.all(zapProfilePromises);
+          const updatedZapDetails = zapDetails.map(zap => {
+            const profileResult = zapProfileResults.find(r => r.pubkey === zap.pubkey);
+            if (profileResult && profileResult.profile) {
+              return {
+                ...zap,
+                authorName: profileResult.profile.displayName || profileResult.profile.name
+              };
+            }
+            return zap;
+          });
+          
+          zapDataCacheRef.current.set(postId, updatedZapDetails.sort((a, b) => b.amount - a.amount));
+          
+          setReactionStats(prev => ({ ...prev, zaps: uniqueZapIds.size }));
+        }),
 
-      // Deduplicate comment ids across sources
-      const commentIds = new Set<string>();
-      for (const ev of nip22ByE) commentIds.add(ev.id);
-      for (const ev of nip22ByA as Set<NDKEvent>) commentIds.add(ev.id);
-      for (const ev of kind1ByE) commentIds.add(ev.id);
-      for (const ev of kind1ByA as Set<NDKEvent>) commentIds.add(ev.id);
+        // Reposts
+        Promise.all([
+          ndkToUse.fetchEvents({ kinds: [6, 16], '#e': [postId] }),
+          aCoordinate ? ndkToUse.fetchEvents({ kinds: [6, 16], '#a': [aCoordinate] }) : Promise.resolve(new Set()),
+          ndkToUse.fetchEvents({ kinds: [1], '#q': [postId] }),
+          aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#q': [aCoordinate] }) : Promise.resolve(new Set())
+        ]).then(async ([repostsByE, repostsByA, quoteRepostsByE, quoteRepostsByA]) => {
+          const uniqueRepostIds = new Set<string>();
+          const allReposts: NDKEvent[] = [];
+          for (const ev of repostsByE) {
+            uniqueRepostIds.add(ev.id);
+            allReposts.push(ev);
+          }
+          for (const ev of repostsByA as Set<NDKEvent>) {
+            if (!uniqueRepostIds.has(ev.id)) {
+              uniqueRepostIds.add(ev.id);
+              allReposts.push(ev);
+            }
+          }
+          for (const ev of quoteRepostsByE) {
+            if (!uniqueRepostIds.has(ev.id)) {
+              uniqueRepostIds.add(ev.id);
+              allReposts.push(ev);
+            }
+          }
+          for (const ev of quoteRepostsByA as Set<NDKEvent>) {
+            if (!uniqueRepostIds.has(ev.id)) {
+              uniqueRepostIds.add(ev.id);
+              allReposts.push(ev);
+            }
+          }
+          
+          // Cache repost details
+          const repostDetails: RepostData[] = allReposts.map(event => ({
+            id: event.id,
+            pubkey: event.pubkey,
+            created_at: event.created_at || 0,
+            kind: event.kind || 6,
+            event: event
+          }));
+          
+          // Fetch profiles for repost authors in background
+          const uniqueRepostPubkeys = new Set(repostDetails.map(repost => repost.pubkey));
+          const repostProfilePromises = Array.from(uniqueRepostPubkeys).map(async (pubkey) => {
+            try {
+              const cachedProfile = getAuthorProfile(pubkey);
+              if (cachedProfile) {
+                return { pubkey, profile: cachedProfile };
+              } else {
+                const user = ndkToUse.getUser({ pubkey });
+                const profile = await user.fetchProfile();
+                return { pubkey, profile };
+              }
+            } catch (error) {
+              console.error('Error fetching repost author profile:', error);
+              return { pubkey, profile: null };
+            }
+          });
+          
+          // Update repost details with profile information
+          const repostProfileResults = await Promise.all(repostProfilePromises);
+          const updatedRepostDetails = repostDetails.map(repost => {
+            const profileResult = repostProfileResults.find(r => r.pubkey === repost.pubkey);
+            if (profileResult && profileResult.profile) {
+              const profile = profileResult.profile;
+              const authorPicture = 'image' in profile ? profile.image : 'picture' in profile ? profile.picture : undefined;
+              return {
+                ...repost,
+                authorName: profile.displayName || profile.name,
+                authorPicture
+              };
+            }
+            return repost;
+          });
+          
+          repostDataCacheRef.current.set(postId, updatedRepostDetails.sort((a, b) => b.created_at - a.created_at));
+          
+          setReactionStats(prev => ({ ...prev, reposts: uniqueRepostIds.size }));
+        })
+      ];
 
-      // Fetch zaps (kind 9735) by both '#e' and '#a'
-      const zapsByE = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
-      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : new Set();
-      const uniqueZapIds = new Set<string>();
-      for (const ev of zapsByE) uniqueZapIds.add(ev.id);
-      for (const ev of zapsByA as Set<NDKEvent>) uniqueZapIds.add(ev.id);
-
-      // Count all reactions across both sources
-      const reactionsById = new Map<string, NDKEvent>();
-      for (const ev of reactionsByE) reactionsById.set(ev.id, ev);
-      for (const ev of reactionsByA as Set<NDKEvent>) reactionsById.set(ev.id, ev);
-      const allReactions = Array.from(reactionsById.values()).filter(event => {
-        const content = event.content.trim();
-        return content !== ''; // Only filter out empty reactions
-      });
-
-      setReactionStats({
-        likes: allReactions.length,
-        comments: commentIds.size,
-        zaps: uniqueZapIds.size,
-        isLoading: false
-      });
+      // Execute all fetches in parallel
+      await Promise.allSettled(fetchPromises);
 
     } catch (error) {
-      console.error('Error fetching reaction stats:', error);
-      setReactionStats(prev => ({ ...prev, isLoading: false }));
+      console.error('Error fetching reaction stats in background:', error);
     }
   }, [contextNdk, standaloneNdk, post?.pubkey, params.d]);
 
@@ -673,13 +983,23 @@ export default function BlogPost() {
   // Fetch reaction stats when post is loaded
   useEffect(() => {
     if (post?.id) {
-      fetchReactionStats(post.id);
+      fetchReactionStatsInBackground(post.id);
     }
-  }, [post?.id, fetchReactionStats]);
+  }, [post?.id, fetchReactionStatsInBackground]);
+
+
 
   const fetchZapDetails = async (postId: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) return;
+
+    // Check cache first
+    const cachedZaps = zapDataCacheRef.current.get(postId);
+    if (cachedZaps) {
+      setZapData(cachedZaps);
+      setShowZapsModal(true);
+      return;
+    }
 
     setIsLoadingZaps(true);
     setShowZapsModal(true);
@@ -744,6 +1064,9 @@ export default function BlogPost() {
       // Sort by amount (highest first)
       zapDetails.sort((a, b) => b.amount - a.amount);
       setZapData(zapDetails);
+      
+      // Cache the results
+      zapDataCacheRef.current.set(postId, zapDetails);
 
     } catch (error) {
       console.error('Error fetching zap details:', error);
@@ -761,6 +1084,14 @@ export default function BlogPost() {
   const fetchReactionDetails = async (postId: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) return;
+
+    // Check cache first
+    const cachedReactions = reactionDataCacheRef.current.get(postId);
+    if (cachedReactions) {
+      setReactionData(cachedReactions);
+      setShowReactionsModal(true);
+      return;
+    }
 
     setIsLoadingReactions(true);
     setShowReactionsModal(true);
@@ -821,6 +1152,9 @@ export default function BlogPost() {
       // Sort by creation date (newest first)
       reactionDetails.sort((a, b) => b.created_at - a.created_at);
       setReactionData(reactionDetails);
+      
+      // Cache the results
+      reactionDataCacheRef.current.set(postId, reactionDetails);
 
     } catch (error) {
       console.error('Error fetching reaction details:', error);
@@ -1592,23 +1926,30 @@ export default function BlogPost() {
               <div className={styles.reactionItem} onClick={handleZapsClick} style={{ cursor: 'pointer' }}>
                 <BoltIcon className={styles.reactionIcon} />
                 <span className={styles.reactionCount}>
-                  {reactionStats.isLoading ? '...' : reactionStats.zaps}
+                  {reactionStats.zaps}
                 </span>
                 <span className={styles.reactionLabel}>Zaps</span>
               </div>
               <div className={styles.reactionItem} onClick={handleReactionsClick} style={{ cursor: 'pointer' }}>
                 <HeartIcon className={styles.reactionIcon} />
                 <span className={styles.reactionCount}>
-                  {reactionStats.isLoading ? '...' : reactionStats.likes}
+                  {reactionStats.likes}
                 </span>
                 <span className={styles.reactionLabel}>Reactions</span>
               </div>
               <div className={styles.reactionItem} onClick={handleCommentsClick} style={{ cursor: 'pointer' }}>
                 <ChatBubbleLeftIcon className={styles.reactionIcon} />
                 <span className={styles.reactionCount}>
-                  {reactionStats.isLoading ? '...' : reactionStats.comments}
+                  {reactionStats.comments}
                 </span>
                 <span className={styles.reactionLabel}>Comments</span>
+              </div>
+              <div className={styles.reactionItem} onClick={handleRepostsClick} style={{ cursor: 'pointer' }}>
+                <ArrowPathIcon className={styles.reactionIcon} />
+                <span className={styles.reactionCount}>
+                  {reactionStats.reposts}
+                </span>
+                <span className={styles.reactionLabel}>Reposts</span>
               </div>
             </div>
             
@@ -1794,7 +2135,7 @@ export default function BlogPost() {
         <div className={styles.commentSection}>
           <div className={styles.commentSectionHeader}>
             <h3 className={styles.commentSectionTitle}>
-              Comments {reactionStats.isLoading ? '(...)' : `(${reactionStats.comments})`}
+              Comments ({reactionStats.comments})
             </h3>
             {isLoadingProfiles && (
               <div className={styles.profileLoadingIndicator}>
@@ -1947,6 +2288,86 @@ export default function BlogPost() {
                      </div>
                    ))}
                  </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reposts Modal */}
+      {showRepostsModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowRepostsModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Reposts</h2>
+              <button 
+                className={styles.modalCloseButton}
+                onClick={() => setShowRepostsModal(false)}
+              >
+                <XMarkIcon className={styles.modalCloseIcon} />
+              </button>
+            </div>
+            
+            <div className={styles.modalBody}>
+              {isLoadingReposts ? (
+                <div className={styles.modalLoading}>Loading reposts...</div>
+              ) : repostData.length === 0 ? (
+                <div className={styles.modalEmpty}>No reposts yet</div>
+              ) : (
+                <div className={styles.reactionList}>
+                  {repostData.map((repost) => (
+                    <div key={repost.id} className={styles.reactionItem}>
+                      <div className={styles.reactionLeft}>
+                        <span className={styles.reactionIcon}>
+                          {repost.kind === 1 ? '💬' : '🔄'}
+                        </span>
+                        <span className={styles.reactionAuthorName}>
+                          {repost.authorName || repost.pubkey.slice(0, 8) + '...'}
+                        </span>
+                      </div>
+                      <div className={styles.reactionRight}>
+                        <div className={styles.reactionMenuWrapper}>
+                          <button className={styles.reactionMenuButton} onClick={(e) => {
+                            e.stopPropagation();
+                            handleReactionMenuToggle(repost.id);
+                          }}>
+                            <EllipsisVerticalIcon className={styles.reactionMenuIcon} />
+                          </button>
+                          <div 
+                            className={styles.reactionMenu} 
+                            style={{ display: openReactionMenuId === repost.id ? 'block' : 'none' }}
+                            data-reaction-menu={repost.id}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button className={styles.reactionMenuItem} onClick={() => {
+                              // Use the full NDKEvent if available, otherwise fall back to basic data
+                              const fullEvent = repost.event ? {
+                                id: repost.event.id,
+                                pubkey: repost.event.pubkey,
+                                created_at: repost.event.created_at,
+                                kind: repost.event.kind,
+                                tags: repost.event.tags || [],
+                                content: repost.event.content,
+                                sig: repost.event.sig
+                              } : {
+                                id: repost.id,
+                                pubkey: repost.pubkey,
+                                created_at: repost.created_at,
+                                kind: repost.kind,
+                                tags: [],
+                                content: '',
+                                sig: ''
+                              };
+                              setSelectedCommentJson(JSON.stringify(fullEvent, null, 2));
+                              setShowCommentJsonModal(true);
+                              closeReactionMenu(); // Close the menu after opening the JSON modal
+                            }}>View JSON</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

@@ -188,35 +188,7 @@ body {
   transform: translateY(0);
 }
 
-/* Whitelist Notice Styles */
-.whitelist-notice {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: rgba(147, 51, 234, 0.1);
-  border: 1px solid rgba(147, 51, 234, 0.3);
-  border-radius: 0.5rem;
-  text-align: center;
-  max-width: 32rem;
-  margin-left: auto;
-  margin-right: auto;
-}
 
-.whitelist-notice p {
-  margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  color: #c4b5fd;
-}
-
-.whitelist-notice p:first-child {
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-.whitelist-notice p:last-child {
-  font-size: 0.8rem;
-  opacity: 0.8;
-}
 
 /* Beta Notice Styles */
 .beta-notice {
