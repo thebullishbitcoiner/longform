@@ -371,6 +371,10 @@
   gap: 1.5rem;
 }
 
+.postCardWrapper {
+  position: relative;
+}
+
 .postCard {
   display: flex;
   text-decoration: none;
@@ -437,12 +441,25 @@
   flex-direction: column;
   justify-content: space-between;
   min-height: 187px; /* Match the image height to prevent gaps */
+  position: relative;
+}
+
+.postHeader {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
 }
 
 @media (max-width: 640px) {
   .postContent {
     min-height: auto;
     padding: 1rem;
+  }
+  
+  .postHeader {
+    top: 0.5rem;
+    right: 0.5rem;
   }
 }
 

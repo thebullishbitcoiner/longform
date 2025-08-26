@@ -77,9 +77,10 @@ export default function ProfilePage() {
     visible: false,
     data: null
   });
-  const [contextMenu, setContextMenu] = useState<{ visible: boolean; highlightId: string | null; x: number; y: number }>({
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean; highlightId: string | null; postId: string | null; x: number; y: number }>({
     visible: false,
     highlightId: null,
+    postId: null,
     x: 0,
     y: 0
   });
@@ -570,10 +571,41 @@ export default function ProfilePage() {
     }
 
     setJsonModal({ visible: true, data: fullEvent });
-    setContextMenu({ visible: false, highlightId: null, x: 0, y: 0 });
+    setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
   };
 
-  const openContextMenu = (event: React.MouseEvent, highlightId: string) => {
+  const openPostJson = (post: ProfilePost) => {
+    // Create a full Nostr event object from the post data
+    const fullEvent = {
+      id: post.id,
+      pubkey: profile.pubkey,
+      created_at: Math.floor(post.published_at / 1000), // Convert back to seconds
+      kind: 30023,
+      tags: [
+        ['d', post.dTag || post.id],
+        ['title', post.title],
+        ['summary', post.summary],
+        ['client', 'Longform._']
+      ],
+      content: '', // We don't have the full content in our post data
+      sig: '' // We don't have the signature in our post data
+    };
+
+    // Add image tag if available
+    if (post.image) {
+      fullEvent.tags.push(['image', post.image]);
+    }
+
+    // Add topic tags
+    post.tags.forEach(tag => {
+      fullEvent.tags.push(['t', tag]);
+    });
+
+    setJsonModal({ visible: true, data: fullEvent });
+    setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
+  };
+
+  const openHighlightContextMenu = (event: React.MouseEvent, highlightId: string) => {
     event.preventDefault();
     event.stopPropagation();
     
@@ -604,13 +636,51 @@ export default function ProfilePage() {
     setContextMenu({
       visible: true,
       highlightId,
+      postId: null,
+      x,
+      y
+    });
+  };
+
+  const openPostContextMenu = (event: React.MouseEvent, postId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Calculate position to keep menu on screen
+    const menuWidth = 120; // Approximate menu width
+    const menuHeight = 50; // Approximate menu height
+    const padding = 10;
+    
+    let x = event.clientX;
+    let y = event.clientY;
+    
+    // Adjust horizontal position to keep menu on screen
+    if (x + menuWidth > window.innerWidth - padding) {
+      x = window.innerWidth - menuWidth - padding;
+    }
+    if (x < padding) {
+      x = padding;
+    }
+    
+    // Adjust vertical position to keep menu on screen
+    if (y + menuHeight > window.innerHeight - padding) {
+      y = window.innerHeight - menuHeight - padding;
+    }
+    if (y < padding) {
+      y = padding;
+    }
+    
+    setContextMenu({
+      visible: true,
+      highlightId: null,
+      postId,
       x,
       y
     });
   };
 
   const closeContextMenu = () => {
-    setContextMenu({ visible: false, highlightId: null, x: 0, y: 0 });
+    setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
   };
 
   const renderPostsTab = () => (
@@ -622,44 +692,60 @@ export default function ProfilePage() {
       ) : (
         <div className={styles.postsGrid}>
           {posts.map((post) => (
-            <Link 
-              key={post.id} 
-              href={`/reader/${encodeURIComponent(profile.nip05 || profile.npub)}/${post.dTag || post.id}`}
-              className={styles.postCard}
-            >
-              {post.image && (
-                <div className={styles.postImage}>
-                  <Image 
-                    src={post.image} 
-                    alt={post.title}
-                    width={400}
-                    height={200}
-                    className={styles.postImageContent}
-                  />
-                </div>
-              )}
-              <div className={styles.postContent}>
-                <h3 className={styles.postTitle}>{post.title}</h3>
-                {post.summary && (
-                  <p className={styles.postSummary}>{post.summary}</p>
+            <div key={post.id} className={styles.postCardWrapper}>
+              <Link 
+                href={`/reader/${encodeURIComponent(profile.nip05 || profile.npub)}/${post.dTag || post.id}`}
+                className={styles.postCard}
+                onClick={(e) => {
+                  // Don't navigate if clicking on the context menu
+                  if ((e.target as HTMLElement).closest(`[data-context-menu]`)) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                {post.image && (
+                  <div className={styles.postImage}>
+                    <Image 
+                      src={post.image} 
+                      alt={post.title}
+                      width={400}
+                      height={200}
+                      className={styles.postImageContent}
+                    />
+                  </div>
                 )}
-                <div className={styles.postMeta}>
-                  <time className={styles.postDate}>
-                    {new Date(post.published_at).toLocaleDateString()}
-                  </time>
-                  {post.tags.length > 0 && (
-                    <div className={styles.postTags}>
-                      {post.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className={styles.tag}>#{tag}</span>
-                      ))}
-                      {post.tags.length > 3 && (
-                        <span className={styles.moreTags}>+{post.tags.length - 3}</span>
-                      )}
-                    </div>
+                <div className={styles.postContent}>
+                  <div className={styles.postHeader}>
+                    <button 
+                      className={styles.contextMenuButton}
+                      onClick={(e) => openPostContextMenu(e, post.id)}
+                      data-context-menu
+                    >
+                      <EllipsisVerticalIcon className={styles.contextMenuIcon} />
+                    </button>
+                  </div>
+                  <h3 className={styles.postTitle}>{post.title}</h3>
+                  {post.summary && (
+                    <p className={styles.postSummary}>{post.summary}</p>
                   )}
+                  <div className={styles.postMeta}>
+                    <time className={styles.postDate}>
+                      {new Date(post.published_at).toLocaleDateString()}
+                    </time>
+                    {post.tags.length > 0 && (
+                      <div className={styles.postTags}>
+                        {post.tags.slice(0, 3).map((tag) => (
+                          <span key={tag} className={styles.tag}>#{tag}</span>
+                        ))}
+                        {post.tags.length > 3 && (
+                          <span className={styles.moreTags}>+{post.tags.length - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       )}
@@ -673,88 +759,62 @@ export default function ProfilePage() {
           <p>No highlights found for this user.</p>
         </div>
       ) : (
-        <>
-          <div className={styles.highlightsGrid}>
-            {highlights.map((highlight) => {
-            // Generate the correct link using NIP-05 and d tag
-            const authorIdentifier = highlight.postAuthorNip05 || highlight.postAuthor;
-            const postIdentifier = highlight.postDTag || highlight.postId;
-            
-            // Debug logging for first highlight
-            if (highlight.id === highlights[0]?.id) {
-              console.log('Profile: Rendering highlight with data:', {
-                id: highlight.id,
-                postAuthor: highlight.postAuthor,
-                postAuthorNip05: highlight.postAuthorNip05,
-                postDTag: highlight.postDTag,
-                postId: highlight.postId,
-                authorIdentifier,
-                postIdentifier
-              });
-            }
-            
-            return (
-              <Link 
-                key={highlight.id} 
-                href={`/reader/${encodeURIComponent(authorIdentifier)}/${postIdentifier}`}
-                className={styles.highlightCard}
-                onClick={(e) => {
-                  // Don't navigate if clicking on the context menu
-                  if ((e.target as HTMLElement).closest(`[data-context-menu]`)) {
-                    e.preventDefault();
-                  }
-                }}
-              >
-                <div className={styles.highlightContent}>
-                  <div className={styles.highlightHeader}>
-                    <button 
-                      className={styles.contextMenuButton}
-                      onClick={(e) => openContextMenu(e, highlight.id)}
-                      data-context-menu
-                    >
-                      <EllipsisVerticalIcon className={styles.contextMenuIcon} />
-                    </button>
-                  </div>
-                  <blockquote className={styles.highlightText}>
-                    &ldquo;{highlight.content}&rdquo;
-                  </blockquote>
-                  {highlight.postAuthorDisplayName && highlight.postAuthorDisplayName !== highlight.postAuthor.slice(0, 8) + '...' && (
-                    <div className={styles.highlightAttribution}>
-                      <span className={styles.highlightAuthor}>
-                        — {highlight.postAuthorDisplayName}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Context Menu */}
-        {contextMenu.visible && (
-          <div 
-            className={styles.contextMenu}
-            style={{ 
-              left: contextMenu.x, 
-              top: contextMenu.y 
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              className={styles.contextMenuItem}
-              onClick={() => {
-                const highlight = highlights.find(h => h.id === contextMenu.highlightId);
-                if (highlight) {
-                  openHighlightJson(highlight);
+        <div className={styles.highlightsGrid}>
+          {highlights.map((highlight) => {
+          // Generate the correct link using NIP-05 and d tag
+          const authorIdentifier = highlight.postAuthorNip05 || highlight.postAuthor;
+          const postIdentifier = highlight.postDTag || highlight.postId;
+          
+          // Debug logging for first highlight
+          if (highlight.id === highlights[0]?.id) {
+            console.log('Profile: Rendering highlight with data:', {
+              id: highlight.id,
+              postAuthor: highlight.postAuthor,
+              postAuthorNip05: highlight.postAuthorNip05,
+              postDTag: highlight.postDTag,
+              postId: highlight.postId,
+              authorIdentifier,
+              postIdentifier
+            });
+          }
+          
+          return (
+            <Link 
+              key={highlight.id} 
+              href={`/reader/${encodeURIComponent(authorIdentifier)}/${postIdentifier}`}
+              className={styles.highlightCard}
+              onClick={(e) => {
+                // Don't navigate if clicking on the context menu
+                if ((e.target as HTMLElement).closest(`[data-context-menu]`)) {
+                  e.preventDefault();
                 }
               }}
             >
-              View JSON
-            </button>
-          </div>
-                 )}
-        </>
+              <div className={styles.highlightContent}>
+                <div className={styles.highlightHeader}>
+                  <button 
+                    className={styles.contextMenuButton}
+                    onClick={(e) => openHighlightContextMenu(e, highlight.id)}
+                    data-context-menu
+                  >
+                    <EllipsisVerticalIcon className={styles.contextMenuIcon} />
+                  </button>
+                </div>
+                <blockquote className={styles.highlightText}>
+                  &ldquo;{highlight.content}&rdquo;
+                </blockquote>
+                {highlight.postAuthorDisplayName && highlight.postAuthorDisplayName !== highlight.postAuthor.slice(0, 8) + '...' && (
+                  <div className={styles.highlightAttribution}>
+                    <span className={styles.highlightAuthor}>
+                      — {highlight.postAuthorDisplayName}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
       )}
     </>
   );
@@ -844,6 +904,37 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div 
+          className={styles.contextMenu}
+          style={{ 
+            left: contextMenu.x, 
+            top: contextMenu.y 
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button 
+            className={styles.contextMenuItem}
+            onClick={() => {
+              if (contextMenu.highlightId) {
+                const highlight = highlights.find(h => h.id === contextMenu.highlightId);
+                if (highlight) {
+                  openHighlightJson(highlight);
+                }
+              } else if (contextMenu.postId) {
+                const post = posts.find(p => p.id === contextMenu.postId);
+                if (post) {
+                  openPostJson(post);
+                }
+              }
+            }}
+          >
+            View JSON
+          </button>
+        </div>
+      )}
 
       {/* JSON Modal */}
       {jsonModal.visible && (

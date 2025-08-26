@@ -98,6 +98,18 @@
     max-width: none !important;
   }
 
+  .metadata {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+
+  .author, .date {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
   /* Full-width images on mobile */
   .postContent img {
     max-width: none !important;
