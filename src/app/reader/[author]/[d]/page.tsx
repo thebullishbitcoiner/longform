@@ -24,12 +24,7 @@ const createStandaloneNDK = () => {
     explicitRelayUrls: [
       'wss://relay.damus.io',
       'wss://relay.nostr.band',
-      'wss://relay.primal.net',
-      'wss://nos.lol',
-      'wss://relay.snort.social',
-      'wss://relay.current.fyi',
-      'wss://relay.nostr.wirednet.jp',
-      'wss://offchain.pub'
+      'wss://relay.primal.net'
     ]
   });
 };

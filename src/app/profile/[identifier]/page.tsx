@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useSupabase } from '@/contexts/SupabaseContext';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
-import NDK from '@nostr-dev-kit/ndk';
+import NDK, { NDKEvent } from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
 import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
@@ -55,6 +55,7 @@ interface ProfileHighlight {
   postDTag?: string;
   startOffset?: number;
   endOffset?: number;
+  event?: NDKEvent; // Store the original NDKEvent for JSON viewing
 }
 
 type TabType = 'posts' | 'highlights';
@@ -131,74 +132,105 @@ export default function ProfilePage() {
       if (cachedHighlights && cachedHighlights.length > 0) {
         console.log(`Profile: Using cached highlights (${cachedHighlights.length} items)`);
         
-        // Convert cached highlights to ProfileHighlight format (without author info initially)
-        const profileHighlights = cachedHighlights.map(highlight => ({
-          id: highlight.id,
-          content: highlight.content,
-          created_at: highlight.created_at,
-          postId: highlight.postId,
-          postAuthor: highlight.postAuthor,
-          postAuthorDisplayName: undefined,
-          postAuthorNip05: highlight.postAuthorNip05,
-          postDTag: highlight.postDTag,
-          startOffset: highlight.startOffset,
-          endOffset: highlight.endOffset,
-        })).sort((a, b) => b.created_at - a.created_at);
+                 // Convert cached highlights to ProfileHighlight format (without author info initially)
+         const profileHighlights = cachedHighlights.map(highlight => ({
+           id: highlight.id,
+           content: highlight.content,
+           created_at: highlight.created_at,
+           postId: highlight.postId,
+           postAuthor: highlight.postAuthor,
+           postAuthorDisplayName: undefined,
+           postAuthorNip05: highlight.postAuthorNip05,
+           postDTag: highlight.postDTag,
+           startOffset: highlight.startOffset,
+           endOffset: highlight.endOffset,
+           event: highlight.eventTags.length > 0 ? {
+             id: highlight.id,
+             pubkey: profile.pubkey,
+             created_at: Math.floor(highlight.created_at / 1000),
+             kind: 9802,
+             tags: highlight.eventTags,
+             content: highlight.content,
+             sig: ''
+           } as any : undefined
+         })).sort((a, b) => b.created_at - a.created_at);
         
         setHighlights(profileHighlights);
         setHighlightsLoaded(true);
         setHighlightsLoading(false);
         
-        // Background fetch author info for cached highlights using existing cache system
-        setTimeout(async () => {
-          try {
-            const authorPubkeys = new Set<string>();
-            cachedHighlights.forEach(highlight => {
-              if (highlight.postAuthor) {
-                authorPubkeys.add(highlight.postAuthor);
-              }
-            });
+                 // Background fetch author info for cached highlights progressively
+         setTimeout(async () => {
+           try {
+             const authorPubkeys = new Set<string>();
+             cachedHighlights.forEach(highlight => {
+               if (highlight.postAuthor) {
+                 authorPubkeys.add(highlight.postAuthor);
+               }
+             });
 
-            // Fetch profiles using the existing cached system
-            for (const authorPubkey of authorPubkeys) {
-              // Check if already cached
-              const cachedProfile = getAuthorProfile(authorPubkey);
-              if (!cachedProfile) {
-                // Fetch and cache the profile
-                await fetchProfileOnce(authorPubkey, async () => {
-                  const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
-                  const profile = await authorUser.fetchProfile();
-                  if (profile) {
-                    return {
-                      name: profile.name,
-                      displayName: profile.displayName,
-                      nip05: profile.nip05,
-                    };
-                  }
-                  return null;
-                });
-              }
-            }
-
-            // Update highlights with author info from cache
-            setHighlights(prevHighlights => 
-              prevHighlights.map(highlight => {
-                const authorProfile = getAuthorProfile(highlight.postAuthor);
-                const postAuthorDisplayName = authorProfile?.displayName || authorProfile?.name || highlight.postAuthor.slice(0, 8) + '...';
+                           // Fetch profiles progressively using the existing cached system, prioritizing recent highlights
+              const fetchCachedAuthorProfile = async (authorPubkey: string) => {
+                // Check if already cached
+                let cachedProfile = getAuthorProfile(authorPubkey);
+                if (!cachedProfile) {
+                  // Fetch and cache the profile
+                  await fetchProfileOnce(authorPubkey, async () => {
+                    const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
+                    const profile = await authorUser.fetchProfile();
+                    if (profile) {
+                      return {
+                        name: profile.name,
+                        displayName: profile.displayName,
+                        nip05: profile.nip05,
+                      };
+                    }
+                    return null;
+                  });
+                  // Get the profile again after caching
+                  cachedProfile = getAuthorProfile(authorPubkey);
+                }
                 
-                return {
-                  ...highlight,
-                  postAuthorDisplayName,
-                  postAuthorNip05: authorProfile?.nip05,
-                };
-              })
-            );
-            
-            console.log(`Profile: Updated cached highlights with author info for ${authorPubkeys.size} authors`);
-          } catch (error) {
-            console.error('Error fetching author profiles for cached highlights:', error);
-          }
-        }, 100); // Small delay to ensure UI shows immediately
+                // Update highlights for this author immediately
+                if (cachedProfile) {
+                  setHighlights(prevHighlights => 
+                    prevHighlights.map(highlight => {
+                      if (highlight.postAuthor === authorPubkey) {
+                        const postAuthorDisplayName = cachedProfile?.displayName || cachedProfile?.name || authorPubkey.slice(0, 8) + '...';
+                        return {
+                          ...highlight,
+                          postAuthorDisplayName,
+                          postAuthorNip05: cachedProfile?.nip05,
+                        };
+                      }
+                      return highlight;
+                    })
+                  );
+                }
+              };
+              
+              // Sort author pubkeys by their highlight recency (most recent first)
+              const authorPubkeysByRecency = Array.from(authorPubkeys).sort((a, b) => {
+                // Find the most recent highlight for each author
+                const aHighlights = cachedHighlights.filter(h => h.postAuthor === a);
+                const bHighlights = cachedHighlights.filter(h => h.postAuthor === b);
+                
+                const aMostRecent = Math.max(...aHighlights.map(h => h.created_at));
+                const bMostRecent = Math.max(...bHighlights.map(h => h.created_at));
+                
+                return bMostRecent - aMostRecent; // Most recent first
+              });
+              
+              // Fetch author profiles sequentially, starting with most recent
+              for (const authorPubkey of authorPubkeysByRecency) {
+                await fetchCachedAuthorProfile(authorPubkey);
+              }
+             
+             console.log(`Profile: Updated cached highlights with author info for ${authorPubkeys.size} authors`);
+           } catch (error) {
+             console.error('Error fetching author profiles for cached highlights:', error);
+           }
+         }, 100); // Small delay to ensure UI shows immediately
         
         return;
       }
@@ -227,6 +259,7 @@ export default function ProfilePage() {
           postDTag: undefined,
           startOffset: event.tags.find(tag => tag[0] === 'start')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'start')?.[1] || '0') : undefined,
           endOffset: event.tags.find(tag => tag[0] === 'end')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'end')?.[1] || '0') : undefined,
+          event: event, // Store the original NDKEvent
         }));
         return tempHighlights.sort((a, b) => b.created_at - a.created_at);
       });
@@ -240,21 +273,60 @@ export default function ProfilePage() {
         }
       });
 
-      // Fetch profiles for all authors
-      const authorProfiles = new Map<string, { name?: string; displayName?: string; nip05?: string }>();
-      for (const authorPubkey of authorPubkeys) {
-        try {
-          const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
-          const authorProfile = await authorUser.fetchProfile();
-          authorProfiles.set(authorPubkey, {
-            name: authorProfile?.name,
-            displayName: authorProfile?.displayName,
-            nip05: authorProfile?.nip05,
+                     // Fetch profiles for all authors progressively, prioritizing recent highlights
+        const authorProfiles = new Map<string, { name?: string; displayName?: string; nip05?: string }>();
+        const fetchAuthorProfile = async (authorPubkey: string) => {
+          try {
+            const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
+            const authorProfile = await authorUser.fetchProfile();
+            const profileData = {
+              name: authorProfile?.name,
+              displayName: authorProfile?.displayName,
+              nip05: authorProfile?.nip05,
+            };
+            authorProfiles.set(authorPubkey, profileData);
+            
+            // Update highlights for this author immediately
+            setHighlights(prevHighlights => 
+              prevHighlights.map(highlight => {
+                if (highlight.postAuthor === authorPubkey) {
+                  const postAuthorDisplayName = profileData.displayName || profileData.name || authorPubkey.slice(0, 8) + '...';
+                  return {
+                    ...highlight,
+                    postAuthorDisplayName,
+                    postAuthorNip05: profileData.nip05,
+                  };
+                }
+                return highlight;
+              })
+            );
+          } catch (error) {
+            console.error(`Failed to fetch profile for author ${authorPubkey}:`, error);
+          }
+        };
+        
+        // Sort author pubkeys by their highlight recency (most recent first)
+        const authorPubkeysByRecency = Array.from(authorPubkeys).sort((a, b) => {
+          // Find the most recent highlight for each author
+          const aHighlights = highlightsArray.filter(event => {
+            const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1];
+            return postAuthor === a;
           });
-        } catch (error) {
-          console.error(`Failed to fetch profile for author ${authorPubkey}:`, error);
+          const bHighlights = highlightsArray.filter(event => {
+            const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1];
+            return postAuthor === b;
+          });
+          
+          const aMostRecent = Math.max(...aHighlights.map(h => h.created_at));
+          const bMostRecent = Math.max(...bHighlights.map(h => h.created_at));
+          
+          return bMostRecent - aMostRecent; // Most recent first
+        });
+        
+        // Fetch author profiles sequentially, starting with most recent
+        for (const authorPubkey of authorPubkeysByRecency) {
+          await fetchAuthorProfile(authorPubkey);
         }
-      }
 
       // Fetch the original posts to get their d tags
       const postIds = new Set<string>();
@@ -309,6 +381,7 @@ export default function ProfilePage() {
             postDTag: postInfo?.dTag,
             startOffset: startOffset ? parseInt(startOffset) : undefined,
             endOffset: endOffset ? parseInt(endOffset) : undefined,
+            event: event, // Store the original NDKEvent
           };
         })
         .sort((a, b) => b.created_at - a.created_at);
@@ -316,19 +389,19 @@ export default function ProfilePage() {
       console.log('Profile: Updating highlights with full data:', profileHighlights.length, 'highlights');
       console.log('Profile: Sample highlight with author data:', profileHighlights[0]);
       
-      // Cache the highlights for faster future loading
-      const highlightsForCache = profileHighlights.map(highlight => ({
-        id: highlight.id,
-        content: highlight.content,
-        created_at: highlight.created_at,
-        postId: highlight.postId,
-        postAuthor: highlight.postAuthor,
-        postAuthorNip05: highlight.postAuthorNip05,
-        postDTag: highlight.postDTag,
-        startOffset: highlight.startOffset,
-        endOffset: highlight.endOffset,
-        eventTags: [] // We don't have the full event tags here, but this is ok for profile display
-      }));
+             // Cache the highlights for faster future loading
+       const highlightsForCache = profileHighlights.map(highlight => ({
+         id: highlight.id,
+         content: highlight.content,
+         created_at: highlight.created_at,
+         postId: highlight.postId,
+         postAuthor: highlight.postAuthor,
+         postAuthorNip05: highlight.postAuthorNip05,
+         postDTag: highlight.postDTag,
+         startOffset: highlight.startOffset,
+         endOffset: highlight.endOffset,
+         eventTags: highlight.event?.tags || [] // Store the original event tags
+       }));
       cacheUserHighlights(profile.pubkey, highlightsForCache);
       console.log(`Profile: Cached ${highlightsForCache.length} highlights for future use`);
       
@@ -547,30 +620,43 @@ export default function ProfilePage() {
   };
 
   const openHighlightJson = (highlight: ProfileHighlight) => {
-    // Create a full Nostr event object from the highlight data
-    const fullEvent = {
-      id: highlight.id,
-      pubkey: profile.pubkey,
-      created_at: Math.floor(highlight.created_at / 1000), // Convert back to seconds
-      kind: 9802,
-      tags: [
-        ['e', highlight.postId],
-        ['p', highlight.postAuthor],
-        ['client', 'Longform._']
-      ],
-      content: highlight.content,
-      sig: '' // We don't have the signature in our highlight data
-    };
+    if (highlight.event) {
+      // Use the actual NDKEvent if available
+      const fullEvent = {
+        id: highlight.event.id,
+        pubkey: highlight.event.pubkey,
+        created_at: highlight.event.created_at,
+        kind: highlight.event.kind,
+        tags: highlight.event.tags,
+        content: highlight.event.content,
+        sig: highlight.event.sig
+      };
+      setJsonModal({ visible: true, data: fullEvent });
+    } else {
+      // Fallback to synthetic event if original event is not available
+      const fullEvent = {
+        id: highlight.id,
+        pubkey: profile.pubkey,
+        created_at: Math.floor(highlight.created_at / 1000), // Convert back to seconds
+        kind: 9802,
+        tags: [
+          ['e', highlight.postId],
+          ['p', highlight.postAuthor],
+          ['client', 'Longform._']
+        ],
+        content: highlight.content,
+        sig: '' // We don't have the signature in our highlight data
+      };
 
-    // Add position tags if available
-    if (highlight.startOffset !== undefined) {
-      fullEvent.tags.push(['start', highlight.startOffset.toString()]);
+      // Add position tags if available
+      if (highlight.startOffset !== undefined) {
+        fullEvent.tags.push(['start', highlight.startOffset.toString()]);
+      }
+      if (highlight.endOffset !== undefined) {
+        fullEvent.tags.push(['end', highlight.endOffset.toString()]);
+      }
+      setJsonModal({ visible: true, data: fullEvent });
     }
-    if (highlight.endOffset !== undefined) {
-      fullEvent.tags.push(['end', highlight.endOffset.toString()]);
-    }
-
-    setJsonModal({ visible: true, data: fullEvent });
     setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
   };
 
@@ -765,18 +851,7 @@ export default function ProfilePage() {
           const authorIdentifier = highlight.postAuthorNip05 || highlight.postAuthor;
           const postIdentifier = highlight.postDTag || highlight.postId;
           
-          // Debug logging for first highlight
-          if (highlight.id === highlights[0]?.id) {
-            console.log('Profile: Rendering highlight with data:', {
-              id: highlight.id,
-              postAuthor: highlight.postAuthor,
-              postAuthorNip05: highlight.postAuthorNip05,
-              postDTag: highlight.postDTag,
-              postId: highlight.postId,
-              authorIdentifier,
-              postIdentifier
-            });
-          }
+
           
           return (
             <Link 
