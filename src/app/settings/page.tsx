@@ -17,7 +17,7 @@ import {
 } from '@/utils/relayList';
 import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
-import { cleanupStorage, getAvailableStorage } from '@/utils/storage';
+import { cleanupStorage } from '@/utils/storage';
 import './page.css';
 
 
@@ -582,7 +582,7 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="cache-info">
-                        <p>Available Storage: <strong>{Math.round(getAvailableStorage() / 1024)}KB</strong></p>
+                        <p>Available Storage: <strong>Browser managed</strong></p>
                         <p>Cache Entries: <strong>{cacheData.length}</strong></p>
                         <p>Total Cache Size: <strong>{Math.round(cacheData.reduce((sum, item) => sum + item.size, 0) / 1024)}KB</strong></p>
                     </div>

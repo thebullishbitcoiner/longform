@@ -138,7 +138,15 @@ export function highlightTextInElement(
   highlights: Highlight[], 
   highlightClass = 'userHighlight'
 ) {
+  console.log('🔍 highlightTextInElement called with:', {
+    element: !!element,
+    highlightsCount: highlights.length,
+    highlightClass,
+    highlights: highlights.map(h => ({ content: h.content, startOffset: h.startOffset, endOffset: h.endOffset }))
+  });
+
   if (!element || highlights.length === 0) {
+    console.log('🔍 No element or highlights, returning early');
     return;
   }
 
@@ -159,10 +167,18 @@ export function highlightTextInElement(
 
   // Apply highlights using position-based approach
   sortedHighlights.forEach((highlight) => {
+    console.log('🔍 Processing highlight:', {
+      content: highlight.content,
+      startOffset: highlight.startOffset,
+      endOffset: highlight.endOffset
+    });
+    
     if (highlight.startOffset !== undefined && highlight.endOffset !== undefined) {
+      console.log('🔍 Applying position-based highlight');
       applyPositionBasedHighlight(element, highlight.startOffset, highlight.endOffset, highlightClass);
     } else {
       // Fallback to text-based highlighting for highlights without position data
+      console.log('🔍 Applying text-based highlight');
       const highlightText = highlight.content.trim();
       if (highlightText) {
         applySimpleHighlight(element, highlightText, highlightClass);

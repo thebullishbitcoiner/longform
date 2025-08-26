@@ -24,52 +24,11 @@ const STORAGE_KEYS = {
   RELAY_LIST_PREFIX: 'longform_relay_list_'
 };
 
-// Check available storage space
-function getAvailableStorage(): number {
-  if (typeof window === 'undefined') return 0;
-  
-  try {
-    const testKey = '__storage_test__';
-    const testValue = 'x'.repeat(1024); // 1KB test
-    let available = 0;
-    
-    // Test localStorage capacity
-    for (let i = 0; i < 10000; i++) { // Test up to ~10MB
-      try {
-        localStorage.setItem(testKey + i, testValue);
-        available += testValue.length;
-      } catch {
-        break;
-      }
-    }
-    
-    // Clean up test data
-    for (let i = 0; i < 10000; i++) {
-      localStorage.removeItem(testKey + i);
-    }
-    
-    return available;
-      } catch {
-      console.warn('Could not test storage capacity');
-      return 0;
-    }
-}
-
-// Safe localStorage operations with quota management
+// Simple storage operations without testing
 function safeSetItem(key: string, value: string): boolean {
   if (typeof window === 'undefined') return false;
   
   try {
-    // Check if we're about to exceed quota
-    const currentSize = localStorage.getItem(key)?.length || 0;
-    const newSize = value.length;
-    const available = getAvailableStorage();
-    
-    // If we're adding significant data and storage is low, clean up
-    if (newSize > currentSize && available < 1024 * 1024) { // Less than 1MB available
-      cleanupStorage();
-    }
-    
     localStorage.setItem(key, value);
     return true;
   } catch (error) {
@@ -108,10 +67,10 @@ function cleanupStorage(): void {
           const trimmedPosts = postsArray.slice(-100);
           localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(trimmedPosts));
         }
-             } catch {
-         // If posts are corrupted, remove them
-         localStorage.removeItem(STORAGE_KEYS.POSTS);
-       }
+      } catch {
+        // If posts are corrupted, remove them
+        localStorage.removeItem(STORAGE_KEYS.POSTS);
+      }
     }
     
     // Remove old author profiles if we have too many
@@ -123,13 +82,13 @@ function cleanupStorage(): void {
         if (profileKeys.length > 50) { // Keep only last 50 profiles
           const trimmedProfiles: Record<string, unknown> = {};
           profileKeys.slice(-50).forEach(key => {
-                       trimmedProfiles[key] = profilesObj[key];
-         });
-         localStorage.setItem(STORAGE_KEYS.AUTHOR_PROFILES, JSON.stringify(trimmedProfiles));
-       }
-     } catch {
-       localStorage.removeItem(STORAGE_KEYS.AUTHOR_PROFILES);
-     }
+            trimmedProfiles[key] = profilesObj[key];
+          });
+          localStorage.setItem(STORAGE_KEYS.AUTHOR_PROFILES, JSON.stringify(trimmedProfiles));
+        }
+      } catch {
+        localStorage.removeItem(STORAGE_KEYS.AUTHOR_PROFILES);
+      }
     }
     
     console.log('Storage cleanup completed');
@@ -182,6 +141,16 @@ export interface CachedHighlight {
   startOffset?: number;
   endOffset?: number;
   eventTags: string[][];
+  // Store the complete event data for JSON viewing
+  eventData?: {
+    id: string;
+    pubkey: string;
+    created_at: number;
+    kind: number;
+    tags: string[][];
+    content: string;
+    sig: string;
+  };
 }
 
 // Cache user highlights
@@ -265,4 +234,4 @@ export function getHighlightsForPost(pubkey: string, postId: string): CachedHigh
 }
 
 // Export storage utilities for other components
-export { safeSetItem, cleanupStorage, getAvailableStorage, STORAGE_KEYS }; 
+export { safeSetItem, cleanupStorage, STORAGE_KEYS }; 

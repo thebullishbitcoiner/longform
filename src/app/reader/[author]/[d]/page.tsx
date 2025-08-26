@@ -1507,10 +1507,13 @@ export default function BlogPost() {
       const ndkEvent = new NDKEvent(ndkToUse);
       ndkEvent.kind = 9802;
       ndkEvent.content = cleanText;
+      // Get the d tag from the post or URL parameters
+      const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
+      
       ndkEvent.tags = [
         ['e', post.id], // Reference to the highlighted post
         ['p', post.pubkey], // Reference to the post author
-        ['a', `30023:${post.pubkey}:${post.id}`], // Reference to the post as a longform article
+        ['a', `30023:${post.pubkey}:${dTag || post.id}`], // Reference to the post as a longform article with d tag
         ['client', 'Longform._']
       ];
 
@@ -1619,18 +1622,52 @@ export default function BlogPost() {
   useEffect(() => {
     if (!post || !postContentRef.current || !isAuthenticated) return;
 
-    // Small delay to ensure content is fully rendered
-    const timer = setTimeout(() => {
+    // Function to apply highlights
+    const applyHighlights = () => {
       const postHighlights = getHighlightsForPost(post.id);
       
       if (postHighlights.length > 0) {
-        console.log(`🔍 Applied ${postHighlights.length} highlights to post content`);
-        highlightTextInElement(postContentRef.current!, postHighlights, styles.userHighlight);
+        console.log(`🔍 Applying ${postHighlights.length} highlights to post content`);
+        try {
+          // Wait for ReactMarkdown to finish rendering
+          const checkContent = () => {
+            if (postContentRef.current && postContentRef.current.children.length > 0) {
+              console.log('🔍 Content is ready, applying highlights with class:', styles.userHighlight);
+              highlightTextInElement(postContentRef.current!, postHighlights, styles.userHighlight);
+              console.log('🔍 Highlights applied successfully');
+            } else {
+              // If content isn't ready yet, try again in a bit
+              setTimeout(checkContent, 100);
+            }
+          };
+          checkContent();
+        } catch (error) {
+          console.error('🔍 Error applying highlights:', error);
+        }
+      } else {
+        console.log('🔍 No highlights found for this post');
       }
-    }, 1000); // Delay to ensure content is fully rendered
+    };
 
+    // Apply highlights with a delay to ensure ReactMarkdown has rendered
+    const timer = setTimeout(applyHighlights, 1000);
     return () => clearTimeout(timer);
-  }, [post, getHighlightsForPost, isAuthenticated]);
+  }, [post, processedContent, getHighlightsForPost, isAuthenticated]);
+
+  // Re-apply highlights when highlights are updated (triggered by changes in highlights cache)
+  useEffect(() => {
+    if (!post || !postContentRef.current || !isAuthenticated) return;
+
+    const postHighlights = getHighlightsForPost(post.id);
+    if (postHighlights.length > 0 && processedContent) {
+      console.log(`🔍 Re-applying ${postHighlights.length} highlights after update`);
+      try {
+        highlightTextInElement(postContentRef.current!, postHighlights, styles.userHighlight);
+      } catch (error) {
+        console.error('🔍 Error re-applying highlights:', error);
+      }
+    }
+  }, [post?.id, processedContent, isAuthenticated, getHighlightsForPost]);
 
   // Function to render custom emojis and reactions as JSX
   const renderReactionContentJSX = (content: string, event?: NDKEvent) => {
@@ -2272,31 +2309,33 @@ export default function BlogPost() {
         </div>
       )}
 
-                           {/* Highlight Context Menu */}
-       {showContextMenu && selectedText && (
-         <div 
-           className={styles.contextMenu}
-           style={{
-             left: `${contextMenuPosition.x}px`,
-             top: `${contextMenuPosition.y}px`
-           }}
-         >
-           {isAuthenticated ? (
-             <button 
-               className={styles.contextMenuButton}
-               onClick={createHighlight}
-               disabled={isCreatingHighlight}
-             >
-               <PencilIcon className={styles.contextMenuIcon} />
-               {isCreatingHighlight ? 'Creating...' : 'Highlight'}
-             </button>
-           ) : (
-             <div className={styles.contextMenuMessage}>
-               Please log in to create highlights
-             </div>
-           )}
-         </div>
-       )}
+                                   {/* Highlight Context Menu */}
+        {showContextMenu && selectedText && (
+          <div 
+            className={styles.contextMenu}
+            style={{
+              left: `${contextMenuPosition.x}px`,
+              top: `${contextMenuPosition.y}px`
+            }}
+          >
+            {isAuthenticated ? (
+              <button 
+                className={styles.contextMenuButton}
+                onClick={createHighlight}
+                disabled={isCreatingHighlight}
+              >
+                <PencilIcon className={styles.contextMenuIcon} />
+                {isCreatingHighlight ? 'Creating...' : 'Highlight'}
+              </button>
+            ) : (
+              <div className={styles.contextMenuMessage}>
+                Please log in to create highlights
+              </div>
+            )}
+          </div>
+        )}
+
+
 
 
     </div>

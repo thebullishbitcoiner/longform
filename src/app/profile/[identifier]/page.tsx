@@ -144,15 +144,7 @@ export default function ProfilePage() {
            postDTag: highlight.postDTag,
            startOffset: highlight.startOffset,
            endOffset: highlight.endOffset,
-           event: highlight.eventTags.length > 0 ? {
-             id: highlight.id,
-             pubkey: profile.pubkey,
-             created_at: Math.floor(highlight.created_at / 1000),
-             kind: 9802,
-             tags: highlight.eventTags,
-             content: highlight.content,
-             sig: ''
-           } as NDKEvent : undefined
+                       event: undefined // Don't create synthetic events for cached highlights
          })).sort((a, b) => b.created_at - a.created_at);
         
         setHighlights(profileHighlights);
@@ -389,19 +381,28 @@ export default function ProfilePage() {
       console.log('Profile: Updating highlights with full data:', profileHighlights.length, 'highlights');
       console.log('Profile: Sample highlight with author data:', profileHighlights[0]);
       
-             // Cache the highlights for faster future loading
-       const highlightsForCache = profileHighlights.map(highlight => ({
-         id: highlight.id,
-         content: highlight.content,
-         created_at: highlight.created_at,
-         postId: highlight.postId,
-         postAuthor: highlight.postAuthor,
-         postAuthorNip05: highlight.postAuthorNip05,
-         postDTag: highlight.postDTag,
-         startOffset: highlight.startOffset,
-         endOffset: highlight.endOffset,
-         eventTags: highlight.event?.tags || [] // Store the original event tags
-       }));
+                    // Cache the highlights for faster future loading
+        const highlightsForCache = profileHighlights.map(highlight => ({
+          id: highlight.id,
+          content: highlight.content,
+          created_at: highlight.created_at,
+          postId: highlight.postId,
+          postAuthor: highlight.postAuthor,
+          postAuthorNip05: highlight.postAuthorNip05,
+          postDTag: highlight.postDTag,
+          startOffset: highlight.startOffset,
+          endOffset: highlight.endOffset,
+          eventTags: highlight.event?.tags || [], // Store the original event tags
+          eventData: highlight.event ? {
+            id: highlight.event.id,
+            pubkey: highlight.event.pubkey,
+            created_at: highlight.event.created_at || 0,
+            kind: highlight.event.kind || 9802,
+            tags: highlight.event.tags || [],
+            content: highlight.event.content || '',
+            sig: highlight.event.sig || ''
+          } : undefined // Store the complete event data for JSON viewing
+        }));
       cacheUserHighlights(profile.pubkey, highlightsForCache);
       console.log(`Profile: Cached ${highlightsForCache.length} highlights for future use`);
       
@@ -619,7 +620,7 @@ export default function ProfilePage() {
     }
   };
 
-  const openHighlightJson = (highlight: ProfileHighlight) => {
+  const openHighlightJson = async (highlight: ProfileHighlight) => {
     if (highlight.event) {
       // Use the actual NDKEvent if available
       const fullEvent = {
@@ -633,29 +634,78 @@ export default function ProfilePage() {
       };
       setJsonModal({ visible: true, data: fullEvent });
     } else {
-      // Fallback to synthetic event if original event is not available
-      const fullEvent = {
-        id: highlight.id,
-        pubkey: profile.pubkey,
-        created_at: Math.floor(highlight.created_at / 1000), // Convert back to seconds
-        kind: 9802,
-        tags: [
-          ['e', highlight.postId],
-          ['p', highlight.postAuthor],
-          ['client', 'Longform._']
-        ],
-        content: highlight.content,
-        sig: '' // We don't have the signature in our highlight data
-      };
-
-      // Add position tags if available
-      if (highlight.startOffset !== undefined) {
-        fullEvent.tags.push(['start', highlight.startOffset.toString()]);
+      // Check if we have cached event data first
+      const cachedHighlights = getCachedHighlights(profile.pubkey);
+      const cachedHighlight = cachedHighlights?.find(h => h.id === highlight.id);
+      
+      if (cachedHighlight?.eventData) {
+        // Use cached event data
+        console.log('Using cached event data for highlight:', highlight.id);
+        setJsonModal({ visible: true, data: cachedHighlight.eventData });
+      } else {
+        // For cached highlights without original event, try to fetch it from the network
+        try {
+          console.log('Attempting to fetch original highlight event:', highlight.id);
+          const ndkToUse = contextNdk || standaloneNdk;
+          if (ndkToUse) {
+            // Try to fetch the original event by ID
+            const originalEvent = await ndkToUse.fetchEvent(highlight.id);
+            if (originalEvent) {
+              console.log('Successfully fetched original highlight event');
+              const fullEvent = {
+                id: originalEvent.id,
+                pubkey: originalEvent.pubkey,
+                created_at: originalEvent.created_at,
+                kind: originalEvent.kind,
+                tags: originalEvent.tags,
+                content: originalEvent.content,
+                sig: originalEvent.sig
+              };
+              setJsonModal({ visible: true, data: fullEvent });
+            } else {
+              // Show cached data if original event not found
+              const simplifiedEvent = {
+                id: highlight.id,
+                content: highlight.content,
+                postId: highlight.postId,
+                postAuthor: highlight.postAuthor,
+                startOffset: highlight.startOffset,
+                endOffset: highlight.endOffset,
+                created_at: Math.floor(highlight.created_at / 1000),
+                note: 'Original event not found on network. Showing cached data.'
+              };
+              setJsonModal({ visible: true, data: simplifiedEvent });
+            }
+          } else {
+            // No NDK available, show cached data
+            const simplifiedEvent = {
+              id: highlight.id,
+              content: highlight.content,
+              postId: highlight.postId,
+              postAuthor: highlight.postAuthor,
+              startOffset: highlight.startOffset,
+              endOffset: highlight.endOffset,
+              created_at: Math.floor(highlight.created_at / 1000),
+              note: 'No network connection available. Showing cached data.'
+            };
+            setJsonModal({ visible: true, data: simplifiedEvent });
+          }
+        } catch (error) {
+          console.error('Error fetching original highlight event:', error);
+          // Show cached data if fetch fails
+          const simplifiedEvent = {
+            id: highlight.id,
+            content: highlight.content,
+            postId: highlight.postId,
+            postAuthor: highlight.postAuthor,
+            startOffset: highlight.startOffset,
+            endOffset: highlight.endOffset,
+            created_at: Math.floor(highlight.created_at / 1000),
+            note: 'Error fetching original event. Showing cached data.'
+          };
+          setJsonModal({ visible: true, data: simplifiedEvent });
+        }
       }
-      if (highlight.endOffset !== undefined) {
-        fullEvent.tags.push(['end', highlight.endOffset.toString()]);
-      }
-      setJsonModal({ visible: true, data: fullEvent });
     }
     setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
   };
@@ -992,11 +1042,11 @@ export default function ProfilePage() {
         >
           <button 
             className={styles.contextMenuItem}
-            onClick={() => {
+            onClick={async () => {
               if (contextMenu.highlightId) {
                 const highlight = highlights.find(h => h.id === contextMenu.highlightId);
                 if (highlight) {
-                  openHighlightJson(highlight);
+                  await openHighlightJson(highlight);
                 }
               } else if (contextMenu.postId) {
                 const post = posts.find(p => p.id === contextMenu.postId);
