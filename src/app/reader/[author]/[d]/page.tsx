@@ -24,7 +24,12 @@ const createStandaloneNDK = () => {
     explicitRelayUrls: [
       'wss://relay.damus.io',
       'wss://relay.nostr.band',
-      'wss://relay.primal.net'
+      'wss://relay.primal.net',
+      'wss://nos.lol',
+      'wss://relay.snort.social',
+      'wss://relay.current.fyi',
+      'wss://relay.nostr.wirednet.jp',
+      'wss://offchain.pub'
     ]
   });
 };
@@ -96,6 +101,13 @@ export default function BlogPost() {
   const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce } = useBlog();
   const { ndk: contextNdk, isAuthenticated } = useNostr();
   const { getHighlightsForPost, addHighlight } = useHighlights();
+  
+  // Helper function for timestamped debug logs
+  const debugLog = (message: string, ...args: unknown[]) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`[${timestamp}] DEBUG: ${message}`, ...args);
+  };
+  
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [processedContent, setProcessedContent] = useState('');
@@ -123,6 +135,9 @@ export default function BlogPost() {
   const zapDataCacheRef = useRef<Map<string, ZapData[]>>(new Map());
   const reactionDataCacheRef = useRef<Map<string, ReactionData[]>>(new Map());
   const repostDataCacheRef = useRef<Map<string, RepostData[]>>(new Map());
+  
+  // Ref to store the latest fetchReactionStatsInBackground function
+  const fetchReactionStatsRef = useRef<((postId: string) => Promise<void>) | null>(null);
   
   // Comment section state
   const [comments, setComments] = useState<CommentData[]>([]);
@@ -463,255 +478,119 @@ export default function BlogPost() {
 
 
 
-  const fetchReactionStatsInBackground = useCallback(async (postId: string) => {
+  const fetchReactionStats = useCallback(async (postId: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) return;
+
+    setReactionStats(prev => ({ ...prev, isLoading: true }));
 
     try {
       // Build article coordinate (a tag)
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
       const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
 
-      // Fetch each type of event in parallel and update stats incrementally
-      const fetchPromises = [
-        // Reactions
-        Promise.all([
-          ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] }),
-          aCoordinate ? ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : Promise.resolve(new Set())
-        ]).then(async ([reactionsByE, reactionsByA]) => {
-          const reactionsById = new Map<string, NDKEvent>();
-          for (const ev of reactionsByE) reactionsById.set(ev.id, ev);
-          for (const ev of reactionsByA as Set<NDKEvent>) reactionsById.set(ev.id, ev);
-          const allReactions = Array.from(reactionsById.values()).filter(event => {
-            const content = event.content.trim();
-            return content !== '';
-          });
-          
-          // Cache reaction details
-          const reactionDetails: ReactionData[] = allReactions.map(reaction => ({
-            id: reaction.id,
-            pubkey: reaction.pubkey,
-            content: reaction.content.trim(),
-            created_at: reaction.created_at,
-            event: reaction
-          }));
-          
-          // Fetch profiles for reaction authors in background
-          const uniqueReactionPubkeys = new Set(reactionDetails.map(reaction => reaction.pubkey));
-          const reactionProfilePromises = Array.from(uniqueReactionPubkeys).map(async (pubkey) => {
-            try {
-              const cachedProfile = getAuthorProfile(pubkey);
-              if (cachedProfile) {
-                return { pubkey, profile: cachedProfile };
-              } else {
-                const user = ndkToUse.getUser({ pubkey });
-                const profile = await user.fetchProfile();
-                return { pubkey, profile };
-              }
-            } catch (error) {
-              console.error('Error fetching reaction author profile:', error);
-              return { pubkey, profile: null };
-            }
-          });
-          
-          // Update reaction details with profile information
-          const reactionProfileResults = await Promise.all(reactionProfilePromises);
-          const updatedReactionDetails = reactionDetails.map(reaction => {
-            const profileResult = reactionProfileResults.find(r => r.pubkey === reaction.pubkey);
-            if (profileResult && profileResult.profile) {
-              return {
-                ...reaction,
-                authorName: profileResult.profile.displayName || profileResult.profile.name
-              };
-            }
-            return reaction;
-          });
-          
-          reactionDataCacheRef.current.set(postId, updatedReactionDetails.sort((a, b) => b.created_at - a.created_at));
-          
-          setReactionStats(prev => ({ ...prev, likes: allReactions.length }));
-        }),
+      // Initialize stats
+      let likes = 0;
+      let comments = 0;
+      let zaps = 0;
+      let reposts = 0;
 
-        // Comments
-        Promise.all([
-          ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId] }),
-          aCoordinate ? ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate] }) : Promise.resolve(new Set()),
-          ndkToUse.fetchEvents({ kinds: [1], '#e': [postId] }),
-          aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate] }) : Promise.resolve(new Set())
-        ]).then(([nip22ByE, nip22ByA, kind1ByE, kind1ByA]) => {
-          const commentIds = new Set<string>();
-          for (const ev of nip22ByE) commentIds.add(ev.id);
-          for (const ev of nip22ByA as Set<NDKEvent>) commentIds.add(ev.id);
-          for (const ev of kind1ByE) commentIds.add(ev.id);
-          for (const ev of kind1ByA as Set<NDKEvent>) commentIds.add(ev.id);
-          
-          setReactionStats(prev => ({ ...prev, comments: commentIds.size }));
-        }),
+      // Helper function to update stats incrementally
+      const updateStats = () => {
+        setReactionStats({
+          likes,
+          comments,
+          zaps,
+          reposts,
+          isLoading: true
+        });
+      };
 
-        // Zaps
-        Promise.all([
-          ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] }),
-          aCoordinate ? ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : Promise.resolve(new Set())
-        ]).then(async ([zapsByE, zapsByA]) => {
-          const uniqueZapIds = new Set<string>();
-          const allZaps: NDKEvent[] = [];
-          for (const ev of zapsByE) {
-            uniqueZapIds.add(ev.id);
-            allZaps.push(ev);
-          }
-          for (const ev of zapsByA as Set<NDKEvent>) {
-            if (!uniqueZapIds.has(ev.id)) {
-              uniqueZapIds.add(ev.id);
-              allZaps.push(ev);
-            }
-          }
-          
-          // Cache zap details
-          const zapDetails: ZapData[] = allZaps.map(zap => {
-            const amountTag = zap.tags.find(tag => tag[0] === 'amount');
-            const descriptionTag = zap.tags.find(tag => tag[0] === 'description');
-            let amount = 0;
-            if (amountTag && amountTag[1]) {
-              amount = parseInt(amountTag[1]) / 1000;
-            }
-            return {
-              id: zap.id,
-              pubkey: zap.pubkey,
-              amount,
-              content: descriptionTag?.[1] || zap.content,
-              created_at: zap.created_at
-            };
-          });
-          
-          // Fetch profiles for zap authors in background
-          const uniqueZapPubkeys = new Set(zapDetails.map(zap => zap.pubkey));
-          const zapProfilePromises = Array.from(uniqueZapPubkeys).map(async (pubkey) => {
-            try {
-              const cachedProfile = getAuthorProfile(pubkey);
-              if (cachedProfile) {
-                return { pubkey, profile: cachedProfile };
-              } else {
-                const user = ndkToUse.getUser({ pubkey });
-                const profile = await user.fetchProfile();
-                return { pubkey, profile };
-              }
-            } catch (error) {
-              console.error('Error fetching zap author profile:', error);
-              return { pubkey, profile: null };
-            }
-          });
-          
-          // Update zap details with profile information
-          const zapProfileResults = await Promise.all(zapProfilePromises);
-          const updatedZapDetails = zapDetails.map(zap => {
-            const profileResult = zapProfileResults.find(r => r.pubkey === zap.pubkey);
-            if (profileResult && profileResult.profile) {
-              return {
-                ...zap,
-                authorName: profileResult.profile.displayName || profileResult.profile.name
-              };
-            }
-            return zap;
-          });
-          
-          zapDataCacheRef.current.set(postId, updatedZapDetails.sort((a, b) => b.amount - a.amount));
-          
-          setReactionStats(prev => ({ ...prev, zaps: uniqueZapIds.size }));
-        }),
+      // Fetch and update reactions (kind 7) incrementally
+      debugLog('Fetching reactions...');
+      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] });
+      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : new Set();
+      
+      // Count reactions across both sources
+      const reactionsById = new Map<string, NDKEvent>();
+      for (const ev of reactionsByE) reactionsById.set(ev.id, ev);
+      for (const ev of reactionsByA as Set<NDKEvent>) reactionsById.set(ev.id, ev);
+      const allReactions = Array.from(reactionsById.values()).filter(event => {
+        const content = event.content.trim();
+        return content !== ''; // Only filter out empty reactions
+      });
+      likes = allReactions.length;
+      debugLog('Reactions fetched:', likes);
+      updateStats();
 
-        // Reposts
-        Promise.all([
-          ndkToUse.fetchEvents({ kinds: [6, 16], '#e': [postId] }),
-          aCoordinate ? ndkToUse.fetchEvents({ kinds: [6, 16], '#a': [aCoordinate] }) : Promise.resolve(new Set()),
-          ndkToUse.fetchEvents({ kinds: [1], '#q': [postId] }),
-          aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#q': [aCoordinate] }) : Promise.resolve(new Set())
-        ]).then(async ([repostsByE, repostsByA, quoteRepostsByE, quoteRepostsByA]) => {
-          const uniqueRepostIds = new Set<string>();
-          const allReposts: NDKEvent[] = [];
-          for (const ev of repostsByE) {
-            uniqueRepostIds.add(ev.id);
-            allReposts.push(ev);
-          }
-          for (const ev of repostsByA as Set<NDKEvent>) {
-            if (!uniqueRepostIds.has(ev.id)) {
-              uniqueRepostIds.add(ev.id);
-              allReposts.push(ev);
-            }
-          }
-          for (const ev of quoteRepostsByE) {
-            if (!uniqueRepostIds.has(ev.id)) {
-              uniqueRepostIds.add(ev.id);
-              allReposts.push(ev);
-            }
-          }
-          for (const ev of quoteRepostsByA as Set<NDKEvent>) {
-            if (!uniqueRepostIds.has(ev.id)) {
-              uniqueRepostIds.add(ev.id);
-              allReposts.push(ev);
-            }
-          }
-          
-          // Cache repost details
-          const repostDetails: RepostData[] = allReposts.map(event => ({
-            id: event.id,
-            pubkey: event.pubkey,
-            created_at: event.created_at || 0,
-            kind: event.kind || 6,
-            event: event
-          }));
-          
-          // Fetch profiles for repost authors in background
-          const uniqueRepostPubkeys = new Set(repostDetails.map(repost => repost.pubkey));
-          const repostProfilePromises = Array.from(uniqueRepostPubkeys).map(async (pubkey) => {
-            try {
-              const cachedProfile = getAuthorProfile(pubkey);
-              if (cachedProfile) {
-                return { pubkey, profile: cachedProfile };
-              } else {
-                const user = ndkToUse.getUser({ pubkey });
-                const profile = await user.fetchProfile();
-                return { pubkey, profile };
-              }
-            } catch (error) {
-              console.error('Error fetching repost author profile:', error);
-              return { pubkey, profile: null };
-            }
-          });
-          
-          // Update repost details with profile information
-          const repostProfileResults = await Promise.all(repostProfilePromises);
-          const updatedRepostDetails = repostDetails.map(repost => {
-            const profileResult = repostProfileResults.find(r => r.pubkey === repost.pubkey);
-            if (profileResult && profileResult.profile) {
-              const profile = profileResult.profile;
-              const authorPicture = 'image' in profile ? profile.image : 'picture' in profile ? profile.picture : undefined;
-              return {
-                ...repost,
-                authorName: profile.displayName || profile.name,
-                authorPicture
-              };
-            }
-            return repost;
-          });
-          
-          repostDataCacheRef.current.set(postId, updatedRepostDetails.sort((a, b) => b.created_at - a.created_at));
-          
-          setReactionStats(prev => ({ ...prev, reposts: uniqueRepostIds.size }));
-        })
-      ];
+      // Fetch and update comments (kind 1111 - NIP-22) incrementally
+      debugLog('Fetching NIP-22 comments...');
+      const nip22ByE = await ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId] });
+      const nip22ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate] }) : new Set();
+      
+      // Fetch kind 1 comments (legacy) incrementally
+      debugLog('Fetching legacy comments...');
+      const kind1ByE = await ndkToUse.fetchEvents({ kinds: [1], '#e': [postId] });
+      const kind1ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate] }) : new Set();
 
-      // Execute all fetches in parallel
-      await Promise.allSettled(fetchPromises);
+      // Deduplicate comment ids across sources
+      const commentIds = new Set<string>();
+      for (const ev of nip22ByE) commentIds.add(ev.id);
+      for (const ev of nip22ByA as Set<NDKEvent>) commentIds.add(ev.id);
+      for (const ev of kind1ByE) commentIds.add(ev.id);
+      for (const ev of kind1ByA as Set<NDKEvent>) commentIds.add(ev.id);
+      comments = commentIds.size;
+      debugLog('Comments fetched:', comments);
+      updateStats();
+
+      // Fetch and update zaps (kind 9735) incrementally
+      debugLog('Fetching zaps...');
+      const zapsByE = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
+      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : new Set();
+      const uniqueZapIds = new Set<string>();
+      for (const ev of zapsByE) uniqueZapIds.add(ev.id);
+      for (const ev of zapsByA as Set<NDKEvent>) uniqueZapIds.add(ev.id);
+      zaps = uniqueZapIds.size;
+      debugLog('Zaps fetched:', zaps);
+      updateStats();
+
+      // Fetch reposts (kind 6 and 16) incrementally
+      debugLog('Fetching reposts...');
+      const repostsByE = await ndkToUse.fetchEvents({ kinds: [6, 16], '#e': [postId] });
+      const repostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [6, 16], '#a': [aCoordinate] }) : new Set();
+      const uniqueRepostIds = new Set<string>();
+      for (const ev of repostsByE) uniqueRepostIds.add(ev.id);
+      for (const ev of repostsByA as Set<NDKEvent>) uniqueRepostIds.add(ev.id);
+      reposts = uniqueRepostIds.size;
+      debugLog('Reposts fetched:', reposts);
+      updateStats();
+
+      // Final update with loading complete
+      setReactionStats({
+        likes,
+        comments,
+        zaps,
+        reposts,
+        isLoading: false
+      });
+
+      debugLog('All reaction stats fetched:', { likes, comments, zaps, reposts });
 
     } catch (error) {
-      console.error('Error fetching reaction stats in background:', error);
+      console.error('Error fetching reaction stats:', error);
+      setReactionStats(prev => ({ ...prev, isLoading: false }));
     }
   }, [contextNdk, standaloneNdk, post?.pubkey, params.d]);
+
+  // Store the function in the ref whenever it changes
+  useEffect(() => {
+    fetchReactionStatsRef.current = fetchReactionStats;
+  }, [fetchReactionStats]);
 
   const loadAdditionalData = useCallback(async (postData: BlogPost) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) {
-      console.log('🔍 DEBUG: No NDK available for loading additional data');
+      debugLog('No NDK available for loading additional data');
       return;
     }
 
@@ -796,72 +675,72 @@ export default function BlogPost() {
       return processedContent;
     };
 
-    console.log('🔍 DEBUG: Loading additional data for post:', postData.id);
+    debugLog('Loading additional data for post:', postData.id);
 
     try {
       // Process content to replace npubs with usernames and convert image URLs
-      console.log('🔍 DEBUG: Processing content for npubs and images');
-      console.log('🔍 DEBUG: Original content:', postData.content.substring(0, 500) + '...');
+      debugLog('Processing content for npubs and images');
+      debugLog('Original content:', postData.content.substring(0, 500) + '...');
       let content = await processNpubs(postData.content, ndkToUse);
       content = processImageUrls(content);
-      console.log('🔍 DEBUG: Processed content:', content.substring(0, 500) + '...');
+      debugLog('Processed content:', content.substring(0, 500) + '...');
       setProcessedContent(content);
       
-      // Fetch author profile if not already available
+            // Fetch author profile if not already available
       if (!postData.author) {
-        console.log('🔍 DEBUG: Fetching author profile for:', postData.pubkey);
+        debugLog('Fetching author profile for:', postData.pubkey);
         
         // Check if we already have this profile cached
         const cachedProfile = getAuthorProfile(postData.pubkey);
         if (cachedProfile) {
-          console.log('🔍 DEBUG: Using cached profile for:', postData.pubkey);
+          debugLog('Using cached profile for:', postData.pubkey);
           const updatedPost = { ...postData, author: cachedProfile };
           setPost(updatedPost);
         } else {
-          console.log('🔍 DEBUG: Fetching profile for blog post:', postData.pubkey);
+          debugLog('Fetching profile for blog post:', postData.pubkey);
           const profile = await fetchProfileOnce(postData.pubkey, async () => {
             const user = ndkToUse.getUser({ pubkey: postData.pubkey });
             const profile = await user.fetchProfile();
             if (profile) {
-              console.log('🔍 DEBUG: Fetched profile:', { 
-                name: profile.name, 
-                displayName: profile.displayName 
+              debugLog('Fetched profile:', {
+                name: profile.name,
+                displayName: profile.displayName
               });
               return {
                 name: profile.name,
                 displayName: profile.displayName
               };
             }
-            console.log('🔍 DEBUG: No profile found for:', postData.pubkey);
+            debugLog('No profile found for:', postData.pubkey);
             return null;
           });
           
           if (profile) {
             const updatedPost = { ...postData, author: profile };
             setPost(updatedPost);
-            console.log('🔍 DEBUG: Updated post with author profile');
+            debugLog('Updated post with author profile');
           }
         }
       } else {
-        console.log('🔍 DEBUG: Post already has author profile');
+        debugLog('Post already has author profile');
       }
       
-      console.log('🔍 DEBUG: Additional data loading completed');
+      debugLog('Additional data loading completed');
     } catch (error) {
-      console.error('🔍 DEBUG: Error loading additional data:', error);
+      console.error('Error loading additional data:', error);
     }
   }, [contextNdk, standaloneNdk, getAuthorProfile, fetchProfileOnce]);
 
   const fetchPostByAuthorAndDTag = useCallback(async (pubkey: string, dTag: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) {
-      console.log('🔍 DEBUG: No NDK available for fetching post');
+      debugLog('No NDK available for fetching post');
       setLoading(false);
       return;
     }
 
     try {
-      console.log('🔍 DEBUG: Fetching events with:', { pubkey, dTag, kind: 30023 });
+      debugLog('Fetching events with:', { pubkey, dTag, kind: 30023 });
       
       // Fetch the most recent event with the given author and d tag
       const events = await ndkToUse.fetchEvents({
@@ -870,14 +749,14 @@ export default function BlogPost() {
         '#d': [dTag]
       });
 
-      console.log('🔍 DEBUG: Fetched events count:', events.size);
+      debugLog('Fetched events count:', events.size);
 
       if (events.size > 0) {
         // Get the most recent event
         const sortedEvents = Array.from(events).sort((a, b) => b.created_at - a.created_at);
         const event = sortedEvents[0];
         
-        console.log('🔍 DEBUG: Selected most recent event:', { 
+        debugLog('Selected most recent event:', { 
           id: event.id, 
           created_at: event.created_at,
           title: event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled'
@@ -907,7 +786,7 @@ export default function BlogPost() {
           emojiTags // Store emoji tags separately for processing
         };
 
-        console.log('🔍 DEBUG: Created post data:', { 
+        debugLog('Created post data:', { 
           id: postData.id, 
           title: postData.title, 
           contentLength: postData.content.length 
@@ -923,18 +802,18 @@ export default function BlogPost() {
         await loadAdditionalData(postData);
         setIsLoadingAdditionalData(false);
         
-        console.log('🔍 DEBUG: Post loaded successfully');
+        debugLog('Post loaded successfully');
 
         // Only add post to context if user is authenticated (to avoid polluting local storage)
         if (isAuthenticated) {
           addPost(postData);
         }
       } else {
-        console.log('🔍 DEBUG: No events found for pubkey and dTag:', { pubkey, dTag });
+        debugLog('No events found for pubkey and dTag:', { pubkey, dTag });
         setLoading(false);
       }
     } catch (error) {
-      console.error('🔍 DEBUG: Error fetching post:', error);
+      console.error('Error fetching post:', error);
       setLoading(false);
     }
   }, [contextNdk, standaloneNdk, isAuthenticated, addPost, loadAdditionalData]);
@@ -943,13 +822,13 @@ export default function BlogPost() {
   useEffect(() => {
     const resolveAuthor = async () => {
       if (!params.author || !params.d) {
-        console.log('🔍 DEBUG: Missing params:', { author: params.author, d: params.d });
+        debugLog('Missing params:', { author: params.author, d: params.d });
         return;
       }
 
       const ndkToUse = contextNdk || standaloneNdk;
       if (!ndkToUse) {
-        console.log('🔍 DEBUG: No NDK available');
+        debugLog('No NDK available');
         return;
       }
 
@@ -957,22 +836,22 @@ export default function BlogPost() {
         const author = decodeURIComponent(params.author as string);
         const dTag = decodeURIComponent(params.d as string);
         
-        console.log('🔍 DEBUG: Resolving author:', { author, dTag });
+        debugLog('Resolving author:', { author, dTag });
 
         // Resolve the author identifier to a pubkey
         const pubkey = await resolveNip05(ndkToUse, author);
         
-        console.log('🔍 DEBUG: Resolved pubkey:', { author, pubkey });
+        debugLog('Resolved pubkey:', { author, pubkey });
 
         if (pubkey) {
-          console.log('🔍 DEBUG: Fetching post with pubkey and dTag:', { pubkey, dTag });
+          debugLog('Fetching post with pubkey and dTag:', { pubkey, dTag });
           await fetchPostByAuthorAndDTag(pubkey, dTag);
         } else {
-          console.log('🔍 DEBUG: Could not resolve author identifier:', author);
+          debugLog('Could not resolve author identifier:', author);
           setLoading(false);
         }
       } catch (error) {
-        console.error('🔍 DEBUG: Error resolving author:', error);
+        console.error('Error resolving author:', error);
         setLoading(false);
       }
     };
@@ -982,10 +861,14 @@ export default function BlogPost() {
 
   // Fetch reaction stats when post is loaded
   useEffect(() => {
-    if (post?.id) {
-      fetchReactionStatsInBackground(post.id);
+    debugLog('useEffect for reaction stats triggered, post?.id:', post?.id);
+    if (post?.id && fetchReactionStatsRef.current) {
+      debugLog('Calling fetchReactionStatsInBackground with postId:', post.id);
+      fetchReactionStatsRef.current(post.id);
+    } else {
+      debugLog('No post.id available or function not ready, skipping reaction stats fetch');
     }
-  }, [post?.id, fetchReactionStatsInBackground]);
+  }, [post?.id]);
 
 
 
