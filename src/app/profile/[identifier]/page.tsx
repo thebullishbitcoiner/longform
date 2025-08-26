@@ -152,7 +152,7 @@ export default function ProfilePage() {
              tags: highlight.eventTags,
              content: highlight.content,
              sig: ''
-           } as any : undefined
+           } as NDKEvent : undefined
          })).sort((a, b) => b.created_at - a.created_at);
         
         setHighlights(profileHighlights);
