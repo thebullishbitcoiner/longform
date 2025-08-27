@@ -10,7 +10,9 @@ import Link from 'next/link';
 import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 import styles from './page.module.css';
-import { getCachedHighlights, cacheUserHighlights } from '@/utils/storage';
+import { getCachedHighlights, cacheUserHighlights, getCachedPosts, cacheUserPosts } from '@/utils/storage';
+import { hexToNote1 } from '@/utils/nostr';
+import toast from 'react-hot-toast';
 import { useBlog } from '@/contexts/BlogContext';
 
 // Create a standalone NDK instance for public access
@@ -42,6 +44,7 @@ interface ProfilePost {
   image?: string;
   tags: string[];
   dTag?: string;
+  event?: NDKEvent; // Store the original NDKEvent for JSON viewing
 }
 
 interface ProfileHighlight {
@@ -432,6 +435,96 @@ export default function ProfilePage() {
     }
   }, [profile, highlightsLoaded, highlightsLoading]);
 
+  // Function to fetch and cache posts
+  const fetchAndCachePosts = async (ndkToUse: NDK, pubkey: string) => {
+    // Fetch user's blog posts (kind 30023)
+    const postsQuery = await ndkToUse.fetchEvents({
+      kinds: [30023],
+      authors: [pubkey],
+      limit: 50,
+    });
+
+    // Fetch deletion events (kind 5) to filter out deleted posts
+    const deletionQuery = await ndkToUse.fetchEvents({
+      kinds: [5],
+      authors: [pubkey],
+      limit: 100,
+    });
+
+    // Create a set of deleted event IDs
+    const deletedEventIds = new Set<string>();
+    deletionQuery.forEach(deletionEvent => {
+      deletionEvent.tags.forEach((tag: string[]) => {
+        if (tag[0] === 'e') {
+          deletedEventIds.add(tag[1]);
+        }
+      });
+    });
+
+    console.log(`Profile: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
+
+    const allPosts = Array.from(postsQuery);
+    console.log(`Profile: Found ${allPosts.length} total posts`);
+
+    const profilePosts: ProfilePost[] = allPosts
+      .filter(event => {
+        // Filter out deleted posts
+        const isDeleted = deletedEventIds.has(event.id);
+        if (isDeleted) {
+          console.log(`Profile: Removing deleted post: ${event.id}`);
+        }
+        return !isDeleted;
+      })
+      .map(event => {
+        const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
+        const summary = event.tags.find(tag => tag[0] === 'summary')?.[1] || '';
+        const image = event.tags.find(tag => tag[0] === 'image')?.[1];
+        const tags = event.tags.filter(tag => tag[0] === 't').map(tag => tag[1]);
+        const dTag = event.tags.find(tag => tag[0] === 'd')?.[1];
+
+        // event.created_at is always in seconds (Unix timestamp)
+        const timestamp = event.created_at * 1000; // Convert seconds to milliseconds
+
+        return {
+          id: event.id,
+          title,
+          summary,
+          published_at: timestamp,
+          image,
+          tags,
+          dTag,
+          event: event, // Store the original NDKEvent
+        };
+      })
+      .sort((a, b) => b.published_at - a.published_at);
+
+    console.log(`Profile: Posts after filtering deletions: ${profilePosts.length}`);
+    
+    // Cache the posts for faster future loading
+    const postsForCache = profilePosts.map(post => ({
+      id: post.id,
+      title: post.title,
+      summary: post.summary,
+      published_at: post.published_at,
+      image: post.image,
+      tags: post.tags,
+      dTag: post.dTag,
+      eventData: post.event ? {
+        id: post.event.id,
+        pubkey: post.event.pubkey,
+        created_at: post.event.created_at || 0,
+        kind: post.event.kind || 30023,
+        tags: post.event.tags || [],
+        content: post.event.content || '',
+        sig: post.event.sig || ''
+      } : undefined // Store the complete event data for JSON viewing
+    }));
+    cacheUserPosts(pubkey, postsForCache);
+    console.log(`Profile: Cached ${postsForCache.length} posts for future use`);
+    
+    setPosts(profilePosts);
+  };
+
   // Resolve identifier and fetch profile
   useEffect(() => {
     const loadProfile = async () => {
@@ -502,68 +595,37 @@ export default function ProfilePage() {
           setIsProfileLegend(false);
         }
 
-        // Fetch user's blog posts (kind 30023)
-        const postsQuery = await ndkToUse.fetchEvents({
-          kinds: [30023],
-          authors: [pubkey],
-          limit: 50,
-        });
-
-        // Fetch deletion events (kind 5) to filter out deleted posts
-        const deletionQuery = await ndkToUse.fetchEvents({
-          kinds: [5],
-          authors: [pubkey],
-          limit: 100,
-        });
-
-        // Create a set of deleted event IDs
-        const deletedEventIds = new Set<string>();
-        deletionQuery.forEach(deletionEvent => {
-          deletionEvent.tags.forEach((tag: string[]) => {
-            if (tag[0] === 'e') {
-              deletedEventIds.add(tag[1]);
+        // Check cache first for posts
+        const cachedPosts = getCachedPosts(pubkey);
+        if (cachedPosts && cachedPosts.length > 0) {
+          console.log(`Profile: Using cached posts (${cachedPosts.length} items)`);
+          
+          // Convert cached posts to ProfilePost format
+          const profilePosts = cachedPosts.map(post => ({
+            id: post.id,
+            title: post.title,
+            summary: post.summary,
+            published_at: post.published_at,
+            image: post.image,
+            tags: post.tags,
+            dTag: post.dTag,
+            event: undefined // Don't create synthetic events for cached posts
+          })).sort((a, b) => b.published_at - a.published_at);
+          
+          setPosts(profilePosts);
+          
+          // Background fetch to refresh cache
+          setTimeout(async () => {
+            try {
+              await fetchAndCachePosts(ndkToUse, pubkey);
+            } catch (error) {
+              console.error('Error refreshing post cache:', error);
             }
-          });
-        });
-
-        console.log(`Profile: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
-
-        const allPosts = Array.from(postsQuery);
-        console.log(`Profile: Found ${allPosts.length} total posts`);
-
-        const profilePosts: ProfilePost[] = allPosts
-          .filter(event => {
-            // Filter out deleted posts
-            const isDeleted = deletedEventIds.has(event.id);
-            if (isDeleted) {
-              console.log(`Profile: Removing deleted post: ${event.id}`);
-            }
-            return !isDeleted;
-          })
-          .map(event => {
-            const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
-            const summary = event.tags.find(tag => tag[0] === 'summary')?.[1] || '';
-            const image = event.tags.find(tag => tag[0] === 'image')?.[1];
-            const tags = event.tags.filter(tag => tag[0] === 't').map(tag => tag[1]);
-            const dTag = event.tags.find(tag => tag[0] === 'd')?.[1];
-
-            // event.created_at is always in seconds (Unix timestamp)
-            const timestamp = event.created_at * 1000; // Convert seconds to milliseconds
-
-            return {
-              id: event.id,
-              title,
-              summary,
-              published_at: timestamp,
-              image,
-              tags,
-              dTag,
-            };
-          })
-          .sort((a, b) => b.published_at - a.published_at);
-
-        console.log(`Profile: Posts after filtering deletions: ${profilePosts.length}`);
-        setPosts(profilePosts);
+          }, 100);
+        } else {
+          // Fetch posts from network if no cache available
+          await fetchAndCachePosts(ndkToUse, pubkey);
+        }
 
         setLoading(false);
 
@@ -617,6 +679,20 @@ export default function ProfilePage() {
       // You could add a toast notification here if you want
     } catch (error) {
       console.error('Failed to copy npub:', error);
+    }
+  };
+
+  const handleCopyNoteId = async (noteId: string) => {
+    try {
+      // Convert hex to note1 format
+      const note1Id = hexToNote1(noteId);
+      const textToCopy = note1Id || noteId; // Fallback to hex if conversion fails
+      
+      await navigator.clipboard.writeText(textToCopy);
+      toast.success('Note ID copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy note ID:', error);
+      toast.error('Failed to copy note ID');
     }
   };
 
@@ -710,34 +786,114 @@ export default function ProfilePage() {
     setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
   };
 
-  const openPostJson = (post: ProfilePost) => {
-    // Create a full Nostr event object from the post data
-    const fullEvent = {
-      id: post.id,
-      pubkey: profile.pubkey,
-      created_at: Math.floor(post.published_at / 1000), // Convert back to seconds
-      kind: 30023,
-      tags: [
-        ['d', post.dTag || post.id],
-        ['title', post.title],
-        ['summary', post.summary],
-        ['client', 'Longform._']
-      ],
-      content: '', // We don't have the full content in our post data
-      sig: '' // We don't have the signature in our post data
-    };
-
-    // Add image tag if available
-    if (post.image) {
-      fullEvent.tags.push(['image', post.image]);
+  const openPostJson = async (post: ProfilePost) => {
+    if (post.event) {
+      // Use the actual NDKEvent if available
+      const fullEvent = {
+        id: post.event.id,
+        pubkey: post.event.pubkey,
+        created_at: post.event.created_at,
+        kind: post.event.kind,
+        tags: post.event.tags,
+        content: post.event.content,
+        sig: post.event.sig
+      };
+      setJsonModal({ visible: true, data: fullEvent });
+    } else {
+      // Check if we have cached event data first
+      const cachedPosts = getCachedPosts(profile.pubkey);
+      const cachedPost = cachedPosts?.find(p => p.id === post.id);
+      
+      if (cachedPost?.eventData) {
+        // Use cached event data
+        console.log('Using cached event data for post:', post.id);
+        setJsonModal({ visible: true, data: cachedPost.eventData });
+      } else {
+        // For cached posts without original event, try to fetch it from the network
+        try {
+          console.log('Attempting to fetch original post event:', post.id);
+          const ndkToUse = contextNdk || standaloneNdk;
+          if (ndkToUse) {
+            // Try to fetch the original event by ID
+            const originalEvent = await ndkToUse.fetchEvent(post.id);
+            if (originalEvent) {
+              console.log('Successfully fetched original post event');
+              const fullEvent = {
+                id: originalEvent.id,
+                pubkey: originalEvent.pubkey,
+                created_at: originalEvent.created_at,
+                kind: originalEvent.kind,
+                tags: originalEvent.tags,
+                content: originalEvent.content,
+                sig: originalEvent.sig
+              };
+              setJsonModal({ visible: true, data: fullEvent });
+            } else {
+              // Show cached data if original event not found
+              const simplifiedEvent = {
+                id: post.id,
+                pubkey: profile.pubkey,
+                created_at: Math.floor(post.published_at / 1000),
+                kind: 30023,
+                tags: [
+                  ['d', post.dTag || post.id],
+                  ['title', post.title],
+                  ['summary', post.summary],
+                  ['client', 'Longform._'],
+                  ...(post.image ? [['image', post.image]] : []),
+                  ...post.tags.map(tag => ['t', tag])
+                ],
+                content: '',
+                sig: '',
+                note: 'Original event not found on network. Showing cached data.'
+              };
+              setJsonModal({ visible: true, data: simplifiedEvent });
+            }
+          } else {
+            // No NDK available, show cached data
+            const simplifiedEvent = {
+              id: post.id,
+              pubkey: profile.pubkey,
+              created_at: Math.floor(post.published_at / 1000),
+              kind: 30023,
+              tags: [
+                ['d', post.dTag || post.id],
+                ['title', post.title],
+                ['summary', post.summary],
+                ['client', 'Longform._'],
+                ...(post.image ? [['image', post.image]] : []),
+                ...post.tags.map(tag => ['t', tag])
+              ],
+              content: '',
+              sig: '',
+              note: 'No network connection available. Showing cached data.'
+            };
+            setJsonModal({ visible: true, data: simplifiedEvent });
+          }
+        } catch (error) {
+          console.error('Error fetching original post event:', error);
+          // Show cached data if fetch fails
+          const simplifiedEvent = {
+            id: post.id,
+            pubkey: profile.pubkey,
+            created_at: Math.floor(post.published_at / 1000),
+            kind: 30023,
+            tags: [
+              ['d', post.dTag || post.id],
+              ['title', post.title],
+              ['summary', post.summary],
+              ['client', 'Longform._'],
+              ...(post.image ? [['image', post.image]] : []),
+              ...post.tags.map(tag => ['t', tag])
+            ],
+            content: '',
+            sig: '',
+            note: 'Error fetching original event. Showing cached data.'
+          };
+          setJsonModal({ visible: true, data: simplifiedEvent });
+        }
+      }
     }
-
-    // Add topic tags
-    post.tags.forEach(tag => {
-      fullEvent.tags.push(['t', tag]);
-    });
-
-    setJsonModal({ visible: true, data: fullEvent });
     setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
   };
 
@@ -1040,6 +1196,28 @@ export default function ProfilePage() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {contextMenu.postId && (
+            <button 
+              className={styles.contextMenuItem}
+              onClick={async () => {
+                await handleCopyNoteId(contextMenu.postId!);
+                closeContextMenu();
+              }}
+            >
+              Copy Note ID
+            </button>
+          )}
+          {contextMenu.highlightId && (
+            <button 
+              className={styles.contextMenuItem}
+              onClick={async () => {
+                await handleCopyNoteId(contextMenu.highlightId!);
+                closeContextMenu();
+              }}
+            >
+              Copy Note ID
+            </button>
+          )}
           <button 
             className={styles.contextMenuItem}
             onClick={async () => {
@@ -1051,7 +1229,7 @@ export default function ProfilePage() {
               } else if (contextMenu.postId) {
                 const post = posts.find(p => p.id === contextMenu.postId);
                 if (post) {
-                  openPostJson(post);
+                  await openPostJson(post);
                 }
               }
             }}

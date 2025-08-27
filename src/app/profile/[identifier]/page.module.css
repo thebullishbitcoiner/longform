@@ -446,7 +446,7 @@
 
 .postHeader {
   position: absolute;
-  top: 0.75rem;
+  top: 1.5rem; /* Align with the first line of the title */
   right: 0.75rem;
   z-index: 10;
 }
@@ -458,7 +458,7 @@
   }
   
   .postHeader {
-    top: 0.5rem;
+    top: 1rem; /* Align with the first line of the title on mobile */
     right: 0.5rem;
   }
 }

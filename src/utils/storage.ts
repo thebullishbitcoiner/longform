@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
   READ_POSTS: 'longform_readPosts',
   AUTHOR_PROFILES: 'longform_authorProfiles',
   USER_HIGHLIGHTS: 'longform_userHighlights',
+  USER_POSTS: 'longform_userPosts',
   HIGHLIGHT_CACHE_TIMESTAMP: 'longform_highlightCacheTimestamp',
   RELAY_LIST_PREFIX: 'longform_relay_list_'
 };
@@ -231,6 +232,80 @@ export function clearHighlightCache(): void {
 export function getHighlightsForPost(pubkey: string, postId: string): CachedHighlight[] {
   const highlights = getCachedHighlights(pubkey) || [];
   return highlights.filter(h => h.postId === postId);
+}
+
+// Post caching functions
+export interface CachedPost {
+  id: string;
+  title: string;
+  summary: string;
+  published_at: number;
+  image?: string;
+  tags: string[];
+  dTag?: string;
+  // Store the complete event data for JSON viewing
+  eventData?: {
+    id: string;
+    pubkey: string;
+    created_at: number;
+    kind: number;
+    tags: string[][];
+    content: string;
+    sig: string;
+  };
+}
+
+// Cache user posts
+export function cacheUserPosts(pubkey: string, posts: CachedPost[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const postsData = {
+      pubkey,
+      posts,
+      timestamp: Date.now()
+    };
+    
+    const success = safeSetItem(STORAGE_KEYS.USER_POSTS, JSON.stringify(postsData));
+    if (!success) {
+      console.warn('Failed to cache posts due to storage constraints');
+    }
+  } catch (error) {
+    console.error('Error caching posts:', error);
+  }
+}
+
+// Get cached posts for a user
+export function getCachedPosts(pubkey: string): CachedPost[] | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const cached = localStorage.getItem(STORAGE_KEYS.USER_POSTS);
+    if (!cached) return null;
+    
+    const data = JSON.parse(cached);
+    
+    // Check if cache is for the same user
+    if (data.pubkey !== pubkey) return null;
+    
+    // Check if cache is fresh (less than 1 hour old)
+    const cacheAge = Date.now() - data.timestamp;
+    if (cacheAge > 60 * 60 * 1000) { // 1 hour
+      console.log('Post cache expired, will refresh');
+      return null;
+    }
+    
+    return data.posts || [];
+  } catch (error) {
+    console.error('Error reading cached posts:', error);
+    return null;
+  }
+}
+
+// Clear post cache
+export function clearPostCache(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEYS.USER_POSTS);
 }
 
 // Export storage utilities for other components

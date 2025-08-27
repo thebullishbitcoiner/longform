@@ -25,7 +25,6 @@ export interface Subscriber {
   npub: string;
   last_payment: string;
   created_at?: string;
-  updated_at?: string;
 }
 
 export interface ProStatus {

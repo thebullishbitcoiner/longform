@@ -40,7 +40,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       // Query the subscribers table for the given npub
       const { data, error } = await supabase
         .from('subscribers')
-        .select('*')
+        .select('npub, last_payment, created_at')
         .eq('npub', npub)
         .single();
 
@@ -97,7 +97,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       // Query the legends table for the given npub
       const { data, error } = await supabase
         .from('legends')
-        .select('*')
+        .select('npub, created_at')
         .eq('npub', npub)
         .single();
 
@@ -134,7 +134,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       // Query the subscribers table for the given npub
       const { data, error } = await supabase
         .from('subscribers')
-        .select('*')
+        .select('npub, last_payment, created_at')
         .eq('npub', currentUser.npub)
         .single();
 
