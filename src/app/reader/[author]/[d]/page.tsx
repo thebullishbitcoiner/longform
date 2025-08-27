@@ -1583,18 +1583,30 @@ export default function BlogPost() {
 
   // Add event listeners for text selection
   useEffect(() => {
+    const handleScroll = () => {
+      if (showContextMenu) {
+        setShowContextMenu(false);
+        setSelectedText(null);
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+
     document.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('click', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
     };
-  }, [handleMouseUp, handleClickOutside, handleKeyDown, handleContextMenu]);
+  }, [handleMouseUp, handleClickOutside, handleKeyDown, handleContextMenu, showContextMenu]);
 
   // Mark post as read when end of content is reached (only if authenticated)
   useEffect(() => {

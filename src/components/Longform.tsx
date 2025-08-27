@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlusIcon, TrashIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
@@ -458,20 +458,15 @@ export default function Longform() {
 
   const handleCopyNoteId = async (note: PublishedNote) => {
     try {
-      // Convert hex event ID to note1 format according to NIP-19
-      const note1 = hexToNote1(note.id);
-      const textToCopy = note1 || note.id;
+      // Convert hex to note1 format
+      const note1Id = hexToNote1(note.id);
+      const textToCopy = note1Id || note.id; // Fallback to hex if conversion fails
       
-      await copyToClipboard(textToCopy);
+      await navigator.clipboard.writeText(textToCopy);
       toast.success('Note ID copied to clipboard!');
-    } catch {
-      // Show manual copy modal for mobile or when clipboard fails
-      const textToCopy = hexToNote1(note.id) || note.id;
-      setShareModal({
-        visible: true,
-        text: textToCopy,
-        title: 'Copy Note ID'
-      });
+    } catch (error) {
+      console.error('Failed to copy note ID:', error);
+      toast.error('Failed to copy note ID');
     }
   };
 
@@ -552,7 +547,7 @@ export default function Longform() {
     setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
   };
 
-  // Close context menu when clicking outside
+  // Close context menu when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = () => {
       if (contextMenu.visible) {
@@ -560,8 +555,21 @@ export default function Longform() {
       }
     };
 
+    const handleScroll = () => {
+      if (contextMenu.visible) {
+        setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
+      }
+    };
+
     document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    document.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, [contextMenu.visible]);
 
   // Prevent scrolling when modals are open
@@ -668,6 +676,15 @@ export default function Longform() {
                   className="published-item"
                   onClick={() => handleViewPublished(note.id)}
                 >
+                  <div className="published-header">
+                    <button
+                      onClick={(e) => handleContextMenu(e, note.id)}
+                      className="menu-button"
+                      title="More options"
+                    >
+                      <EllipsisVerticalIcon />
+                    </button>
+                  </div>
                   <div className="published-content">
                     <div className="published-info">
                       <div className="published-title">
@@ -696,13 +713,6 @@ export default function Longform() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => handleContextMenu(e, note.id)}
-                      className="menu-button"
-                      title="More options"
-                    >
-                      <EllipsisHorizontalIcon />
-                    </button>
                   </div>
                 </div>
               ))}

@@ -629,7 +629,7 @@
 
 .highlightHeader {
   position: absolute;
-  top: 0.75rem;
+  top: 1.5rem; /* Align with the first line of the highlight text */
   right: 0.75rem;
   z-index: 10;
 }
@@ -699,19 +699,19 @@
   border-radius: 0.5rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3), 0 4px 6px rgba(0, 0, 0, 0.1);
   z-index: 3000;
-  min-width: 120px;
+  min-width: 140px;
   overflow: hidden;
 }
 
 .contextMenuItem {
   display: block;
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1.25rem;
   background: none;
   border: none;
   color: rgb(244 244 245);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 1rem;
   text-align: left;
   transition: background-color 0.2s ease;
 }
@@ -734,7 +734,7 @@
   }
   
   .highlightHeader {
-    top: 0.5rem;
+    top: 1rem; /* Align with the first line of the highlight text on mobile */
     right: 0.5rem;
   }
   
@@ -758,12 +758,12 @@
   }
   
   .contextMenu {
-    min-width: 100px;
+    min-width: 120px;
   }
   
   .contextMenuItem {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
   }
 } 
 

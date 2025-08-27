@@ -103,7 +103,7 @@ export default function ProfilePage() {
     }
   }, [contextNdk, standaloneNdk]);
 
-  // Close context menu when clicking outside
+  // Close context menu when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = () => {
       if (contextMenu.visible) {
@@ -111,9 +111,20 @@ export default function ProfilePage() {
       }
     };
 
+    const handleScroll = () => {
+      if (contextMenu.visible) {
+        closeContextMenu();
+      }
+    };
+
     document.addEventListener('click', handleClickOutside);
+    document.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
     return () => {
       document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
     };
   }, [contextMenu.visible]);
 
@@ -902,12 +913,13 @@ export default function ProfilePage() {
     event.stopPropagation();
     
     // Calculate position to keep menu on screen
-    const menuWidth = 120; // Approximate menu width
-    const menuHeight = 50; // Approximate menu height
+    const menuWidth = 140; // Increased menu width
+    const menuHeight = 120; // Increased menu height for multiple items
     const padding = 10;
+    const buttonOffset = 10; // Reduced offset to position menu closer to the button
     
     let x = event.clientX;
-    let y = event.clientY;
+    let y = event.clientY + buttonOffset; // Position below the button
     
     // Adjust horizontal position to keep menu on screen
     if (x + menuWidth > window.innerWidth - padding) {
@@ -919,7 +931,7 @@ export default function ProfilePage() {
     
     // Adjust vertical position to keep menu on screen
     if (y + menuHeight > window.innerHeight - padding) {
-      y = window.innerHeight - menuHeight - padding;
+      y = event.clientY - menuHeight - buttonOffset; // Position above the button if not enough space below
     }
     if (y < padding) {
       y = padding;
@@ -939,12 +951,13 @@ export default function ProfilePage() {
     event.stopPropagation();
     
     // Calculate position to keep menu on screen
-    const menuWidth = 120; // Approximate menu width
-    const menuHeight = 50; // Approximate menu height
+    const menuWidth = 140; // Increased menu width
+    const menuHeight = 120; // Increased menu height for multiple items
     const padding = 10;
+    const buttonOffset = 10; // Reduced offset to position menu closer to the button
     
     let x = event.clientX;
-    let y = event.clientY;
+    let y = event.clientY + buttonOffset; // Position below the button
     
     // Adjust horizontal position to keep menu on screen
     if (x + menuWidth > window.innerWidth - padding) {
@@ -956,7 +969,7 @@ export default function ProfilePage() {
     
     // Adjust vertical position to keep menu on screen
     if (y + menuHeight > window.innerHeight - padding) {
-      y = window.innerHeight - menuHeight - padding;
+      y = event.clientY - menuHeight - buttonOffset; // Position above the button if not enough space below
     }
     if (y < padding) {
       y = padding;
