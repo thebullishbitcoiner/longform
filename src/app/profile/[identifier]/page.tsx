@@ -718,29 +718,33 @@ export default function ProfilePage() {
 
     setIsSubscribing(true);
     try {
+      const action = isSubscribed ? 'unsubscribe' : 'subscribe';
+      
       const { error } = await supabase
-        .from('pending_subscribers')
+        .from('action_queue')
         .insert({
           author: profile.npub,
-          subscriber: currentUser.npub,
-          synced_to_nostr: false
+          reader: currentUser.npub,
+          action: action,
+          created_at: new Date().toISOString()
         });
 
       if (error) {
-        console.error('Error creating subscription:', error);
-        // Check if it's a duplicate key error (user already subscribed)
+        console.error(`Error creating ${action} request:`, error);
+        // Check if it's a duplicate key error (user already has pending request)
         if (error.code === '23505') {
-          setIsSubscribed(true);
+          // If already subscribed and trying to unsubscribe, or vice versa
+          setIsSubscribed(!isSubscribed);
         } else {
-          toast.error('Failed to subscribe. Please try again.');
+          toast.error(`Failed to ${action}. Please try again.`);
         }
         return;
       }
 
-      setIsSubscribed(true);
+      setIsSubscribed(!isSubscribed);
     } catch (error) {
-      console.error('Error subscribing:', error);
-      toast.error('Failed to subscribe. Please try again.');
+      console.error('Error with subscription action:', error);
+      toast.error('Failed to process request. Please try again.');
     } finally {
       setIsSubscribing(false);
     }
@@ -1212,7 +1216,7 @@ export default function ProfilePage() {
                   <button 
                     className={styles.subscribeButton}
                     onClick={handleSubscribe}
-                    disabled={isSubscribing || isSubscribed}
+                    disabled={isSubscribing}
                   >
                     {isSubscribed ? 'Subscribed ✓' : 'Subscribe'}
                   </button>

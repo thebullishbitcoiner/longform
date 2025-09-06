@@ -21,7 +21,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Database types for TypeScript
-export interface Subscriber {
+export interface Pro {
   npub: string;
   last_payment: string;
   created_at?: string;
@@ -39,9 +39,10 @@ export interface Legend {
   created_at: string;
 }
 
-export interface PendingSubscriber {
+export interface ActionQueue {
+  id?: number; // int8 (bigint) with auto-increment in Supabase
   author: string;
-  subscriber: string;
-  synced_to_nostr: boolean;
+  reader: string;
+  action: 'subscribe' | 'unsubscribe';
   created_at?: string;
 }

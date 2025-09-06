@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { supabase, ProStatus, Subscriber } from '@/config/supabase';
+import { supabase, ProStatus, Pro } from '@/config/supabase';
 import { useNostr } from './NostrContext';
 
 interface SupabaseContextType {
@@ -37,9 +37,9 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       
       console.log('Checking PRO status for npub:', npub);
       
-      // Query the subscribers table for the given npub
+      // Query the pros table for the given npub
       const { data, error } = await supabase
-        .from('subscribers')
+        .from('pros')
         .select('npub, last_payment, created_at')
         .eq('npub', npub)
         .single();
@@ -48,8 +48,8 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
 
       if (error) {
         if (error.code === 'PGRST116') {
-          // No rows returned - user is not a subscriber
-          console.log('No subscriber found for npub:', npub);
+          // No rows returned - user is not a pro
+          console.log('No pro found for npub:', npub);
           return { isPro: false };
         }
         console.error('Supabase error:', error);
@@ -60,8 +60,8 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
         return { isPro: false };
       }
 
-      const subscriber: Subscriber = data;
-      const lastPayment = new Date(subscriber.last_payment);
+      const pro: Pro = data;
+      const lastPayment = new Date(pro.last_payment);
       const now = new Date();
       
       // Calculate expiration date (30 days from last payment)
@@ -76,7 +76,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
 
       const status: ProStatus = {
         isPro,
-        lastPayment: subscriber.last_payment,
+        lastPayment: pro.last_payment,
         expiresAt: expiresAt.toISOString(),
         isInBuffer
       };
@@ -131,9 +131,9 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
     try {
       console.log('Refreshing PRO status for npub:', currentUser.npub);
       
-      // Query the subscribers table for the given npub
+      // Query the pros table for the given npub
       const { data, error } = await supabase
-        .from('subscribers')
+        .from('pros')
         .select('npub, last_payment, created_at')
         .eq('npub', currentUser.npub)
         .single();
@@ -142,8 +142,8 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
 
       if (error) {
         if (error.code === 'PGRST116') {
-          // No rows returned - user is not a subscriber
-          console.log('No subscriber found for npub:', currentUser.npub);
+          // No rows returned - user is not a pro
+          console.log('No pro found for npub:', currentUser.npub);
           setProStatus({ isPro: false });
           return;
         }
@@ -156,8 +156,8 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
         return;
       }
 
-      const subscriber: Subscriber = data;
-      const lastPayment = new Date(subscriber.last_payment);
+      const pro: Pro = data;
+      const lastPayment = new Date(pro.last_payment);
       const now = new Date();
       
       // Calculate expiration date (30 days from last payment)
@@ -172,7 +172,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
 
       const status: ProStatus = {
         isPro,
-        lastPayment: subscriber.last_payment,
+        lastPayment: pro.last_payment,
         expiresAt: expiresAt.toISOString(),
         isInBuffer
       };
