@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useSupabase } from '@/contexts/SupabaseContext';
+import { supabase } from '@/config/supabase';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
 import NDK, { NDKEvent } from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
@@ -65,7 +66,7 @@ type TabType = 'posts' | 'highlights';
 
 export default function ProfilePage() {
   const params = useParams();
-  const { ndk: contextNdk, isAuthenticated } = useNostr();
+  const { ndk: contextNdk, isAuthenticated, currentUser } = useNostr();
   const { getAuthorProfile, fetchProfileOnce } = useBlog();
   const { checkProStatus, checkLegendStatus } = useSupabase();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -90,6 +91,8 @@ export default function ProfilePage() {
   });
   const [isProfilePro, setIsProfilePro] = useState(false);
   const [isProfileLegend, setIsProfileLegend] = useState(false);
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -707,6 +710,42 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSubscribe = async () => {
+    if (!isAuthenticated || !currentUser?.npub || !profile) {
+      toast.error('Please log in to subscribe');
+      return;
+    }
+
+    setIsSubscribing(true);
+    try {
+      const { error } = await supabase
+        .from('pending_subscribers')
+        .insert({
+          author: profile.npub,
+          subscriber: currentUser.npub,
+          synced_to_nostr: false
+        });
+
+      if (error) {
+        console.error('Error creating subscription:', error);
+        // Check if it's a duplicate key error (user already subscribed)
+        if (error.code === '23505') {
+          setIsSubscribed(true);
+        } else {
+          toast.error('Failed to subscribe. Please try again.');
+        }
+        return;
+      }
+
+      setIsSubscribed(true);
+    } catch (error) {
+      console.error('Error subscribing:', error);
+      toast.error('Failed to subscribe. Please try again.');
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
   const openHighlightJson = async (highlight: ProfileHighlight) => {
     if (highlight.event) {
       // Use the actual NDKEvent if available
@@ -1165,6 +1204,18 @@ export default function ProfilePage() {
                 <div className={styles.profileIdentifier}>
                   <span className={styles.identifierLabel}>NIP-05:</span>
                   <span className={styles.identifierValue}>{profile.nip05}</span>
+                </div>
+              )}
+              {/* Subscribe button for PRO and Legend users */}
+              {isAuthenticated && (isProfilePro || isProfileLegend) && (
+                <div className={styles.subscribeSection}>
+                  <button 
+                    className={styles.subscribeButton}
+                    onClick={handleSubscribe}
+                    disabled={isSubscribing || isSubscribed}
+                  >
+                    {isSubscribed ? 'Subscribed ✓' : 'Subscribe'}
+                  </button>
                 </div>
               )}
               {profile.about && (

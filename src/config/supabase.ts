@@ -38,3 +38,10 @@ export interface Legend {
   npub: string;
   created_at: string;
 }
+
+export interface PendingSubscriber {
+  author: string;
+  subscriber: string;
+  synced_to_nostr: boolean;
+  created_at?: string;
+}
