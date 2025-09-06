@@ -15,15 +15,12 @@ import { getCachedHighlights, cacheUserHighlights, getCachedPosts, cacheUserPost
 import { hexToNote1 } from '@/utils/nostr';
 import toast from 'react-hot-toast';
 import { useBlog } from '@/contexts/BlogContext';
+import { DEFAULT_RELAYS } from '@/config/relays';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
   return new NDK({
-    explicitRelayUrls: [
-      'wss://relay.damus.io',
-      'wss://relay.nostr.band',
-      'wss://relay.primal.net'
-    ]
+    explicitRelayUrls: DEFAULT_RELAYS
   });
 };
 

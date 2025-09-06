@@ -11,13 +11,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useRouter } from 'next/navigation';
 import { generateNip05Url, getUserIdentifier } from '@/utils/nostr';
 import { AuthGuard } from '@/components/AuthGuard';
-
-// Configuration: Specify which relays to use for contact list queries
-// You can modify this list to use only the relays you trust
-const CONTACT_LIST_RELAYS = [
-  'wss://relay.nostr.band', 
-  'wss://purplepag.es'
-];
+import { CONTACT_LIST_RELAYS } from '@/config/relays';
 
 function getTagValue(tags: string[][], tagName: string): string | undefined {
   return tags.find(tag => tag[0] === tagName)?.[1];

@@ -17,15 +17,12 @@ import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
+import { DEFAULT_RELAYS } from '@/config/relays';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
   return new NDK({
-    explicitRelayUrls: [
-      'wss://relay.damus.io',
-      'wss://relay.nostr.band',
-      'wss://relay.primal.net'
-    ]
+    explicitRelayUrls: DEFAULT_RELAYS
   });
 };
 

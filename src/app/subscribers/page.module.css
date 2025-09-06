@@ -166,6 +166,16 @@
   border: 1px solid #3f3f46;
 }
 
+.pending-removal-badge {
+  background: #7f1d1d;
+  color: #fca5a5;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.375rem;
+  border: 1px solid #991b1b;
+}
+
 .avatar-image {
   width: 3rem;
   height: 3rem;
@@ -603,5 +613,76 @@
   .modal-add {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Action Queue Modal Styles */
+.actions-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #27272a;
+  border-radius: 0.5rem;
+  background: #000000;
+  margin-top: 1rem;
+}
+
+.action-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #27272a;
+  gap: 1rem;
+}
+
+.action-item:last-child {
+  border-bottom: none;
+}
+
+.action-type {
+  font-weight: 600;
+  color: #8b5cf6;
+  min-width: 100px;
+}
+
+.action-reader {
+  font-size: 0.875rem;
+  color: #ffffff;
+  flex: 1;
+  font-weight: 500;
+}
+
+.modal-ok {
+  background: linear-gradient(135deg, #8b5cf6, #a855f7);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.modal-ok:hover {
+  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  transform: translateY(-1px);
+}
+
+.modal-ok:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 640px) {
+  .action-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .action-type,
+  .action-reader {
+    min-width: auto;
+    width: 100%;
   }
 }

@@ -45,4 +45,5 @@ export interface ActionQueue {
   reader: string;
   action: 'subscribe' | 'unsubscribe';
   created_at?: string;
+  processed?: boolean;
 }

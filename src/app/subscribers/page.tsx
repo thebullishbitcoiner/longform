@@ -7,6 +7,7 @@ import { UserIcon, UsersIcon, ArrowPathIcon, PlusIcon, XMarkIcon } from '@heroic
 import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
 import Image from 'next/image';
+import { supabase } from '@/config/supabase';
 import styles from './page.module.css';
 
 interface Subscriber {
@@ -17,6 +18,7 @@ interface Subscriber {
   picture?: string;
   nip05?: string;
   isPending?: boolean;
+  isPendingRemoval?: boolean;
 }
 
 const SubscribersPage: React.FC = () => {
@@ -29,6 +31,9 @@ const SubscribersPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [npubInput, setNpubInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isActionQueueModalOpen, setIsActionQueueModalOpen] = useState(false);
+  const [pendingActions, setPendingActions] = useState<{id?: number; author: string; reader: string; action: string; created_at: string; readerDisplayName?: string}[]>([]);
+  const [processedActionIds, setProcessedActionIds] = useState<number[]>([]);
 
   // Fetch subscribers from kind 30000 events with "longform-subscribers" d tag
   const fetchSubscribers = useCallback(async () => {
@@ -164,6 +169,159 @@ const SubscribersPage: React.FC = () => {
     }
   }, [ndk, currentUser, isConnected]);
 
+  // Check for pending actions in the action queue
+  const checkPendingActions = useCallback(async () => {
+    if (!currentUser?.npub || !ndk) return;
+
+    try {
+      console.log('Subscribers: Checking for pending actions for author:', currentUser.npub);
+      
+      const { data, error } = await supabase
+        .from('action_queue')
+        .select('*')
+        .eq('author', currentUser.npub)
+        .eq('processed', false)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching pending actions:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        console.log('Subscribers: Found', data.length, 'pending actions');
+        
+        // Fetch display names for each reader
+        const actionsWithDisplayNames = await Promise.all(
+          data.map(async (action) => {
+            try {
+              // Convert npub to pubkey for profile fetching
+              const { bech32 } = await import('bech32');
+              const { words } = bech32.decode(action.reader);
+              const pubkey = Buffer.from(bech32.fromWords(words)).toString('hex');
+              
+              const ndkUser = ndk.getUser({ pubkey });
+              const profile = await ndkUser.fetchProfile();
+              
+              return {
+                ...action,
+                readerDisplayName: profile?.displayName || profile?.name || 'Anonymous'
+              };
+            } catch (error) {
+              console.error('Error fetching profile for reader:', action.reader, error);
+              return {
+                ...action,
+                readerDisplayName: 'Unknown User'
+              };
+            }
+          })
+        );
+        
+        setPendingActions(actionsWithDisplayNames);
+        setIsActionQueueModalOpen(true);
+      } else {
+        console.log('Subscribers: No pending actions found');
+        setPendingActions([]);
+      }
+    } catch (error) {
+      console.error('Error checking pending actions:', error);
+    }
+  }, [currentUser?.npub, ndk]);
+
+  // Handle OK button click in action queue modal
+  const handleActionQueueOK = async () => {
+    if (!ndk || !currentUser) return;
+
+    try {
+      // Process each pending action
+      const newSubscribers: Subscriber[] = [];
+      const subscribersToMarkForRemoval = new Set<string>();
+
+      for (const action of pendingActions) {
+        if (action.action === 'subscribe') {
+          // Convert npub to pubkey for the new subscriber
+          try {
+            const { bech32 } = await import('bech32');
+            const { words } = bech32.decode(action.reader);
+            const pubkey = Buffer.from(bech32.fromWords(words)).toString('hex');
+
+            // Check if subscriber already exists
+            const existingSubscriber = subscribers.find(sub => sub.pubkey === pubkey);
+            if (!existingSubscriber) {
+              // Fetch profile for the new subscriber
+              const ndkUser = ndk.getUser({ pubkey });
+              const profile = await ndkUser.fetchProfile();
+
+              const newSubscriber: Subscriber = {
+                pubkey,
+                npub: action.reader,
+                name: profile?.name,
+                displayName: profile?.displayName,
+                picture: profile?.image,
+                nip05: profile?.nip05,
+                isPending: true
+              };
+
+              newSubscribers.push(newSubscriber);
+            }
+          } catch (error) {
+            console.error('Error processing subscribe action:', error);
+          }
+        } else if (action.action === 'unsubscribe') {
+          // Mark subscriber for pending removal
+          try {
+            const { bech32 } = await import('bech32');
+            const { words } = bech32.decode(action.reader);
+            const pubkey = Buffer.from(bech32.fromWords(words)).toString('hex');
+            subscribersToMarkForRemoval.add(pubkey);
+          } catch (error) {
+            console.error('Error processing unsubscribe action:', error);
+          }
+        }
+      }
+
+      // Update subscribers list
+      setSubscribers(prev => {
+        // Add new subscribers
+        let updatedSubscribers = [...prev, ...newSubscribers];
+        
+        // Mark existing subscribers for pending removal
+        updatedSubscribers = updatedSubscribers.map(sub => {
+          if (subscribersToMarkForRemoval.has(sub.pubkey)) {
+            return { ...sub, isPendingRemoval: true };
+          }
+          return sub;
+        });
+        
+        return updatedSubscribers;
+      });
+
+      // Store action IDs for later processing and close the modal
+      const actionIds = pendingActions
+        .filter(action => action.id)
+        .map(action => action.id!);
+      setProcessedActionIds(actionIds);
+      setIsActionQueueModalOpen(false);
+      setPendingActions([]);
+
+      // Show success message
+      const subscribeCount = newSubscribers.length;
+      const unsubscribeCount = subscribersToMarkForRemoval.size;
+      
+      if (subscribeCount > 0 && unsubscribeCount > 0) {
+        toast.success(`Added ${subscribeCount} subscriber${subscribeCount !== 1 ? 's' : ''} and marked ${unsubscribeCount} for removal (pending save)`);
+      } else if (subscribeCount > 0) {
+        toast.success(`Added ${subscribeCount} subscriber${subscribeCount !== 1 ? 's' : ''} (pending save)`);
+      } else if (unsubscribeCount > 0) {
+        toast.success(`Marked ${unsubscribeCount} subscriber${unsubscribeCount !== 1 ? 's' : ''} for removal (pending save)`);
+      }
+
+    } catch (error) {
+      console.error('Error processing action queue:', error);
+      toast.error('Failed to process pending actions');
+    }
+  };
+
   // Load subscribers data
   const loadSubscribers = useCallback(async () => {
     if (!isAuthenticated || !currentUser) {
@@ -175,13 +333,16 @@ const SubscribersPage: React.FC = () => {
     try {
       const subscribersList = await fetchSubscribers();
       setSubscribers(subscribersList);
+      
+      // Check for pending actions after loading subscribers
+      await checkPendingActions();
     } catch (error: unknown) {
       console.error('Subscribers: Error loading subscribers:', error);
       toast.error('Failed to load subscribers');
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, currentUser, fetchSubscribers]);
+  }, [isAuthenticated, currentUser, fetchSubscribers, checkPendingActions]);
 
   // Create subscription list
   const createSubscriptionList = useCallback(async () => {
@@ -305,8 +466,10 @@ const SubscribersPage: React.FC = () => {
         ['title', 'Longform Subscribers']
       ];
 
-      // Add all subscribers (both existing and pending) as p tags
-      subscribers.forEach(subscriber => {
+      // Add all subscribers (both existing and pending, but not pending removal) as p tags
+      subscribers
+        .filter(subscriber => !subscriber.isPendingRemoval)
+        .forEach(subscriber => {
         event.tags.push(['p', subscriber.pubkey]);
       });
 
@@ -315,8 +478,30 @@ const SubscribersPage: React.FC = () => {
       
       console.log('Subscribers: Subscribers list saved successfully');
       
-      // Remove pending status from all subscribers
-      setSubscribers(prev => prev.map(sub => ({ ...sub, isPending: false })));
+      // Remove pending status from all subscribers and remove those marked for removal
+      setSubscribers(prev => prev
+        .filter(sub => !sub.isPendingRemoval)
+        .map(sub => ({ ...sub, isPending: false }))
+      );
+
+      // Mark all processed actions as processed in the database
+      if (processedActionIds.length > 0) {
+        console.log('Marking', processedActionIds.length, 'actions as processed:', processedActionIds);
+        
+        const { error: updateError } = await supabase
+          .from('action_queue')
+          .update({ processed: true })
+          .in('id', processedActionIds);
+
+        if (updateError) {
+          console.error('Error marking actions as processed:', updateError);
+          // Don't show error to user since the main operation succeeded
+        } else {
+          console.log('Successfully marked', processedActionIds.length, 'actions as processed');
+          // Clear processed action IDs since they've been processed
+          setProcessedActionIds([]);
+        }
+      }
       
       toast.success('Subscribers list saved successfully!');
     } catch (error: unknown) {
@@ -414,6 +599,9 @@ const SubscribersPage: React.FC = () => {
                           {subscriber.isPending && (
                             <div className={styles['pending-badge']}>Pending</div>
                           )}
+                          {subscriber.isPendingRemoval && (
+                            <div className={styles['pending-removal-badge']}>Pending Removal</div>
+                          )}
                         </div>
                         <p className={styles['subscriber-npub']}>
                           {subscriber.npub.substring(0, 12)}...{subscriber.npub.substring(subscriber.npub.length - 11)}
@@ -423,7 +611,7 @@ const SubscribersPage: React.FC = () => {
                   ))}
                 </div>
                 
-                {subscribers.some(sub => sub.isPending) && (
+                {(subscribers.some(sub => sub.isPending) || subscribers.some(sub => sub.isPendingRemoval)) && (
                   <div className={styles['save-section']}>
                     <button 
                       onClick={handleSaveSubscribers}
@@ -516,6 +704,51 @@ const SubscribersPage: React.FC = () => {
                     className={styles['modal-add']}
                   >
                     Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Action Queue Modal */}
+          {isActionQueueModalOpen && (
+            <div className={styles['modal-overlay']}>
+              <div className={styles['modal']}>
+                <div className={styles['modal-header']}>
+                  <h3>Pending Actions</h3>
+                  <button 
+                    onClick={() => setIsActionQueueModalOpen(false)}
+                    className={styles['modal-close']}
+                  >
+                    <XMarkIcon className={styles['close-icon']} />
+                  </button>
+                </div>
+                
+                <div className={styles['modal-content']}>
+                  <p className={styles['modal-description']}>
+                    You have some subscribes/unsubscribes that haven&apos;t been synced to Nostr yet. Please review them in the list and save the changes.
+                  </p>
+                  
+                  <div className={styles['actions-list']}>
+                    {pendingActions.map((action, index) => (
+                      <div key={action.id || index} className={styles['action-item']}>
+                        <div className={styles['action-type']}>
+                          {action.action === 'subscribe' ? 'Subscribe' : 'Unsubscribe'}
+                        </div>
+                        <div className={styles['action-reader']}>
+                          {action.readerDisplayName || 'Unknown User'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className={styles['modal-actions']}>
+                  <button 
+                    onClick={handleActionQueueOK}
+                    className={styles['modal-ok']}
+                  >
+                    OK
                   </button>
                 </div>
               </div>

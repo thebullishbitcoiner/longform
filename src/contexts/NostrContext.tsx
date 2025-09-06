@@ -4,14 +4,11 @@ import NDK from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 
 import { NostrLoginSigner } from '@/utils/nostrLoginSigner';
+import { DEFAULT_RELAYS } from '@/config/relays';
 
 // Create a singleton NDK instance without signer initially
 const ndkInstance = new NDK({
-  explicitRelayUrls: [
-    'wss://relay.damus.io',
-    'wss://relay.nostr.band',
-    'wss://relay.primal.net'
-  ]
+  explicitRelayUrls: DEFAULT_RELAYS
 });
 
 // Initialize connection outside of React lifecycle

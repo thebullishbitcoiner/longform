@@ -2,6 +2,7 @@ import { nip19 } from 'nostr-tools';
 import NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { getRelaysForPublishingEvent, getRelaysForReadingPrivateEvents } from './preferredRelays';
+import { DEFAULT_RELAYS } from '@/config/relays';
 
 /**
  * Convert npub to hex public key
@@ -233,11 +234,7 @@ export const isValidPublicKey = (publicKey: string): boolean => {
  */
 export function createNDKWithPreferredRelays(
   userPubkey: string,
-  defaultRelays: string[] = [
-    'wss://relay.damus.io',
-    'wss://relay.nostr.band',
-    'wss://relay.primal.net'
-  ]
+  defaultRelays: string[] = DEFAULT_RELAYS
 ): NDK {
   // Get preferred relays for private events
   const preferredRelays = getRelaysForReadingPrivateEvents(userPubkey);
