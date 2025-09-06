@@ -1,4 +1,4 @@
-import { supabase, ProStatus, Subscriber } from '@/config/supabase';
+import { supabase, ProStatus, Pro } from '@/config/supabase';
 
 /**
  * Check if a user has PRO status based on their npub
@@ -6,14 +6,14 @@ import { supabase, ProStatus, Subscriber } from '@/config/supabase';
 export async function checkProStatus(npub: string): Promise<ProStatus> {
   try {
     const { data, error } = await supabase
-      .from('subscribers')
+      .from('pros')
       .select('*')
       .eq('npub', npub)
       .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
-        // No rows returned - user is not a subscriber
+        // No rows returned - user is not a pro
         return { isPro: false };
       }
       throw error;
@@ -23,8 +23,8 @@ export async function checkProStatus(npub: string): Promise<ProStatus> {
       return { isPro: false };
     }
 
-    const subscriber: Subscriber = data;
-    const lastPayment = new Date(subscriber.last_payment);
+    const pro: Pro = data;
+    const lastPayment = new Date(pro.last_payment);
     const now = new Date();
     
     // Check if the last payment was within the last 30 days
@@ -36,7 +36,7 @@ export async function checkProStatus(npub: string): Promise<ProStatus> {
 
     return {
       isPro,
-      lastPayment: subscriber.last_payment,
+      lastPayment: pro.last_payment,
       expiresAt: expiresAt.toISOString()
     };
   } catch (error) {
@@ -51,7 +51,7 @@ export async function checkProStatus(npub: string): Promise<ProStatus> {
 export async function updateLastPayment(npub: string, paymentDate: string): Promise<boolean> {
   try {
     const { error } = await supabase
-      .from('subscribers')
+      .from('pros')
       .upsert({
         npub,
         last_payment: paymentDate,
@@ -71,23 +71,23 @@ export async function updateLastPayment(npub: string, paymentDate: string): Prom
 }
 
 /**
- * Get all subscribers (for admin use)
+ * Get all pros (for admin use)
  */
-export async function getAllSubscribers(): Promise<Subscriber[]> {
+export async function getAllSubscribers(): Promise<Pro[]> {
   try {
     const { data, error } = await supabase
-      .from('subscribers')
+      .from('pros')
       .select('*')
       .order('last_payment', { ascending: false });
 
     if (error) {
-      console.error('Error fetching subscribers:', error);
+      console.error('Error fetching pros:', error);
       return [];
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error fetching subscribers:', error);
+    console.error('Error fetching pros:', error);
     return [];
   }
 }
