@@ -665,6 +665,11 @@
   flex-direction: column;
 }
 
+/* Wider modal for JSON content on desktop */
+.modalContent:has(.jsonPre) {
+  max-width: 800px;
+}
+
 .modalHeader {
   display: flex;
   justify-content: space-between;
@@ -986,6 +991,34 @@
   background-color: var(--hover);
 }
 
+.commentSectionActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.commentButton {
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.commentButton:hover:not(:disabled) {
+  background-color: #7c3aed;
+}
+
+.commentButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .commentSectionTitle {
   font-size: 1.25rem;
   font-weight: 600;
@@ -1092,6 +1125,34 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.commentActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.replyButton {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.replyButton:hover:not(:disabled) {
+  background-color: var(--hover);
+  color: var(--text);
+  border-color: var(--text-secondary);
+}
+
+.replyButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .commentMenuWrapper {
@@ -1201,6 +1262,258 @@
 
 .commentContent .nostrLink:hover {
   color: #7c3aed;
+}
+
+/* Comment Form Styles */
+.commentForm {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--background-secondary);
+}
+
+.commentFormHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.commentFormHeader h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.commentFormClose {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.commentFormClose:hover {
+  background-color: var(--hover);
+  color: var(--text);
+}
+
+.commentFormCloseIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.commentTextarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background-color: var(--background);
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  resize: vertical;
+  font-family: inherit;
+  margin-bottom: 1rem;
+}
+
+.commentTextarea:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.commentTextarea::placeholder {
+  color: var(--text-secondary);
+}
+
+.commentFormFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.commentCharCount {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.commentFormActions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.commentCancelButton {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.commentCancelButton:hover:not(:disabled) {
+  background-color: var(--hover);
+  color: var(--text);
+  border-color: var(--text-secondary);
+}
+
+.commentCancelButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.commentSubmitButton {
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.commentSubmitButton:hover:not(:disabled) {
+  background-color: #7c3aed;
+}
+
+.commentSubmitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Reply Form Styles */
+.replyForm {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.replyFormHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.replyFormHeader h5 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.replyFormClose {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.replyFormClose:hover {
+  background-color: var(--hover);
+  color: var(--text);
+}
+
+.replyFormCloseIcon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.replyTextarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background-color: var(--background-secondary);
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  resize: vertical;
+  font-family: inherit;
+  margin-bottom: 0.75rem;
+}
+
+.replyTextarea:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+}
+
+.replyTextarea::placeholder {
+  color: var(--text-secondary);
+}
+
+.replyFormFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.replyCharCount {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.replyFormActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.replyCancelButton {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.replyCancelButton:hover:not(:disabled) {
+  background-color: var(--hover);
+  color: var(--text);
+  border-color: var(--text-secondary);
+}
+
+.replyCancelButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.replySubmitButton {
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.replySubmitButton:hover:not(:disabled) {
+  background-color: #7c3aed;
+}
+
+.replySubmitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .viewMoreComments {
@@ -1341,6 +1654,47 @@
     padding: 2rem 1rem;
   }
 
+  .commentForm {
+    padding: 1rem;
+  }
+
+  .commentFormActions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .commentCancelButton,
+  .commentSubmitButton {
+    width: 100%;
+    padding: 0.75rem;
+  }
+
+  .commentActions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+  }
+
+  .replyButton {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .replyForm {
+    padding: 0.75rem;
+  }
+
+  .replyFormActions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .replyCancelButton,
+  .replySubmitButton {
+    width: 100%;
+    padding: 0.5rem;
+  }
+
   .backToTopContainer {
     padding: 1.5rem 0;
   }
@@ -1358,8 +1712,8 @@
   border-radius: 0.5rem;
   padding: 1rem;
   overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .commentThread {
@@ -1382,7 +1736,6 @@
   display: flex;
   justify-content: center;
   padding: 2rem 0;
-  border-top: 1px solid var(--border);
 }
 
 .backToTopButton {
