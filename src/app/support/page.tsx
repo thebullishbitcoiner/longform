@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CheckIcon, ArrowTopRightOnSquareIcon, StarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { useSupabase } from '@/contexts/SupabaseContext';
 import { formatExpirationDate, isExpiringSoon } from '@/utils/supabase';
-import LightningPayment from '@/components/LightningPayment';
+import { supabase } from '@/config/supabase';
 import './page.css';
 
 const SupportPage: React.FC = () => {
@@ -13,10 +13,10 @@ const SupportPage: React.FC = () => {
   const [isLegend, setIsLegend] = useState(false);
   const [isCheckingLegend, setIsCheckingLegend] = useState(false);
   const [isYearly, setIsYearly] = useState(false);
-  const [showLightningPayment, setShowLightningPayment] = useState(false);
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
+  const hasLaunchedPaymentRef = useRef(false);
   const { currentUser } = useNostr();
-  const { proStatus, isLoading, checkLegendStatus, addLegend } = useSupabase();
+  const { proStatus, isLoading, checkLegendStatus } = useSupabase();
 
   // Check legend status when user changes
   useEffect(() => {
@@ -63,41 +63,105 @@ const SupportPage: React.FC = () => {
     }, 1000);
   };
 
-  const handleLegendSubscribe = () => {
+  const handleLegendSubscribe = async () => {
     if (!currentUser?.npub) {
       alert('Please log in to become a Legend');
       return;
     }
-    // Set loading state and launch the payment modal
-    setIsGeneratingInvoice(true);
-    setShowLightningPayment(true);
-  };
 
-  const handleLegendPaymentSuccess = async () => {
+    if (hasLaunchedPaymentRef.current) return; // Prevent duplicate launches
+    hasLaunchedPaymentRef.current = true;
+
     try {
-      // Add user to legends table
-      await addLegend(currentUser?.npub || '');
+      setIsGeneratingInvoice(true);
       
-      // Update legend status
-      setIsLegend(true);
-      setShowLightningPayment(false);
-      setIsGeneratingInvoice(false);
+      // Dynamically import Lightning libraries to avoid SSR issues
+      const { LightningAddress } = await import('@getalby/lightning-tools/lnurl');
+      const { launchPaymentModal } = await import('@getalby/bitcoin-connect');
       
-      // Show success message
-      alert('Congratulations! You are now a Longform Legend!');
-    } catch (error) {
-      console.error('Error updating legend status:', error);
-      alert('Payment successful but there was an error updating your status. Please contact support.');
+      // Create Lightning Address instance
+      const ln = new LightningAddress("bullish@getalby.com");
+      
+      // Fetch the Lightning Address details
+      await ln.fetch();
+      
+      // Request an invoice for the specified amount
+      const invoice = await ln.requestInvoice({ 
+        satoshi: 100000,
+        comment: "Longform PRO" 
+      });
+
+      // Launch the payment modal
+      const { setPaid } = launchPaymentModal({
+        invoice: invoice.paymentRequest,
+        onPaid: async () => {
+          clearInterval(checkPaymentInterval);
+          
+          try {
+            // Insert user into legends table
+            const { error } = await supabase
+              .from('legends')
+              .insert({
+                npub: currentUser.npub,
+                created_at: new Date().toISOString()
+              });
+
+            if (error) {
+              throw error;
+            }
+
+            // Update legend status
+            setIsLegend(true);
+            setIsGeneratingInvoice(false);
+            hasLaunchedPaymentRef.current = false;
+            
+            // Show success message
+            alert('Congratulations! You are now a Longform Legend!');
+          } catch (err) {
+            console.error('Error updating legend status:', err);
+            alert('Payment successful but there was an error updating your status. Please contact support.');
+            setIsGeneratingInvoice(false);
+            hasLaunchedPaymentRef.current = false;
+          }
+        },
+        onCancelled: () => {
+          clearInterval(checkPaymentInterval);
+          alert('Payment cancelled');
+          setIsGeneratingInvoice(false);
+          hasLaunchedPaymentRef.current = false;
+        },
+      });
+
+      // Start polling for payment verification
+      const checkPaymentInterval = setInterval(async () => {
+        try {
+          const paid = await invoice.verifyPayment();
+          
+          if (paid && invoice.preimage) {
+            setPaid({
+              preimage: invoice.preimage,
+            });
+          }
+        } catch (err) {
+          console.error('Payment verification error:', err);
+        }
+      }, 1000);
+
+      // Stop polling after 10 minutes
+      setTimeout(() => {
+        clearInterval(checkPaymentInterval);
+        setIsGeneratingInvoice(false);
+        hasLaunchedPaymentRef.current = false;
+      }, 600000);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate invoice';
+      alert(`Payment error: ${errorMessage}`);
       setIsGeneratingInvoice(false);
+      hasLaunchedPaymentRef.current = false;
     }
   };
 
-  const handleLegendPaymentError = (error: string) => {
-    console.error('Legend payment error:', error);
-    alert(`Payment error: ${error}`);
-    setShowLightningPayment(false);
-    setIsGeneratingInvoice(false);
-  };
 
   const benefits = [
     'PRO badge on your profile page',
@@ -338,15 +402,6 @@ const SupportPage: React.FC = () => {
               </p>
             </div>
 
-            {showLightningPayment && currentUser?.npub && (
-              <LightningPayment
-                amount={100000}
-                description="Longform PRO"
-                onPaymentSuccess={handleLegendPaymentSuccess}
-                onPaymentError={handleLegendPaymentError}
-                npub={currentUser.npub}
-              />
-            )}
           </div>
 
           <div className="support-info">
