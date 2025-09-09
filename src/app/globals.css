@@ -10,6 +10,14 @@
   --button-text: #000000;
 }
 
+html {
+  --bc-color-brand: #8b5cf6;
+  --bc-color-brand-dark: #8b5cf6; /* use a different brand color in dark mode */
+  --bc-brand-mix: 100%; /* how much to mix the brand color with default foreground color */
+  --bc-color-brand-button-text: #ffffff; /* override text color for primary button. Normally this is based on the luminance of the brand color */
+  --bc-color-brand-button-text-dark: #ffffff; /* override text color for primary button in dark mode. Normally this is based on the luminance of the brand color in dark mode */
+}
+
 * {
   box-sizing: border-box;
   padding: 0;

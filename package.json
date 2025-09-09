@@ -1,6 +1,6 @@
 {
   "name": "longform",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -11,6 +11,8 @@
     "test": "npm run lint && npm run type-check"
   },
   "dependencies": {
+    "@getalby/bitcoin-connect": "^3.10.0",
+    "@getalby/lightning-tools": "^6.0.0",
     "@heroicons/react": "^2.2.0",
     "@nostr-dev-kit/ndk": "^2.14.9",
     "@nostrify/nostrify": "npm:@jsr/nostrify__nostrify@^0.46.0",

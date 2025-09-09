@@ -5,14 +5,18 @@ import { CheckIcon, ArrowTopRightOnSquareIcon, StarIcon, ExclamationTriangleIcon
 import { useNostr } from '@/contexts/NostrContext';
 import { useSupabase } from '@/contexts/SupabaseContext';
 import { formatExpirationDate, isExpiringSoon } from '@/utils/supabase';
+import LightningPayment from '@/components/LightningPayment';
 import './page.css';
 
 const SupportPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLegend, setIsLegend] = useState(false);
   const [isCheckingLegend, setIsCheckingLegend] = useState(false);
+  const [isYearly, setIsYearly] = useState(false);
+  const [showLightningPayment, setShowLightningPayment] = useState(false);
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const { currentUser } = useNostr();
-  const { proStatus, isLoading, checkLegendStatus } = useSupabase();
+  const { proStatus, isLoading, checkLegendStatus, addLegend } = useSupabase();
 
   // Check legend status when user changes
   useEffect(() => {
@@ -44,10 +48,10 @@ const SupportPage: React.FC = () => {
     
     // Construct the subscription URL
     const subscriptionUrl = new URL('https://zapplanner.albylabs.com/confirm');
-    subscriptionUrl.searchParams.set('amount', '1000');
+    subscriptionUrl.searchParams.set('amount', isYearly ? '10000' : '1000');
     subscriptionUrl.searchParams.set('recipient', 'bullish@getalby.com');
-    subscriptionUrl.searchParams.set('timeframe', '30d');
-    subscriptionUrl.searchParams.set('comment', ' Longform PRO subscription');
+    subscriptionUrl.searchParams.set('timeframe', isYearly ? '365d' : '30d');
+    subscriptionUrl.searchParams.set('comment', ` Longform PRO ${isYearly ? 'yearly' : 'monthly'} subscription`);
     subscriptionUrl.searchParams.set('payerdata', payerdata);
 
     // Open in new tab/window
@@ -59,6 +63,42 @@ const SupportPage: React.FC = () => {
     }, 1000);
   };
 
+  const handleLegendSubscribe = () => {
+    if (!currentUser?.npub) {
+      alert('Please log in to become a Legend');
+      return;
+    }
+    // Set loading state and launch the payment modal
+    setIsGeneratingInvoice(true);
+    setShowLightningPayment(true);
+  };
+
+  const handleLegendPaymentSuccess = async () => {
+    try {
+      // Add user to legends table
+      await addLegend(currentUser?.npub || '');
+      
+      // Update legend status
+      setIsLegend(true);
+      setShowLightningPayment(false);
+      setIsGeneratingInvoice(false);
+      
+      // Show success message
+      alert('Congratulations! You are now a Longform Legend!');
+    } catch (error) {
+      console.error('Error updating legend status:', error);
+      alert('Payment successful but there was an error updating your status. Please contact support.');
+      setIsGeneratingInvoice(false);
+    }
+  };
+
+  const handleLegendPaymentError = (error: string) => {
+    console.error('Legend payment error:', error);
+    alert(`Payment error: ${error}`);
+    setShowLightningPayment(false);
+    setIsGeneratingInvoice(false);
+  };
+
   const benefits = [
     'PRO badge on your profile page',
     'Dashboard with stats and insights',
@@ -66,6 +106,12 @@ const SupportPage: React.FC = () => {
     'Early access to new features',
     'Priority customer support',
     'Bragging rights on Nostr',
+  ];
+
+  const legendBenefits = [
+    'Everything from PRO',
+    'LEGEND badge on your profile page with profile pic border',
+    'Moar bragging rights on Nostr',
   ];
 
   return (
@@ -94,7 +140,7 @@ const SupportPage: React.FC = () => {
                   <div className="pro-status-active pro-status-legend">
                     <div className="pro-status-header">
                       <StarIcon className="pro-badge" />
-                      <h3>LEGEND</h3>
+                      <h3>YOU'RE A LEGEND!</h3>
                     </div>
                     <div className="pro-status-details">
                       <p className="legend-info">
@@ -152,9 +198,24 @@ const SupportPage: React.FC = () => {
             <div className="pro-header">
               <h2 className="pro-title">Longform PRO</h2>
               <div className="pro-price">
-                <span className="price-amount">1000</span>
+                <span className="price-amount">{isYearly ? '10,000' : '1,000'}</span>
                 <span className="price-currency">sats</span>
-                <span className="price-period">/month</span>
+                <span className="price-period">/{isYearly ? 'year' : 'month'}</span>
+              </div>
+              <div className="subscription-toggle">
+                <button
+                  className={`toggle-button ${!isYearly ? 'active' : ''}`}
+                  onClick={() => setIsYearly(false)}
+                >
+                  Monthly
+                </button>
+                <button
+                  className={`toggle-button ${isYearly ? 'active' : ''}`}
+                  onClick={() => setIsYearly(true)}
+                >
+                  Yearly
+                  <span className={`savings-badge ${isYearly ? 'active' : ''}`}>17% off</span>
+                </button>
               </div>
             </div>
 
@@ -216,6 +277,76 @@ const SupportPage: React.FC = () => {
                 NOTE: Clicking the button will bring you to ZapPlanner to set up a subscription. Please allow 21 hours for it to take effect. Subscribers are currently managed manually while an automated solution is in the works.
               </p>
             </div>
+          </div>
+
+          {/* LEGEND Card */}
+          <div className="legend-card">
+            <div className="legend-header">
+              <h2 className="legend-title">Longform LEGEND</h2>
+              <div className="legend-price">
+                <span className="price-amount">100,000</span>
+                <span className="price-currency">sats</span>
+              </div>
+            </div>
+
+            <div className="legend-benefits">
+              <h3 className="benefits-title">What do you get with LEGEND?</h3>
+              <ul className="benefits-list">
+                {legendBenefits.map((benefit, index) => (
+                  <li key={index} className="benefit-item legend-benefit-item">
+                    <CheckIcon className="check-icon legend-check-icon" />
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="subscription-form legend-subscription-form">
+              {isLegend ? (
+                <button
+                  disabled={true}
+                  className="subscribe-button legend-button"
+                >
+                  <span>Already a Legend!</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleLegendSubscribe}
+                  disabled={isSubmitting || isGeneratingInvoice}
+                  className="subscribe-button legend-subscribe-button"
+                >
+                  {isSubmitting ? (
+                    <div className="loading-spinner" />
+                  ) : isGeneratingInvoice ? (
+                    <>
+                      <div className="loading-spinner" />
+                      <span>Generating invoice...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Become a Legend</span>
+                      <ArrowTopRightOnSquareIcon className="button-icon" />
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            <div className="legend-note">
+              <p>
+                NOTE: LEGEND is a one-time payment that grants permanent PRO access plus exclusive LEGEND benefits.
+              </p>
+            </div>
+
+            {showLightningPayment && currentUser?.npub && (
+              <LightningPayment
+                amount={100000}
+                description="Longform PRO"
+                onPaymentSuccess={handleLegendPaymentSuccess}
+                onPaymentError={handleLegendPaymentError}
+                npub={currentUser.npub}
+              />
+            )}
           </div>
 
           <div className="support-info">

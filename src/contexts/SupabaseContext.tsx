@@ -10,6 +10,7 @@ interface SupabaseContextType {
   checkProStatus: (npub: string) => Promise<ProStatus>;
   checkLegendStatus: (npub: string) => Promise<boolean>;
   refreshProStatus: () => Promise<void>;
+  addLegend: (npub: string) => Promise<void>;
 }
 
 const SupabaseContext = createContext<SupabaseContextType>({
@@ -17,7 +18,8 @@ const SupabaseContext = createContext<SupabaseContextType>({
   isLoading: false,
   checkProStatus: async () => ({ isPro: false }),
   checkLegendStatus: async () => false,
-  refreshProStatus: async () => {}
+  refreshProStatus: async () => {},
+  addLegend: async () => {}
 });
 
 export const useSupabase = () => useContext(SupabaseContext);
@@ -183,6 +185,29 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
     }
   };
 
+  const addLegend = async (npub: string): Promise<void> => {
+    try {
+      console.log('Adding legend for npub:', npub);
+      
+      const { error } = await supabase
+        .from('legends')
+        .insert({
+          npub: npub,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('Supabase error adding legend:', error);
+        throw error;
+      }
+
+      console.log('Successfully added legend for npub:', npub);
+    } catch (error) {
+      console.error('Error adding legend:', error);
+      throw error;
+    }
+  };
+
   // Check PRO status when user changes
   useEffect(() => {
     if (currentUser?.npub) {
@@ -202,7 +227,8 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
       isLoading,
       checkProStatus,
       checkLegendStatus,
-      refreshProStatus
+      refreshProStatus,
+      addLegend
     }}>
       {children}
     </SupabaseContext.Provider>
