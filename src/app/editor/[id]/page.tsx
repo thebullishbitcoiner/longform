@@ -673,37 +673,84 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
+    input.multiple = true; // Enable multiple file selection
 
     input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
+      const files = (e.target as HTMLInputElement).files;
+      if (!files || files.length === 0) return;
 
-      try {
-        console.log('Editor: Uploading image:', file.name);
-        const [[, url]] = await uploader.upload(file);
-        console.log('Editor: Image uploaded to:', url);
+      const fileArray = Array.from(files);
+      
+      // Show initial progress toast
+      if (fileArray.length > 1) {
+        toast.loading(`Uploading ${fileArray.length} images...`, { id: 'batch-upload' });
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+      const uploadedImages: string[] = [];
+
+      // Process each file
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
         
-        // Insert the image markdown at the cursor position
-        const imageMarkdown = `![${file.name}](${url})`;
+        try {
+          console.log(`Editor: Uploading image ${i + 1}/${fileArray.length}:`, file.name);
+          const [[, url]] = await uploader.upload(file);
+          console.log(`Editor: Image uploaded to:`, url);
+          
+          // Store the image markdown for batch insertion
+          const imageMarkdown = `![${file.name}](${url})`;
+          uploadedImages.push(imageMarkdown);
+          successCount++;
+
+          // Update progress for multiple files
+          if (fileArray.length > 1) {
+            toast.loading(`Uploaded ${successCount}/${fileArray.length} images...`, { id: 'batch-upload' });
+          }
+        } catch (error) {
+          console.error(`Editor: Error uploading image ${file.name}:`, error);
+          errorCount++;
+        }
+      }
+
+      // Insert all uploaded images
+      if (uploadedImages.length > 0) {
+        const allImagesMarkdown = uploadedImages.join('\n\n');
         
         if (editorRef.current) {
-          editorRef.current.insertAtCursor(imageMarkdown);
+          editorRef.current.insertAtCursor(allImagesMarkdown);
           setHasUnsavedChanges(true);
-          toast.success('Image uploaded and inserted!');
         } else {
           // Fallback: append to end if editor ref is not available
           const updatedDraft = {
             ...draft,
-            content: draft.content + '\n' + imageMarkdown + '\n',
+            content: draft.content + '\n' + allImagesMarkdown + '\n',
             lastModified: new Date().toISOString(),
           };
           setDraft(updatedDraft);
           setHasUnsavedChanges(true);
           debouncedAutoSave(updatedDraft);
         }
-      } catch (error) {
-        console.error('Editor: Error uploading image:', error);
-        toast.error('Failed to upload image. Please try again.');
+      }
+
+      // Show final result
+      if (fileArray.length > 1) {
+        toast.dismiss('batch-upload');
+        if (successCount === fileArray.length) {
+          toast.success(`Successfully uploaded ${successCount} images!`);
+        } else if (successCount > 0) {
+          toast.success(`Uploaded ${successCount} images, ${errorCount} failed`);
+        } else {
+          toast.error('Failed to upload any images');
+        }
+      } else {
+        // Single file upload
+        if (successCount > 0) {
+          toast.success('Image uploaded and inserted!');
+        } else {
+          toast.error('Failed to upload image. Please try again.');
+        }
       }
     };
 
@@ -1126,10 +1173,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           <button 
             onClick={handleImageUpload} 
             className="action-button image-button"
-            title="Upload Image"
+            title="Add Image (supports multiple selection)"
           >
             <PhotoIcon />
-            Upload
+            Add Image
           </button>
           {/* Only show save button for drafts (kind 30024) */}
           {draft.kind === 30024 && (
