@@ -140,7 +140,7 @@ const SupportPage: React.FC = () => {
                   <div className="pro-status-active pro-status-legend">
                     <div className="pro-status-header">
                       <StarIcon className="pro-badge" />
-                      <h3>YOU'RE A LEGEND!</h3>
+                        <h3>YOU&apos;RE A LEGEND!</h3>
                     </div>
                     <div className="pro-status-details">
                       <p className="legend-info">
