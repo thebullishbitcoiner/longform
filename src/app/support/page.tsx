@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckIcon, ArrowTopRightOnSquareIcon, StarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { useSupabase } from '@/contexts/SupabaseContext';
@@ -9,8 +9,29 @@ import './page.css';
 
 const SupportPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLegend, setIsLegend] = useState(false);
+  const [isCheckingLegend, setIsCheckingLegend] = useState(false);
   const { currentUser } = useNostr();
-  const { proStatus, isLoading } = useSupabase();
+  const { proStatus, isLoading, checkLegendStatus } = useSupabase();
+
+  // Check legend status when user changes
+  useEffect(() => {
+    if (currentUser?.npub) {
+      setIsCheckingLegend(true);
+      checkLegendStatus(currentUser.npub)
+        .then(setIsLegend)
+        .catch(error => {
+          console.error('Error checking legend status:', error);
+          setIsLegend(false);
+        })
+        .finally(() => {
+          setIsCheckingLegend(false);
+        });
+    } else {
+      setIsLegend(false);
+      setIsCheckingLegend(false);
+    }
+  }, [currentUser?.npub, checkLegendStatus]);
 
   const handleSubscribe = () => {
     setIsSubmitting(true);
@@ -62,11 +83,23 @@ const SupportPage: React.FC = () => {
             {/* PRO Status Display */}
             {currentUser && (
               <>
-                {isLoading && !proStatus ? (
+                {(isLoading || isCheckingLegend) && !proStatus ? (
                   <div className="pro-status-section">
                     <div className="pro-status-loading">
                       <div className="loading-spinner" />
-                      <span>Checking PRO status...</span>
+                      <span>Checking status...</span>
+                    </div>
+                  </div>
+                ) : isLegend ? (
+                  <div className="pro-status-active pro-status-legend">
+                    <div className="pro-status-header">
+                      <StarIcon className="pro-badge" />
+                      <h3>LEGEND</h3>
+                    </div>
+                    <div className="pro-status-details">
+                      <p className="legend-info">
+                        You have permanent PRO access as a Longform Legend
+                      </p>
                     </div>
                   </div>
                 ) : proStatus?.isPro ? (
@@ -138,7 +171,14 @@ const SupportPage: React.FC = () => {
             </div>
 
             <div className="subscription-form">
-              {proStatus?.isPro ? (
+              {isLegend ? (
+                <button
+                  disabled={true}
+                  className="subscribe-button legend-button"
+                >
+                  <span>Legend - No Subscription Needed</span>
+                </button>
+              ) : proStatus?.isPro ? (
                 <button
                   onClick={handleSubscribe}
                   disabled={isSubmitting}

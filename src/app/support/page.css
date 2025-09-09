@@ -93,6 +93,31 @@
   box-shadow: 0 4px 20px rgba(245, 158, 11, 0.1);
 }
 
+.pro-status-legend {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(168, 85, 247, 0.12) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+}
+
+.pro-status-legend .pro-badge {
+  color: #8b5cf6;
+}
+
+.pro-status-legend .pro-status-header h3 {
+  color: #8b5cf6;
+}
+
+.legend-info {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: #8b5cf6;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 0.375rem;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
 .pro-badge {
   width: 1.5rem;
   height: 1.5rem;
@@ -339,6 +364,16 @@
 .renew-button:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(139, 92, 246, 0.3);
+}
+
+.legend-button {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+  cursor: default;
+}
+
+.legend-button:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 .button-icon {
