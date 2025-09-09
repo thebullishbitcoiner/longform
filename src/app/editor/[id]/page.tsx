@@ -394,12 +394,23 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         const ndkEvent = new NDKEvent(ndk);
         ndkEvent.kind = 30024;
         ndkEvent.content = updatedDraft.content;
+        
+        // Explicitly set the dTag if provided to prevent automatic generation
+        if (updatedDraft.dTag?.trim()) {
+          ndkEvent.dTag = updatedDraft.dTag.trim();
+        }
+        
         ndkEvent.tags = [
           ['title', updatedDraft.title],
           ['published_at', Math.floor(Date.now() / 1000).toString()],
           ['t', 'longform'],
           ['client', 'Longform._']
         ];
+        
+        // Add dTag to tags array if provided
+        if (updatedDraft.dTag?.trim()) {
+          ndkEvent.tags.push(['d', updatedDraft.dTag.trim()]);
+        }
         
         // Add hashtags as 't' tags
         if (updatedDraft.hashtags) {
@@ -486,6 +497,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         ndkEvent.kind = 30024;
         ndkEvent.content = updatedDraft.content;
         
+        // Explicitly set the dTag if provided to prevent automatic generation
+        if (updatedDraft.dTag?.trim()) {
+          ndkEvent.dTag = updatedDraft.dTag.trim();
+        }
+        
         console.log('Editor: Setting content for publish:', {
           draftContent: updatedDraft.content.substring(0, 100) + '...',
           contentLength: updatedDraft.content.length,
@@ -518,14 +534,17 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           });
           
           // Add the "d" tag to link to the original post
-          const dTagValue = updatedDraft.dTag || updatedDraft.id;
-          const hasDTag = updatedTags.some(tag => tag[0] === 'd');
-          if (!hasDTag) {
-            updatedTags.push(['d', dTagValue]);
-          } else {
-            // Update existing d tag with the new value
-            const dTagIndex = updatedTags.findIndex(tag => tag[0] === 'd');
-            updatedTags[dTagIndex] = ['d', dTagValue];
+          // Only use dTag if it's provided and not empty, otherwise don't add a d tag
+          const dTagValue = updatedDraft.dTag?.trim();
+          if (dTagValue) {
+            const hasDTag = updatedTags.some(tag => tag[0] === 'd');
+            if (!hasDTag) {
+              updatedTags.push(['d', dTagValue]);
+            } else {
+              // Update existing d tag with the new value
+              const dTagIndex = updatedTags.findIndex(tag => tag[0] === 'd');
+              updatedTags[dTagIndex] = ['d', dTagValue];
+            }
           }
           
           // Remove existing hashtags (t tags except 'longform') and add new ones
@@ -582,8 +601,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           
           // If updating a published post without original tags, add the "d" tag
           if (isUpdatingPublishedPost) {
-            const dTagValue = updatedDraft.dTag || updatedDraft.id;
-            ndkEvent.tags.push(['d', dTagValue]);
+            const dTagValue = updatedDraft.dTag?.trim();
+            if (dTagValue) {
+              ndkEvent.tags.push(['d', dTagValue]);
+            }
           }
           
           // Add hashtags as 't' tags
@@ -617,7 +638,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           tags: ndkEvent.tags,
           created_at: ndkEvent.created_at,
           isUpdatingPublishedPost,
-          hasOriginalTags: !!updatedDraft.originalTags
+          hasOriginalTags: !!updatedDraft.originalTags,
+          originalDTag: updatedDraft.dTag,
+          dTagInTags: ndkEvent.tags.find(tag => tag[0] === 'd')
         });
 
         await ndkEvent.publish();
@@ -823,6 +846,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       ndkEvent.kind = 30023;
       ndkEvent.content = currentContent;
       
+      // Explicitly set the dTag if provided to prevent automatic generation
+      if (draft.dTag?.trim()) {
+        ndkEvent.dTag = draft.dTag.trim();
+      }
+      
       console.log('Editor: Setting content for publish:', {
         draftContent: currentContent.substring(0, 100) + '...',
         contentLength: currentContent.length,
@@ -855,14 +883,17 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         });
         
         // Add the "d" tag to link to the original post
-        const dTagValue = draft.dTag || draft.id;
-        const hasDTag = updatedTags.some(tag => tag[0] === 'd');
-        if (!hasDTag) {
-          updatedTags.push(['d', dTagValue]);
-        } else {
-          // Update existing d tag with the new value
-          const dTagIndex = updatedTags.findIndex(tag => tag[0] === 'd');
-          updatedTags[dTagIndex] = ['d', dTagValue];
+        // Only use dTag if it's provided and not empty, otherwise don't add a d tag
+        const dTagValue = draft.dTag?.trim();
+        if (dTagValue) {
+          const hasDTag = updatedTags.some(tag => tag[0] === 'd');
+          if (!hasDTag) {
+            updatedTags.push(['d', dTagValue]);
+          } else {
+            // Update existing d tag with the new value
+            const dTagIndex = updatedTags.findIndex(tag => tag[0] === 'd');
+            updatedTags[dTagIndex] = ['d', dTagValue];
+          }
         }
         
         // Remove existing hashtags (t tags except 'longform') and add new ones
@@ -921,8 +952,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         ];
         
         // Add the "d" tag to link to the original post
-        const dTagValue = draft.dTag || draft.id;
-        ndkEvent.tags.push(['d', dTagValue]);
+        const dTagValue = draft.dTag?.trim();
+        if (dTagValue) {
+          ndkEvent.tags.push(['d', dTagValue]);
+        }
         
         // Add hashtags as 't' tags
         if (draft.hashtags) {
@@ -948,6 +981,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ['t', 'longform'],
           ['client', 'Longform._']
         ];
+        
+        // Add dTag to tags array if provided
+        if (draft.dTag?.trim()) {
+          ndkEvent.tags.push(['d', draft.dTag.trim()]);
+        }
         
         // Add hashtags as 't' tags
         if (draft.hashtags) {
@@ -980,7 +1018,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         tags: ndkEvent.tags,
         created_at: ndkEvent.created_at,
         isUpdatingPublishedPost,
-        hasOriginalTags: !!draft.originalTags
+        hasOriginalTags: !!draft.originalTags,
+        originalDTag: draft.dTag,
+        dTagInTags: ndkEvent.tags.find(tag => tag[0] === 'd')
       });
 
       await ndkEvent.publish();
