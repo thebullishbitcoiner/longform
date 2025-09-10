@@ -504,6 +504,8 @@
 .postContent pre code {
   background-color: transparent;
   padding: 0;
+  border: none;
+  border-radius: 0;
 }
 
 .postContent a {

@@ -1992,6 +1992,27 @@ export default function BlogPost() {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                // Custom code component to handle HTML entities
+                code: ({ children, className, ...props }) => {
+                  // Decode HTML entities in code content
+                  const decodedContent = typeof children === 'string' 
+                    ? children.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'")
+                    : children;
+                  
+                  return (
+                    <code className={className} {...props}>
+                      {decodedContent}
+                    </code>
+                  );
+                },
+                // Custom pre component to handle HTML entities in code blocks
+                pre: ({ children, ...props }) => {
+                  return (
+                    <pre {...props}>
+                      {children}
+                    </pre>
+                  );
+                },
                 // Custom text component to handle emojis in post content
                 text: ({ children }) => {
                   try {
