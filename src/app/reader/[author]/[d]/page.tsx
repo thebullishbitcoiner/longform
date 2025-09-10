@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import { ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { decode } from 'bolt11';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
 import { nip19 } from 'nostr-tools';
@@ -17,12 +18,15 @@ import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
-import { DEFAULT_RELAYS } from '@/config/relays';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
   return new NDK({
-    explicitRelayUrls: DEFAULT_RELAYS
+    explicitRelayUrls: [
+      'wss://relay.damus.io',
+      'wss://relay.nostr.band',
+      'wss://relay.primal.net'
+    ]
   });
 };
 
@@ -41,6 +45,7 @@ interface ZapData {
   content?: string;
   created_at: number;
   authorName?: string;
+  event?: NDKEvent; // NDKEvent for full event data
 }
 
 interface ReactionData {
@@ -88,167 +93,9 @@ interface TextSelection {
   container: Node;
 }
 
-// Recursive component to render threaded comments
-const CommentThread = ({ 
-  comments, 
-  depth = 0, 
-  showReplyForm, 
-  setShowReplyForm, 
-  replyText, 
-  setReplyText, 
-  isAuthenticated, 
-  handleReplyButtonClick, 
-  handleReplySubmit, 
-  isSubmittingReply,
-  processCommentContent,
-  openCommentJson,
-  styles
-}: { 
-  comments: CommentData[], 
-  depth?: number,
-  showReplyForm: string | null,
-  setShowReplyForm: (id: string | null) => void,
-  replyText: string,
-  setReplyText: (text: string) => void,
-  isAuthenticated: boolean,
-  handleReplyButtonClick: (id: string) => void,
-  handleReplySubmit: (id: string) => void,
-  isSubmittingReply: boolean,
-  processCommentContent: (content: string) => React.ReactNode,
-  openCommentJson: (id: string) => void,
-  styles: Record<string, string>
-}) => {
-  return (
-    <div className={styles.commentThread} style={{ marginLeft: `${depth * 20}px` }}>
-      {comments.map((comment) => (
-        <div key={comment.id} className={styles.commentItem}>
-          <div className={styles.commentHeader}>
-            <div className={styles.commentAuthor}>
-              {comment.authorPicture && (
-                <Image 
-                  src={comment.authorPicture} 
-                  alt="Author" 
-                  width={32}
-                  height={32}
-                  className={styles.commentAuthorAvatar}
-                />
-              )}
-              <span className={styles.commentAuthorName}>
-                {comment.authorName || comment.pubkey.slice(0, 8) + '...'}
-              </span>
-            </div>
-            <div className={styles.commentHeaderRight}>
-              <span className={styles.commentDate}>
-                {new Date(comment.created_at * 1000).toLocaleDateString()}
-              </span>
-              <div className={styles.commentActions}>
-                <button 
-                  className={styles.replyButton}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleReplyButtonClick(comment.id);
-                  }}
-                  disabled={!isAuthenticated}
-                >
-                  Reply
-                </button>
-                <div className={styles.commentMenuWrapper}>
-                  <button className={styles.commentMenuButton} onClick={(e) => {
-                    e.stopPropagation();
-                    const menu = (e.currentTarget.nextSibling as HTMLElement);
-                    if (menu) {
-                      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-                    }
-                  }}>
-                    <EllipsisVerticalIcon className={styles.commentMenuIcon} />
-                  </button>
-                  <div className={styles.commentMenu} onClick={(e) => e.stopPropagation()}>
-                    <button className={styles.commentMenuItem} onClick={() => openCommentJson(comment.id)}>View JSON</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className={styles.commentContent}>
-            {processCommentContent(comment.content)}
-          </div>
-          
-          {/* Reply Form */}
-          {showReplyForm === comment.id && isAuthenticated && (
-            <div className={styles.replyForm}>
-              <div className={styles.replyFormHeader}>
-                <h5>Reply to {comment.authorName || comment.pubkey.slice(0, 8) + '...'}</h5>
-                <button 
-                  className={styles.replyFormClose}
-                  onClick={() => {
-                    setShowReplyForm(null);
-                    setReplyText('');
-                  }}
-                >
-                  <XMarkIcon className={styles.replyFormCloseIcon} />
-                </button>
-              </div>
-              <textarea
-                className={styles.replyTextarea}
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Write your reply..."
-                rows={3}
-                maxLength={1000}
-              />
-              <div className={styles.replyFormFooter}>
-                <span className={styles.replyCharCount}>
-                  {replyText.length}/1000
-                </span>
-                <div className={styles.replyFormActions}>
-                  <button 
-                    className={styles.replyCancelButton}
-                    onClick={() => {
-                      setShowReplyForm(null);
-                      setReplyText('');
-                    }}
-                    disabled={isSubmittingReply}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    className={styles.replySubmitButton}
-                    onClick={() => handleReplySubmit(comment.id)}
-                    disabled={!replyText.trim() || isSubmittingReply}
-                  >
-                    {isSubmittingReply ? 'Posting...' : 'Post Reply'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {comment.children.length > 0 && (
-            <CommentThread 
-              comments={comment.children} 
-              depth={depth + 1}
-              showReplyForm={showReplyForm}
-              setShowReplyForm={setShowReplyForm}
-              replyText={replyText}
-              setReplyText={setReplyText}
-              isAuthenticated={isAuthenticated}
-              handleReplyButtonClick={handleReplyButtonClick}
-              handleReplySubmit={handleReplySubmit}
-              isSubmittingReply={isSubmittingReply}
-              processCommentContent={processCommentContent}
-              openCommentJson={openCommentJson}
-              styles={styles}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-};
-
 export default function BlogPost() {
   const params = useParams();
-  const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce } = useBlog();
+  const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce, updateAuthorProfile } = useBlog();
   const { ndk: contextNdk, isAuthenticated } = useNostr();
   const { getHighlightsForPost, addHighlight } = useHighlights();
   
@@ -295,17 +142,10 @@ export default function BlogPost() {
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [showCommentJsonModal, setShowCommentJsonModal] = useState(false);
   const [selectedCommentJson, setSelectedCommentJson] = useState<string | null>(null);
+  const [showZapJsonModal, setShowZapJsonModal] = useState(false);
+  const [selectedZapJson, setSelectedZapJson] = useState<string | null>(null);
   const [openReactionMenuId, setOpenReactionMenuId] = useState<string | null>(null);
-  
-  // Comment form state
-  const [showCommentForm, setShowCommentForm] = useState(false);
-  const [commentText, setCommentText] = useState('');
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
-  
-  // Reply form state
-  const [showReplyForm, setShowReplyForm] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState('');
-  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [openZapMenuId, setOpenZapMenuId] = useState<string | null>(null);
 
   const openCommentJson = (eventId: string) => {
     const comment = comments.find(c => c.id === eventId);
@@ -327,6 +167,20 @@ export default function BlogPost() {
   const closeCommentJson = () => {
     setShowCommentJsonModal(false);
     setSelectedCommentJson(null);
+  };
+
+
+  const closeZapJson = () => {
+    setShowZapJsonModal(false);
+    setSelectedZapJson(null);
+  };
+
+  const handleZapMenuToggle = (zapId: string) => {
+    setOpenZapMenuId(openZapMenuId === zapId ? null : zapId);
+  };
+
+  const closeZapMenu = () => {
+    setOpenZapMenuId(null);
   };
 
   const handleReactionMenuToggle = (reactionId: string) => {
@@ -398,6 +252,10 @@ export default function BlogPost() {
           } else {
             const user = ndkToUse.getUser({ pubkey });
             const profile = await user.fetchProfile();
+            if (profile) {
+              // Cache the profile for future use
+              updateAuthorProfile(pubkey, profile);
+            }
             return { pubkey, profile };
           }
         } catch (error) {
@@ -433,7 +291,7 @@ export default function BlogPost() {
     } finally {
       setIsLoadingReposts(false);
     }
-  }, [contextNdk, standaloneNdk, getAuthorProfile, post?.pubkey, params.d]);
+  }, [contextNdk, standaloneNdk, getAuthorProfile, updateAuthorProfile, post?.pubkey, params.d]);
 
   const handleRepostsClick = () => {
     if (post?.id) {
@@ -441,123 +299,176 @@ export default function BlogPost() {
     }
   };
 
-  // Function to process comment content and convert nprofile strings to links
-  const processCommentContent = (content: string) => {
-    if (!content || typeof content !== 'string') {
-      return content;
-    }
-
-    // Process the content by replacing nostr links with React elements
-    const nostrLinkRegex = /(nostr:)?(nprofile1[a-zA-Z0-9]+|npub1[a-zA-Z0-9]+|note1[a-zA-Z0-9]+|nevent1[a-zA-Z0-9]+)/g;
-    
-    const elements: (string | React.ReactElement)[] = [];
-    let lastIndex = 0;
-    let match;
-    
-    while ((match = nostrLinkRegex.exec(content)) !== null) {
-      // Add text before the match
-      if (match.index > lastIndex) {
-        elements.push(content.slice(lastIndex, match.index));
+  // Recursive component to render threaded comments
+  const CommentThread = ({ comments, depth = 0 }: { comments: CommentData[], depth?: number }) => {
+    // Function to process comment content and convert nprofile strings to links
+    const processCommentContent = (content: string) => {
+      if (!content || typeof content !== 'string') {
+        return content;
       }
+
+      // Process the content by replacing nostr links with React elements
+      const nostrLinkRegex = /(nostr:)?(nprofile1[a-zA-Z0-9]+|npub1[a-zA-Z0-9]+|note1[a-zA-Z0-9]+|nevent1[a-zA-Z0-9]+)/g;
       
-      const fullMatch = match[0]; // The full matched string (including nostr: if present)
-      const cleanPart = fullMatch.replace(/^nostr:/, ''); // Remove nostr: prefix
+      const elements: (string | React.ReactElement)[] = [];
+      let lastIndex = 0;
+      let match;
       
-      try {
-        const decoded = nip19.decode(cleanPart);
+      while ((match = nostrLinkRegex.exec(content)) !== null) {
+        // Add text before the match
+        if (match.index > lastIndex) {
+          elements.push(content.slice(lastIndex, match.index));
+        }
         
-        switch (decoded.type) {
-          case 'nprofile':
-            const pubkey = decoded.data.pubkey;
-            if (pubkey) {
-              const profileUrl = `/profile/${nip19.npubEncode(pubkey)}`;
-              const cachedProfile = getAuthorProfile(pubkey);
-              const displayName = cachedProfile?.displayName || cachedProfile?.name;
+        const fullMatch = match[0]; // The full matched string (including nostr: if present)
+        const cleanPart = fullMatch.replace(/^nostr:/, ''); // Remove nostr: prefix
+        
+        try {
+          const decoded = nip19.decode(cleanPart);
+          
+          switch (decoded.type) {
+            case 'nprofile':
+              const pubkey = decoded.data.pubkey;
+              if (pubkey) {
+                const profileUrl = `/profile/${nip19.npubEncode(pubkey)}`;
+                const cachedProfile = getAuthorProfile(pubkey);
+                const displayName = cachedProfile?.displayName || cachedProfile?.name;
+                
+                elements.push(
+                  <Link 
+                    key={`nostr-${match.index}`}
+                    href={profileUrl}
+                    className={styles.nostrLink}
+                    onClick={(e) => e.stopPropagation()}
+                    title={fullMatch}
+                  >
+                    {displayName ? `@${displayName}` : `@${pubkey.slice(0, 8)}...`}
+                  </Link>
+                );
+              } else {
+                elements.push(fullMatch);
+              }
+              break;
+            
+            case 'npub':
+              const npubUrl = `/profile/${cleanPart}`;
+              const npubPubkey = decoded.data;
+              const npubCachedProfile = getAuthorProfile(npubPubkey);
+              const npubDisplayName = npubCachedProfile?.displayName || npubCachedProfile?.name;
               
               elements.push(
                 <Link 
                   key={`nostr-${match.index}`}
-                  href={profileUrl}
+                  href={npubUrl}
                   className={styles.nostrLink}
                   onClick={(e) => e.stopPropagation()}
                   title={fullMatch}
                 >
-                  {displayName ? `@${displayName}` : `@${pubkey.slice(0, 8)}...`}
+                  {npubDisplayName ? `@${npubDisplayName}` : `@${npubPubkey.slice(0, 8)}...`}
                 </Link>
               );
-            } else {
-              elements.push(fullMatch);
-            }
-            break;
-          
-          case 'npub':
-            const npubUrl = `/profile/${cleanPart}`;
-            const npubPubkey = decoded.data;
-            const npubCachedProfile = getAuthorProfile(npubPubkey);
-            const npubDisplayName = npubCachedProfile?.displayName || npubCachedProfile?.name;
+              break;
             
-            elements.push(
-              <Link 
-                key={`nostr-${match.index}`}
-                href={npubUrl}
-                className={styles.nostrLink}
-                onClick={(e) => e.stopPropagation()}
-                title={fullMatch}
-              >
-                {npubDisplayName ? `@${npubDisplayName}` : `@${npubPubkey.slice(0, 8)}...`}
-              </Link>
-            );
-            break;
-          
-          case 'note':
-            const noteUrl = `https://njump.me/${cleanPart}`;
-            elements.push(
-              <a 
-                key={`nostr-${match.index}`}
-                href={noteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.nostrLink}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {fullMatch}
-              </a>
-            );
-            break;
-          
-          case 'nevent':
-            const eventUrl = `https://njump.me/${cleanPart}`;
-            elements.push(
-              <a 
-                key={`nostr-${match.index}`}
-                href={eventUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.nostrLink}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {fullMatch}
-              </a>
-            );
-            break;
-          
-          default:
-            elements.push(fullMatch);
+            case 'note':
+              const noteUrl = `https://njump.me/${cleanPart}`;
+              elements.push(
+                <a 
+                  key={`nostr-${match.index}`}
+                  href={noteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.nostrLink}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {fullMatch}
+                </a>
+              );
+              break;
+            
+            case 'nevent':
+              const eventUrl = `https://njump.me/${cleanPart}`;
+              elements.push(
+                <a 
+                  key={`nostr-${match.index}`}
+                  href={eventUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.nostrLink}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {fullMatch}
+                </a>
+              );
+              break;
+            
+            default:
+              elements.push(fullMatch);
+          }
+        } catch (error) {
+          console.error('Error decoding nostr link:', fullMatch, error);
+          elements.push(fullMatch);
         }
-      } catch (error) {
-        console.error('Error decoding nostr link:', fullMatch, error);
-        elements.push(fullMatch);
+        
+        lastIndex = match.index + fullMatch.length;
       }
       
-      lastIndex = match.index + fullMatch.length;
-    }
-    
-    // Add remaining text after the last match
-    if (lastIndex < content.length) {
-      elements.push(content.slice(lastIndex));
-    }
-    
-    return elements.length > 0 ? elements : content;
+      // Add remaining text after the last match
+      if (lastIndex < content.length) {
+        elements.push(content.slice(lastIndex));
+      }
+      
+      return elements.length > 0 ? elements : content;
+    };
+
+    return (
+      <div className={styles.commentThread} style={{ marginLeft: `${depth * 20}px` }}>
+        {comments.map((comment) => (
+          <div key={comment.id} className={styles.commentItem}>
+            <div className={styles.commentHeader}>
+              <div className={styles.commentAuthor}>
+                {comment.authorPicture && (
+                  <Image 
+                    src={comment.authorPicture} 
+                    alt="Author" 
+                    width={32}
+                    height={32}
+                    className={styles.commentAuthorAvatar}
+                  />
+                )}
+                <span className={styles.commentAuthorName}>
+                  {comment.authorName || comment.pubkey.slice(0, 8) + '...'}
+                </span>
+              </div>
+              <div className={styles.commentHeaderRight}>
+                <span className={styles.commentDate}>
+                  {new Date(comment.created_at * 1000).toLocaleDateString()}
+                </span>
+                <div className={styles.commentMenuWrapper}>
+                  <button className={styles.commentMenuButton} onClick={(e) => {
+                    e.stopPropagation();
+                    const menu = (e.currentTarget.nextSibling as HTMLElement);
+                    if (menu) {
+                      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+                    }
+                  }}>
+                    <EllipsisVerticalIcon className={styles.commentMenuIcon} />
+                  </button>
+                  <div className={styles.commentMenu} onClick={(e) => e.stopPropagation()}>
+                    <button className={styles.commentMenuItem} onClick={() => openCommentJson(comment.id)}>View JSON</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className={styles.commentContent}>
+              {processCommentContent(comment.content)}
+            </div>
+            {comment.children.length > 0 && (
+              <CommentThread comments={comment.children} depth={depth + 1} />
+            )}
+          </div>
+        ))}
+      </div>
+    );
   };
   
   const endOfContentRef = useRef<HTMLDivElement>(null);
@@ -1013,38 +924,86 @@ export default function BlogPost() {
       for (const zap of uniqueZaps.values()) {
         try {
           // Parse zap event to extract amount and other details
-          const amountTag = zap.tags.find(tag => tag[0] === 'amount');
+          const bolt11Tag = zap.tags.find(tag => tag[0] === 'bolt11');
           const descriptionTag = zap.tags.find(tag => tag[0] === 'description');
+          const zapperPubkeyTag = zap.tags.find(tag => tag[0] === 'P');
+          
+          // Get the zapper's pubkey from the P tag (not the main pubkey field)
+          const zapperPubkey = zapperPubkeyTag?.[1] || zap.pubkey;
           
           let amount = 0;
-          if (amountTag && amountTag[1]) {
-            amount = parseInt(amountTag[1]) / 1000; // Convert from millisats to sats
+          let description = '';
+          
+          // Try to decode bolt11 invoice to get amount
+          if (bolt11Tag && bolt11Tag[1]) {
+            try {
+              const bolt11String = bolt11Tag[1].trim();
+              console.log('Attempting to decode bolt11:', bolt11String.substring(0, 50) + '...');
+              const decoded = decode(bolt11String);
+              amount = decoded.satoshis || 0;
+              description = decoded.tagsObject?.description || '';
+              console.log('Successfully decoded bolt11 - amount:', amount, 'description:', description);
+            } catch (error) {
+              console.error('Error decoding bolt11 invoice:', error);
+              console.log('Bolt11 string:', bolt11Tag[1]);
+              // Fallback to amount tag if bolt11 decoding fails
+              const amountTag = zap.tags.find(tag => tag[0] === 'amount');
+              if (amountTag && amountTag[1]) {
+                amount = parseInt(amountTag[1]) / 1000; // Convert from millisats to sats
+                console.log('Using fallback amount from amount tag:', amount);
+              }
+            }
+          } else {
+            // Fallback to amount tag if no bolt11 tag
+            const amountTag = zap.tags.find(tag => tag[0] === 'amount');
+            if (amountTag && amountTag[1]) {
+              amount = parseInt(amountTag[1]) / 1000; // Convert from millisats to sats
+            }
           }
 
-          // Try to get author name
+          // Try to get author name using the zapper's pubkey
           let authorName: string | undefined;
           try {
-            const cachedProfile = getAuthorProfile(zap.pubkey);
+            const cachedProfile = getAuthorProfile(zapperPubkey);
             if (cachedProfile) {
               authorName = cachedProfile.displayName || cachedProfile.name;
+              console.log('Using cached profile for zap author:', zapperPubkey, '->', authorName);
             } else {
-              const user = ndkToUse.getUser({ pubkey: zap.pubkey });
+              console.log('Fetching profile for zap author:', zapperPubkey);
+              const user = ndkToUse.getUser({ pubkey: zapperPubkey });
               const profile = await user.fetchProfile();
               if (profile) {
                 authorName = profile.displayName || profile.name;
+                console.log('Fetched profile for zap author:', zapperPubkey, '->', authorName, profile);
+                // Cache the profile for future use
+                updateAuthorProfile(zapperPubkey, profile);
+              } else {
+                console.log('No profile found for zap author:', zapperPubkey);
               }
             }
           } catch (error) {
             console.error('Error fetching zap author profile:', error);
           }
 
+          // Use description from bolt11 invoice if available, otherwise fall back to description tag or content
+          const finalDescription = description || descriptionTag?.[1] || zap.content || '';
+
+          console.log('Zap data being added:', {
+            id: zap.id,
+            zapperPubkey,
+            authorName,
+            amount,
+            content: finalDescription
+          });
+
           zapDetails.push({
             id: zap.id,
-            pubkey: zap.pubkey,
+            pubkey: zapperPubkey, // Store the zapper's pubkey, not the recipient's
             amount,
-            content: descriptionTag?.[1] || zap.content,
+            content: finalDescription,
             created_at: zap.created_at,
-            authorName
+            authorName,
+            event: zap // Store the full NDK event
           });
         } catch (error) {
           console.error('Error parsing zap event:', error);
@@ -1120,6 +1079,8 @@ export default function BlogPost() {
               const profile = await user.fetchProfile();
               if (profile) {
                 authorName = profile.displayName || profile.name;
+                // Cache the profile for future use
+                updateAuthorProfile(reaction.pubkey, profile);
               }
             }
           } catch (error) {
@@ -1170,16 +1131,11 @@ export default function BlogPost() {
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
       const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
 
-      // Query by multiple tag types to catch all comments:
-      // 1. '#e' (event id reference) - for comments that reference the article in lowercase 'e' tag
-      // 2. '#E' (event id reference) - for comments that reference the article in uppercase 'E' tag  
-      // 3. '#a' (article coordinate reference) - for comments that reference the article coordinate
-      const [nip22ByE, nip22ByE_upper, nip22ByA, kind1ByE, kind1ByE_upper, kind1ByA] = await Promise.all([
+      // Query both by '#e' (event id reference) and '#a' (article coordinate reference)
+      const [nip22ByE, nip22ByA, kind1ByE, kind1ByA] = await Promise.all([
         ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId], limit: 200 }),
-        ndkToUse.fetchEvents({ kinds: [1111], '#E': [postId], limit: 200 }),
         aCoordinate ? ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate], limit: 200 }) : Promise.resolve(new Set()),
         ndkToUse.fetchEvents({ kinds: [1], '#e': [postId], limit: 500 }),
-        ndkToUse.fetchEvents({ kinds: [1], '#E': [postId], limit: 500 }),
         aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate], limit: 500 }) : Promise.resolve(new Set()),
       ]);
 
@@ -1187,44 +1143,24 @@ export default function BlogPost() {
       const combined: NDKEvent[] = [];
       const seen = new Set<string>();
       for (const ev of nip22ByE) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
-      for (const ev of nip22ByE_upper) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
       for (const ev of nip22ByA as Set<NDKEvent>) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
       for (const ev of kind1ByE) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
-      for (const ev of kind1ByE_upper) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
       for (const ev of kind1ByA as Set<NDKEvent>) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
 
       // First, create comments with basic data (no profile fetching yet)
-      const allComments: CommentData[] = combined.map(ev => {
-        // Find the parent comment ID
-        // For NIP-22 comments, we need to distinguish between:
-        // 1. Root comments: only have 'E' tag (article) and 'e' tag (same as article) - no parent
-        // 2. Reply comments: have 'E' tag (article) and 'e' tag (different from article) - parent is the 'e' tag
-        
-        const rootEventId = ev.tags.find(tag => tag[0] === 'E')?.[1]; // Root article event ID
-        const eTag = ev.tags.find(tag => tag[0] === 'e'); // Lowercase 'e' tag
-        
-        let parentId: string | undefined = undefined;
-        
-        if (eTag && eTag[1] && eTag[1] !== rootEventId) {
-          // The 'e' tag is different from the root article, so this is a reply
-          parentId = eTag[1];
-        }
-        // If 'e' tag is the same as root article or doesn't exist, this is a root comment
-        
-        return {
-          id: ev.id,
-          pubkey: ev.pubkey,
-          content: ev.content,
-          created_at: ev.created_at,
-          authorName: undefined, // Will be populated later
-          authorPicture: undefined, // Will be populated later
-          kind: ev.kind,
-          event: ev,
-          parentId: parentId,
-          children: [],
-          depth: 0
-        };
-      });
+      const allComments: CommentData[] = combined.map(ev => ({
+        id: ev.id,
+        pubkey: ev.pubkey,
+        content: ev.content,
+        created_at: ev.created_at,
+        authorName: undefined, // Will be populated later
+        authorPicture: undefined, // Will be populated later
+        kind: ev.kind,
+        event: ev,
+        parentId: ev.tags.find(tag => tag[0] === 'e')?.[1], // Assuming 'e' tag is the parent event
+        children: [],
+        depth: 0
+      }));
 
       // Sort comments by creation date (newest first)
       allComments.sort((a, b) => b.created_at - a.created_at);
@@ -1245,9 +1181,6 @@ export default function BlogPost() {
           const parent = commentMap.get(comment.parentId)!;
           parent.children.push(comment);
           comment.depth = parent.depth + 1;
-        } else if (comment.parentId) {
-          // This is a reply but parent not found - add as root comment for now
-          rootComments.push(comment);
         } else {
           // This is a root comment
           rootComments.push(comment);
@@ -1325,7 +1258,7 @@ export default function BlogPost() {
     } finally {
       setIsLoadingComments(false);
     }
-  }, [contextNdk, standaloneNdk, getAuthorProfile, post?.pubkey, params.d]);
+  }, [contextNdk, standaloneNdk, getAuthorProfile, updateAuthorProfile, post?.pubkey, params.d]);
 
   const handleCommentsClick = () => {
     // Scroll to comment section instead of opening modal
@@ -1333,194 +1266,6 @@ export default function BlogPost() {
     if (commentSection) {
       commentSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  };
-
-  const handleCommentSubmit = async () => {
-    if (!commentText.trim() || !post || !isAuthenticated) {
-      return;
-    }
-
-    const ndkToUse = contextNdk;
-    if (!ndkToUse) {
-      alert('No connection available. Please try again.');
-      return;
-    }
-
-    setIsSubmittingComment(true);
-
-    try {
-      // Create NIP-22 comment event (kind 1111)
-      const ndkEvent = new NDKEvent(ndkToUse);
-      ndkEvent.kind = 1111;
-      ndkEvent.content = commentText.trim();
-      
-      // Get the d tag from the post or URL parameters
-      const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
-      
-      // Build article coordinate (a tag)
-      const aCoordinate = `30023:${post.pubkey}:${dTag || post.id}`;
-      
-      // Add required tags according to NIP-22
-      ndkEvent.tags = [
-        ['K', '30023'], // Kind of the article being commented on
-        ['P', post.pubkey], // Author of the article
-        ['E', post.id], // Event ID of the article
-        ['A', aCoordinate], // Article coordinate
-        ['k', '30023'], // Kind of the article (lowercase)
-        ['p', post.pubkey], // Author of the article (lowercase)
-        ['e', post.id], // Event ID of the article (lowercase)
-        ['a', aCoordinate], // Article coordinate (lowercase)
-        ['client', 'Longform._'] // Client identifier
-      ];
-
-      ndkEvent.created_at = Math.floor(Date.now() / 1000);
-
-      console.log('Publishing comment event:', {
-        kind: ndkEvent.kind,
-        content: ndkEvent.content,
-        tags: ndkEvent.tags,
-        created_at: ndkEvent.created_at
-      });
-
-      // Publish the comment event
-      await ndkEvent.publish();
-      
-      console.log('Comment created successfully:', ndkEvent.id);
-      
-      // Clear the form and hide it
-      setCommentText('');
-      setShowCommentForm(false);
-      
-      // Refresh comments to show the new one
-      if (post.id) {
-        await fetchComments(post.id);
-      }
-      
-      // Show success message
-      alert('Comment posted successfully!');
-      
-    } catch (error) {
-      console.error('Error creating comment:', error);
-      alert(`Error posting comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSubmittingComment(false);
-    }
-  };
-
-  const handleCommentButtonClick = () => {
-    if (!isAuthenticated) {
-      alert('Please log in to comment on this post.');
-      return;
-    }
-    setShowCommentForm(true);
-  };
-
-  const handleReplySubmit = async (parentCommentId: string) => {
-    if (!replyText.trim() || !post || !isAuthenticated) {
-      return;
-    }
-
-    const ndkToUse = contextNdk;
-    if (!ndkToUse) {
-      alert('No connection available. Please try again.');
-      return;
-    }
-
-    setIsSubmittingReply(true);
-
-    try {
-      // Find the parent comment to get its details
-      const findCommentById = (comments: CommentData[], id: string): CommentData | null => {
-        for (const comment of comments) {
-          if (comment.id === id) {
-            return comment;
-          }
-          if (comment.children.length > 0) {
-            const found = findCommentById(comment.children, id);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-
-      const parentComment = findCommentById(comments, parentCommentId);
-      if (!parentComment) {
-        alert('Parent comment not found');
-        return;
-      }
-
-      // Create NIP-22 reply event (kind 1111)
-      const ndkEvent = new NDKEvent(ndkToUse);
-      ndkEvent.kind = 1111;
-      ndkEvent.content = replyText.trim();
-      
-      // Get the d tag from the post or URL parameters
-      const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
-      
-      // Build article coordinate (a tag)
-      const aCoordinate = `30023:${post.pubkey}:${dTag || post.id}`;
-      
-      // Add required tags according to NIP-22 for replies
-      ndkEvent.tags = [
-        // Root event (the article)
-        ['E', post.id], // Event ID of the article
-        ['K', '30023'], // Kind of the article
-        ['P', post.pubkey], // Author of the article
-        ['A', aCoordinate], // Article coordinate
-        
-        // Parent event (the comment being replied to)
-        ['e', parentCommentId], // Event ID of the parent comment
-        ['k', parentComment.kind.toString()], // Kind of the parent comment (1 or 1111)
-        ['p', parentComment.pubkey], // Author of the parent comment
-        
-        ['client', 'Longform._'] // Client identifier
-      ];
-
-      ndkEvent.created_at = Math.floor(Date.now() / 1000);
-
-      console.log('Publishing reply event:', {
-        kind: ndkEvent.kind,
-        content: ndkEvent.content,
-        tags: ndkEvent.tags,
-        created_at: ndkEvent.created_at,
-        parentComment: {
-          id: parentComment.id,
-          kind: parentComment.kind,
-          pubkey: parentComment.pubkey
-        }
-      });
-
-      // Publish the reply event
-      await ndkEvent.publish();
-      
-      console.log('Reply created successfully:', ndkEvent.id);
-      
-      // Clear the form and hide it
-      setReplyText('');
-      setShowReplyForm(null);
-      
-      // Refresh comments to show the new reply
-      if (post.id) {
-        await fetchComments(post.id);
-      }
-      
-      // Show success message
-      alert('Reply posted successfully!');
-      
-    } catch (error) {
-      console.error('Error creating reply:', error);
-      alert(`Error posting reply: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSubmittingReply(false);
-    }
-  };
-
-  const handleReplyButtonClick = (commentId: string) => {
-    if (!isAuthenticated) {
-      alert('Please log in to reply to this comment.');
-      return;
-    }
-    setShowReplyForm(commentId);
   };
 
   // Fetch comments when post is loaded
@@ -1769,7 +1514,16 @@ export default function BlogPost() {
         closeReactionMenu();
       }
     }
-  }, [showContextMenu, openReactionMenuId]);
+
+    // Handle zap context menus
+    if (openZapMenuId) {
+      const zapMenu = document.querySelector(`[data-zap-menu="${openZapMenuId}"]`);
+      
+      if (!zapMenu || !zapMenu.contains(target)) {
+        closeZapMenu();
+      }
+    }
+  }, [showContextMenu, openReactionMenuId, openZapMenuId]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -1781,8 +1535,11 @@ export default function BlogPost() {
       if (openReactionMenuId) {
         closeReactionMenu();
       }
+      if (openZapMenuId) {
+        closeZapMenu();
+      }
     }
-  }, [showContextMenu, openReactionMenuId]);
+  }, [showContextMenu, openReactionMenuId, openZapMenuId]);
 
   const handleContextMenu = useCallback((event: MouseEvent) => {
     // Prevent native context menu on all devices to avoid flashing
@@ -2144,35 +1901,37 @@ export default function BlogPost() {
             <h1 className={styles.title}>{post.title}</h1>
             <div className={styles.metadata}>
               <div className={styles.author}>
-                <span className={styles.label}>Author:</span>
-                <Link 
-                  href={`/profile/${nip19.npubEncode(post.pubkey)}`}
-                  className={styles.authorValue}
-                  style={{ textDecoration: 'none', color: 'inherit' }}
-                >
-                  {(() => {
-                    // First check if we have author info in the post itself
-                    if (post.author?.displayName || post.author?.name) {
-                      return post.author.displayName || post.author.name;
-                    }
-                    
-                    // If not, check the centralized author profiles cache
-                    const cachedProfile = getAuthorProfile(post.pubkey);
-                    if (cachedProfile?.displayName || cachedProfile?.name) {
-                      return cachedProfile.displayName || cachedProfile.name;
-                    }
-                    
-                    // Fallback to truncated pubkey
-                    return post.pubkey.slice(0, 8) + '...';
-                  })()}
-                </Link>
-                {isLoadingAdditionalData && !post.author && !getAuthorProfile(post.pubkey) && (
-                  <span className={styles.loadingIndicator}> (loading...)</span>
-                )}
-              </div>
-              <div className={styles.date}>
-                <span className={styles.label}>Published:</span>
-                <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
+                <div className={styles.authorLine}>
+                  <span className={styles.label}>Author:</span>
+                  <Link 
+                    href={`/profile/${nip19.npubEncode(post.pubkey)}`}
+                    className={styles.authorValue}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
+                  >
+                    {(() => {
+                      // First check if we have author info in the post itself
+                      if (post.author?.displayName || post.author?.name) {
+                        return post.author.displayName || post.author.name;
+                      }
+                      
+                      // If not, check the centralized author profiles cache
+                      const cachedProfile = getAuthorProfile(post.pubkey);
+                      if (cachedProfile?.displayName || cachedProfile?.name) {
+                        return cachedProfile.displayName || cachedProfile.name;
+                      }
+                      
+                      // Fallback to truncated pubkey
+                      return post.pubkey.slice(0, 8) + '...';
+                    })()}
+                  </Link>
+                  {isLoadingAdditionalData && !post.author && !getAuthorProfile(post.pubkey) && (
+                    <span className={styles.loadingIndicator}> (loading...)</span>
+                  )}
+                </div>
+                <div className={styles.date}>
+                  <span className={styles.label}>Published:</span>
+                  <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
+                </div>
               </div>
             </div>
             
@@ -2392,72 +2151,13 @@ export default function BlogPost() {
             <h3 className={styles.commentSectionTitle}>
               Comments ({reactionStats.comments})
             </h3>
-            <div className={styles.commentSectionActions}>
-              {isLoadingProfiles && (
-                <div className={styles.profileLoadingIndicator}>
-                  <div className={styles.profileLoadingSpinner}></div>
-                  <span>Loading profiles...</span>
-                </div>
-              )}
-              <button 
-                className={styles.commentButton}
-                onClick={handleCommentButtonClick}
-                disabled={isSubmittingComment}
-              >
-                {isAuthenticated ? 'Add Comment' : 'Login to Comment'}
-              </button>
-            </div>
+            {isLoadingProfiles && (
+              <div className={styles.profileLoadingIndicator}>
+                <div className={styles.profileLoadingSpinner}></div>
+                <span>Loading profiles...</span>
+              </div>
+            )}
           </div>
-          
-          {/* Comment Form */}
-          {showCommentForm && isAuthenticated && (
-            <div className={styles.commentForm}>
-              <div className={styles.commentFormHeader}>
-                <h4>Write a comment</h4>
-                <button 
-                  className={styles.commentFormClose}
-                  onClick={() => {
-                    setShowCommentForm(false);
-                    setCommentText('');
-                  }}
-                >
-                  <XMarkIcon className={styles.commentFormCloseIcon} />
-                </button>
-              </div>
-              <textarea
-                className={styles.commentTextarea}
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Share your thoughts on this post..."
-                rows={4}
-                maxLength={2000}
-              />
-              <div className={styles.commentFormFooter}>
-                <span className={styles.commentCharCount}>
-                  {commentText.length}/2000
-                </span>
-                <div className={styles.commentFormActions}>
-                  <button 
-                    className={styles.commentCancelButton}
-                    onClick={() => {
-                      setShowCommentForm(false);
-                      setCommentText('');
-                    }}
-                    disabled={isSubmittingComment}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    className={styles.commentSubmitButton}
-                    onClick={handleCommentSubmit}
-                    disabled={!commentText.trim() || isSubmittingComment}
-                  >
-                    {isSubmittingComment ? 'Posting...' : 'Post Comment'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
           
           {isLoadingComments ? (
             <div className={styles.commentLoading}>
@@ -2472,20 +2172,7 @@ export default function BlogPost() {
             </div>
           ) : (
             <div className={styles.commentList}>
-              <CommentThread 
-                comments={comments}
-                showReplyForm={showReplyForm}
-                setShowReplyForm={setShowReplyForm}
-                replyText={replyText}
-                setReplyText={setReplyText}
-                isAuthenticated={isAuthenticated}
-                handleReplyButtonClick={handleReplyButtonClick}
-                handleReplySubmit={handleReplySubmit}
-                isSubmittingReply={isSubmittingReply}
-                processCommentContent={processCommentContent}
-                openCommentJson={openCommentJson}
-                styles={styles}
-              />
+              <CommentThread comments={comments} />
             </div>
           )}
         </div>
@@ -2526,12 +2213,54 @@ export default function BlogPost() {
                 <div className={styles.zapList}>
                   {zapData.map((zap) => (
                     <div key={zap.id} className={styles.zapItem}>
-                      <span className={styles.zapAuthorName}>
-                        {zap.authorName || zap.pubkey.slice(0, 8) + '...'}
-                      </span>
-                      <span className={styles.zapAmount}>
-                        ⚡ {zap.amount} sats
-                      </span>
+                      <div className={styles.reactionLeft}>
+                        <span className={styles.zapAuthorName}>
+                          {zap.authorName || zap.pubkey.slice(0, 8) + '...'}
+                        </span>
+                        <span className={styles.zapAmount}>
+                          ⚡ {zap.amount} sats
+                        </span>
+                      </div>
+                      <div className={styles.reactionRight}>
+                        <div className={styles.reactionMenuWrapper}>
+                          <button className={styles.reactionMenuButton} onClick={(e) => {
+                            e.stopPropagation();
+                            handleZapMenuToggle(zap.id);
+                          }}>
+                            <EllipsisVerticalIcon className={styles.reactionMenuIcon} />
+                          </button>
+                          <div 
+                            className={styles.reactionMenu} 
+                            style={{ display: openZapMenuId === zap.id ? 'block' : 'none' }}
+                            data-zap-menu={zap.id}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button className={styles.reactionMenuItem} onClick={() => {
+                              // Use the full NDKEvent if available, otherwise fall back to basic data
+                              const fullEvent = zap.event ? {
+                                id: zap.event.id,
+                                pubkey: zap.event.pubkey,
+                                created_at: zap.event.created_at,
+                                kind: zap.event.kind,
+                                tags: zap.event.tags || [],
+                                content: zap.event.content,
+                                sig: zap.event.sig
+                              } : {
+                                id: zap.id,
+                                pubkey: zap.pubkey,
+                                created_at: zap.created_at,
+                                kind: 9735,
+                                tags: [],
+                                content: zap.content || '',
+                                sig: ''
+                              };
+                              setSelectedZapJson(JSON.stringify(fullEvent, null, 2));
+                              setShowZapJsonModal(true);
+                              closeZapMenu(); // Close the menu after opening the JSON modal
+                            }}>View JSON</button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2716,6 +2445,26 @@ export default function BlogPost() {
             </div>
             <div className={styles.modalBody}>
               <pre className={styles.jsonPre}>{selectedCommentJson}</pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Zap JSON Modal */}
+      {showZapJsonModal && (
+        <div className={styles.modalOverlay} onClick={closeZapJson}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Zap Event JSON</h2>
+              <button 
+                className={styles.modalCloseButton}
+                onClick={closeZapJson}
+              >
+                <XMarkIcon className={styles.modalCloseIcon} />
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <pre className={styles.jsonPre}>{selectedZapJson}</pre>
             </div>
           </div>
         </div>
