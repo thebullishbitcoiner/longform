@@ -621,7 +621,7 @@ export default function Longform() {
         });
       }
     } else if (action === 'delete') {
-      handleDeleteDraft(draft.id, draft.title);
+      handleDeleteDraft(draft.id, draft.title, {} as React.MouseEvent);
     }
     
     setDraftContextMenu({ visible: false, x: 0, y: 0, draftId: null });
