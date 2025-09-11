@@ -16,13 +16,14 @@ export function ProFeature({
   fallback = null, 
   showUpgradePrompt = false 
 }: ProFeatureProps) {
-  const { isPro, isLoading } = useProStatus();
+  const { isPro, isLegend, isLoading } = useProStatus();
 
   if (isLoading) {
     return <div className="pro-feature-loading">Loading...</div>;
   }
 
-  if (isPro) {
+  // Legends have permanent PRO access
+  if (isPro || isLegend) {
     return <>{children}</>;
   }
 
@@ -36,13 +37,21 @@ export function ProFeature({
         <div className="pro-feature-upgrade-content">
           <StarIcon className="pro-feature-icon" />
           <h3>PRO Feature</h3>
-          <p>This feature is only available to PRO subscribers.</p>
-          <a 
-            href="/support" 
-            className="pro-feature-upgrade-button"
-          >
-            Upgrade to PRO
-          </a>
+          <p>This feature is only available to PRO subscribers and Legends.</p>
+          <div className="pro-feature-upgrade-options">
+            <a 
+              href="/support" 
+              className="pro-feature-upgrade-button"
+            >
+              Upgrade to PRO
+            </a>
+            <a 
+              href="/support#legend" 
+              className="pro-feature-legend-button"
+            >
+              Become a Legend
+            </a>
+          </div>
         </div>
       </div>
     );

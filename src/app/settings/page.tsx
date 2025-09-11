@@ -18,6 +18,9 @@ import {
 import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
 import { cleanupStorage } from '@/utils/storage';
+import { ProFeature } from '@/components/ProFeature';
+import { getCustomEmojis, addCustomEmoji, removeCustomEmoji } from '@/utils/supabase';
+import { CustomEmoji } from '@/config/supabase';
 import './page.css';
 
 
@@ -35,6 +38,11 @@ export default function SettingsPage() {
     const [isPublishing, setIsPublishing] = useState(false);
     const [cacheData, setCacheData] = useState<Array<{key: string, value: string, size: number}>>([]);
     const [showCacheInfoModal, setShowCacheInfoModal] = useState(false);
+    const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
+    const [showAddEmojiModal, setShowAddEmojiModal] = useState(false);
+    const [newEmojiUrl, setNewEmojiUrl] = useState('');
+    const [newEmojiName, setNewEmojiName] = useState('');
+    const [isLoadingEmojis, setIsLoadingEmojis] = useState(false);
 
     const loadPreferredRelays = useCallback(async () => {
         if (currentUser?.pubkey) {
@@ -100,7 +108,7 @@ export default function SettingsPage() {
 
     // Prevent scrolling when modal is open
     useEffect(() => {
-        if (showInfoModal || showRelayListInfoModal || showCacheInfoModal) {
+        if (showInfoModal || showRelayListInfoModal || showCacheInfoModal || showAddEmojiModal) {
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = 'unset';
@@ -110,7 +118,7 @@ export default function SettingsPage() {
         return () => {
             document.body.style.overflow = 'unset';
         };
-    }, [showInfoModal, showRelayListInfoModal, showCacheInfoModal]);
+    }, [showInfoModal, showRelayListInfoModal, showCacheInfoModal, showAddEmojiModal]);
 
     const handleSavePreferredRelays = (relays: PreferredRelay[]) => {
         setPreferredRelays(relays);
@@ -341,6 +349,102 @@ export default function SettingsPage() {
     useEffect(() => {
         loadCacheData();
     }, [loadCacheData]);
+
+    // Load custom emojis from Supabase
+    const loadCustomEmojis = useCallback(async () => {
+        if (!currentUser?.npub) return;
+        
+        setIsLoadingEmojis(true);
+        try {
+            const emojis = await getCustomEmojis(currentUser.npub);
+            setCustomEmojis(emojis);
+        } catch (error) {
+            console.error('Error loading custom emojis:', error);
+            toast.error('Failed to load custom emojis');
+        } finally {
+            setIsLoadingEmojis(false);
+        }
+    }, [currentUser?.npub]);
+
+    // Load custom emojis on component mount
+    useEffect(() => {
+        if (isAuthenticated && currentUser?.npub) {
+            loadCustomEmojis();
+        }
+    }, [isAuthenticated, currentUser?.npub, loadCustomEmojis]);
+
+    // Custom emoji functions
+    const handleAddCustomEmoji = async () => {
+        if (!currentUser?.npub) {
+            toast.error('User not authenticated');
+            return;
+        }
+
+        if (!newEmojiUrl.trim()) {
+            toast.error('Please enter an emoji URL');
+            return;
+        }
+
+        if (!newEmojiName.trim()) {
+            toast.error('Please enter an emoji name');
+            return;
+        }
+
+        // Basic URL validation
+        try {
+            new URL(newEmojiUrl);
+        } catch {
+            toast.error('Please enter a valid URL');
+            return;
+        }
+
+        // Check if emoji already exists
+        if (customEmojis.some(emoji => emoji.url === newEmojiUrl || emoji.name === newEmojiName)) {
+            toast.error('This emoji already exists');
+            return;
+        }
+
+        try {
+            const newEmoji = await addCustomEmoji(
+                currentUser.npub,
+                newEmojiName.trim(),
+                newEmojiUrl.trim()
+            );
+
+            if (newEmoji) {
+                setCustomEmojis(prev => [newEmoji, ...prev]);
+                setNewEmojiUrl('');
+                setNewEmojiName('');
+                setShowAddEmojiModal(false);
+                toast.success('Custom emoji added successfully');
+            } else {
+                toast.error('Failed to add custom emoji');
+            }
+        } catch (error) {
+            console.error('Error adding custom emoji:', error);
+            toast.error('Failed to add custom emoji');
+        }
+    };
+
+    const handleRemoveCustomEmoji = async (name: string) => {
+        if (!currentUser?.npub) {
+            toast.error('User not authenticated');
+            return;
+        }
+
+        try {
+            const success = await removeCustomEmoji(currentUser.npub, name);
+            if (success) {
+                setCustomEmojis(prev => prev.filter(emoji => emoji.name !== name));
+                toast.success('Custom emoji removed');
+            } else {
+                toast.error('Failed to remove custom emoji');
+            }
+        } catch (error) {
+            console.error('Error removing custom emoji:', error);
+            toast.error('Failed to remove custom emoji');
+        }
+    };
 
 
 
@@ -639,6 +743,64 @@ export default function SettingsPage() {
                     )}
                 </section>
 
+                <section className="settings-section">
+                    <div className="section-header">
+                        <h2>Custom Emojis ({customEmojis.length})</h2>
+                        <ProFeature>
+                            <button
+                                onClick={() => setShowAddEmojiModal(true)}
+                                className="add-emoji-button"
+                                title="Add custom emoji"
+                            >
+                                <PlusIcon />
+                            </button>
+                        </ProFeature>
+                    </div>
+
+                    <ProFeature showUpgradePrompt={true}>
+                        {isLoadingEmojis ? (
+                            <div className="loading-emojis">
+                                <div className="loading-spinner"></div>
+                                <p>Loading custom emojis...</p>
+                            </div>
+                        ) : customEmojis.length === 0 ? (
+                            <p className="no-emojis">No custom emojis configured. Add some emojis below.</p>
+                        ) : (
+                            <div className="emojis-list">
+                                {customEmojis.map((emoji) => (
+                                    <div key={`${emoji.npub}-${emoji.name}`} className="emoji-item">
+                                        <div className="emoji-preview">
+                                            <img 
+                                                src={emoji.url} 
+                                                alt={emoji.name}
+                                                className="emoji-image"
+                                                onError={(e) => {
+                                                    e.currentTarget.style.display = 'none';
+                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                }}
+                                            />
+                                            <div className="emoji-fallback hidden">❓</div>
+                                        </div>
+                                        <div className="emoji-info">
+                                            <div className="emoji-name">{emoji.name}</div>
+                                            <div className="emoji-url">{emoji.url}</div>
+                                        </div>
+                                        <div className="emoji-actions">
+                                            <button
+                                                onClick={() => handleRemoveCustomEmoji(emoji.name)}
+                                                className="remove-emoji-button"
+                                                title="Remove emoji"
+                                            >
+                                                <TrashIcon />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </ProFeature>
+                </section>
+
 
             </div>
 
@@ -761,6 +923,85 @@ export default function SettingsPage() {
                             <p>
                                 <strong>Note:</strong> Clearing cache will require the app to reload data from the Nostr network, which may take some time.
                             </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Emoji Modal */}
+            {showAddEmojiModal && (
+                <div className="modal-overlay" onClick={() => setShowAddEmojiModal(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>Add Custom Emoji</h3>
+                            <button
+                                onClick={() => setShowAddEmojiModal(false)}
+                                className="modal-close-button"
+                                title="Close"
+                            >
+                                <XMarkIcon />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="emoji-form">
+                                <div className="form-group">
+                                    <label htmlFor="emoji-name">Emoji Name</label>
+                                    <input
+                                        id="emoji-name"
+                                        type="text"
+                                        value={newEmojiName}
+                                        onChange={(e) => setNewEmojiName(e.target.value)}
+                                        placeholder="e.g., :custom_emoji:"
+                                        className="emoji-input"
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label htmlFor="emoji-url">Emoji URL</label>
+                                    <input
+                                        id="emoji-url"
+                                        type="url"
+                                        value={newEmojiUrl}
+                                        onChange={(e) => setNewEmojiUrl(e.target.value)}
+                                        placeholder="https://example.com/emoji.png"
+                                        className="emoji-input"
+                                    />
+                                </div>
+                                <div className="emoji-preview-section">
+                                    <label>Preview</label>
+                                    <div className="emoji-preview-container">
+                                        {newEmojiUrl && (
+                                            <img 
+                                                src={newEmojiUrl} 
+                                                alt="Preview"
+                                                className="emoji-preview-image"
+                                                onError={(e) => {
+                                                    e.currentTarget.style.display = 'none';
+                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                }}
+                                            />
+                                        )}
+                                        <div className="emoji-preview-fallback hidden">❓</div>
+                                        {!newEmojiUrl && (
+                                            <div className="emoji-preview-placeholder">Enter URL to see preview</div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="emoji-form-actions">
+                                    <button
+                                        onClick={() => setShowAddEmojiModal(false)}
+                                        className="cancel-button"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleAddCustomEmoji}
+                                        className="add-emoji-submit-button"
+                                        disabled={!newEmojiName.trim() || !newEmojiUrl.trim()}
+                                    >
+                                        Add Emoji
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

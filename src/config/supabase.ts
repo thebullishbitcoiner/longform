@@ -39,6 +39,13 @@ export interface Legend {
   created_at: string;
 }
 
+export interface CustomEmoji {
+  npub: string;
+  name: string;
+  url: string;
+  created_at?: string;
+}
+
 export interface ActionQueue {
   id?: number; // int8 (bigint) with auto-increment in Supabase
   author: string;

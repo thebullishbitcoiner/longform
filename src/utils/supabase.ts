@@ -1,4 +1,4 @@
-import { supabase, ProStatus, Pro } from '@/config/supabase';
+import { supabase, ProStatus, Pro, CustomEmoji } from '@/config/supabase';
 
 /**
  * Check if a user has PRO status based on their npub
@@ -135,4 +135,106 @@ export function isFullyExpired(expiresAt: string): boolean {
   const bufferEndDate = new Date(expirationDate.getTime() + (14 * 24 * 60 * 60 * 1000));
   
   return now > bufferEndDate;
+}
+
+/**
+ * Custom Emoji Functions
+ */
+
+/**
+ * Get all custom emojis for a user
+ */
+export async function getCustomEmojis(npub: string): Promise<CustomEmoji[]> {
+  try {
+    const { data, error } = await supabase
+      .from('custom_emojis')
+      .select('*')
+      .eq('npub', npub)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching custom emojis:', error);
+      throw error;
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error in getCustomEmojis:', error);
+    return [];
+  }
+}
+
+/**
+ * Add a new custom emoji
+ */
+export async function addCustomEmoji(npub: string, name: string, url: string): Promise<CustomEmoji | null> {
+  try {
+    const { data, error } = await supabase
+      .from('custom_emojis')
+      .insert({
+        npub,
+        name,
+        url
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding custom emoji:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in addCustomEmoji:', error);
+    return null;
+  }
+}
+
+/**
+ * Remove a custom emoji
+ */
+export async function removeCustomEmoji(npub: string, name: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('custom_emojis')
+      .delete()
+      .eq('npub', npub)
+      .eq('name', name);
+
+    if (error) {
+      console.error('Error removing custom emoji:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in removeCustomEmoji:', error);
+    return false;
+  }
+}
+
+/**
+ * Update a custom emoji
+ */
+export async function updateCustomEmoji(npub: string, oldName: string, newName: string, url: string): Promise<CustomEmoji | null> {
+  try {
+    const { data, error } = await supabase
+      .from('custom_emojis')
+      .update({ name: newName, url })
+      .eq('npub', npub)
+      .eq('name', oldName)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating custom emoji:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in updateCustomEmoji:', error);
+    return null;
+  }
 }
