@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useBlog } from '@/contexts/BlogContext';
 import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
@@ -18,6 +18,7 @@ import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
+import JsonModal from '@/components/JsonModal';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -93,6 +94,291 @@ interface TextSelection {
   container: Node;
 }
 
+
+// Utility function to count total comments including replies
+const countTotalComments = (comments: CommentData[]): number => {
+  let count = 0;
+  comments.forEach(comment => {
+    count += 1; // Count this comment
+    count += countTotalComments(comment.children); // Count all replies recursively
+  });
+  return count;
+};
+
+// Utility function to close all comment menus
+const closeAllCommentMenus = () => {
+  const menus = document.querySelectorAll(`.${styles.commentMenu}`);
+  menus.forEach(menu => {
+    (menu as HTMLElement).style.display = 'none';
+  });
+};
+
+// Utility function to find a comment by ID recursively
+const findCommentById = (comments: CommentData[], id: string): CommentData | null => {
+  for (const comment of comments) {
+    if (comment.id === id) {
+      return comment;
+    }
+    // Search in children recursively
+    const found = findCommentById(comment.children, id);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+};
+
+// Fallback avatar component
+const FallbackAvatar = ({ name, pubkey, styles }: { name?: string, pubkey: string, styles: Record<string, string> }) => {
+  const initials = name ? name.slice(0, 2).toUpperCase() : pubkey.slice(0, 2).toUpperCase();
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+  const colorIndex = pubkey.charCodeAt(0) % colors.length;
+  
+  return (
+    <div 
+      className={styles.fallbackAvatar}
+      style={{ backgroundColor: colors[colorIndex] }}
+    >
+      {initials}
+    </div>
+  );
+};
+
+// Component to render a single comment in nested structure
+const CommentItem = React.memo(({ 
+  comment, 
+  showReplyForm, 
+  setShowReplyForm, 
+  replyText, 
+  setReplyText, 
+  isAuthenticated, 
+  handleReplyButtonClick, 
+  handleReplySubmit, 
+  isSubmittingReply,
+  processCommentContent,
+  openCommentJson,
+  styles,
+  depth
+}: { 
+  comment: CommentData,
+  showReplyForm: string | null,
+  setShowReplyForm: (id: string | null) => void,
+  replyText: string,
+  setReplyText: (text: string) => void,
+  isAuthenticated: boolean,
+  handleReplyButtonClick: (id: string) => void,
+  handleReplySubmit: (id: string) => void,
+  isSubmittingReply: boolean,
+  processCommentContent: (content: string) => React.ReactNode,
+  openCommentJson: (id: string) => void,
+  styles: Record<string, string>,
+  depth: number
+}) => {
+  const isReply = depth > 0;
+  
+  return (
+    <div className={`${styles.commentContent} ${isReply ? styles.commentReply : ''}`}>
+      <div className={styles.commentHeader}>
+        <div className={styles.commentAuthor}>
+          {comment.authorPicture ? (
+            <Image 
+              src={comment.authorPicture} 
+              alt="Author" 
+              width={32}
+              height={32}
+              className={styles.commentAuthorAvatar}
+            />
+          ) : (
+            <FallbackAvatar 
+              name={comment.authorName}
+              pubkey={comment.pubkey}
+              styles={styles}
+            />
+          )}
+          <span className={styles.commentAuthorName}>
+            {comment.authorName || comment.pubkey.slice(0, 8) + '...'}
+          </span>
+        </div>
+        <div className={styles.commentHeaderRight}>
+          <span className={styles.commentDate}>
+            {new Date(comment.created_at * 1000).toLocaleDateString()}
+          </span>
+          <div className={styles.commentActions}>
+            <button 
+              className={styles.replyButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleReplyButtonClick(comment.id);
+              }}
+              disabled={!isAuthenticated}
+            >
+              Reply
+            </button>
+            <div className={styles.commentMenuWrapper}>
+              <button className={styles.commentMenuButton} onClick={(e) => {
+                e.stopPropagation();
+                closeAllCommentMenus(); // Close all other menus first
+                const menu = (e.currentTarget.nextSibling as HTMLElement);
+                if (menu) {
+                  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+                }
+              }}>
+                <EllipsisVerticalIcon className={styles.commentMenuIcon} />
+              </button>
+              <div className={styles.commentMenu} onClick={(e) => e.stopPropagation()}>
+                <button className={styles.commentMenuItem} onClick={() => openCommentJson(comment.id)}>View JSON</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className={styles.commentText}>
+        {processCommentContent(comment.content)}
+      </div>
+      
+      {/* Reply Form */}
+      {showReplyForm === comment.id && isAuthenticated && (
+        <div className={styles.replyForm}>
+          <div className={styles.replyFormHeader}>
+            <h5>Reply to {comment.authorName || comment.pubkey.slice(0, 8) + '...'}</h5>
+            <button 
+              className={styles.replyFormClose}
+              onClick={() => {
+                setShowReplyForm(null);
+                setReplyText('');
+              }}
+            >
+              <XMarkIcon className={styles.replyFormCloseIcon} />
+            </button>
+          </div>
+          <textarea
+            className={styles.replyTextarea}
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            placeholder="Write your reply..."
+            rows={3}
+            maxLength={1000}
+          />
+          <div className={styles.replyFormFooter}>
+            <span className={styles.replyCharCount}>
+              {replyText.length}/1000
+            </span>
+            <div className={styles.replyFormActions}>
+              <button 
+                className={styles.replyCancelButton}
+                onClick={() => {
+                  setShowReplyForm(null);
+                  setReplyText('');
+                }}
+                disabled={isSubmittingReply}
+              >
+                Cancel
+              </button>
+              <button 
+                className={styles.replySubmitButton}
+                onClick={() => handleReplySubmit(comment.id)}
+                disabled={!replyText.trim() || isSubmittingReply}
+              >
+                {isSubmittingReply ? 'Posting...' : 'Post Reply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+CommentItem.displayName = 'CommentItem';
+
+// Main component to render all comments with nested threading (max 4 levels)
+const CommentThread = React.memo(({ 
+  comments, 
+  showReplyForm, 
+  setShowReplyForm, 
+  replyText, 
+  setReplyText, 
+  isAuthenticated, 
+  handleReplyButtonClick, 
+  handleReplySubmit, 
+  isSubmittingReply,
+  processCommentContent,
+  openCommentJson,
+  styles,
+  depth = 0
+}: { 
+  comments: CommentData[],
+  showReplyForm: string | null,
+  setShowReplyForm: (id: string | null) => void,
+  replyText: string,
+  setReplyText: (text: string) => void,
+  isAuthenticated: boolean,
+  handleReplyButtonClick: (id: string) => void,
+  handleReplySubmit: (id: string) => void,
+  isSubmittingReply: boolean,
+  processCommentContent: (content: string) => React.ReactNode,
+  openCommentJson: (id: string) => void,
+  styles: Record<string, string>,
+  depth?: number
+}) => {
+  const maxDepth = 4;
+  
+  return (
+    <div className={styles.commentThread}>
+      {comments.map((comment) => (
+        <div key={comment.id} className={depth === 0 ? styles.commentItem : ''} data-depth={depth}>
+          <CommentItem
+            comment={comment}
+            showReplyForm={showReplyForm}
+            setShowReplyForm={setShowReplyForm}
+            replyText={replyText}
+            setReplyText={setReplyText}
+            isAuthenticated={isAuthenticated}
+            handleReplyButtonClick={handleReplyButtonClick}
+            handleReplySubmit={handleReplySubmit}
+            isSubmittingReply={isSubmittingReply}
+            processCommentContent={processCommentContent}
+            openCommentJson={openCommentJson}
+            styles={styles}
+            depth={depth}
+          />
+          
+          {/* Render children if we haven't reached max depth */}
+          {depth < maxDepth && comment.children.length > 0 && (
+            <div className={styles.commentChildren}>
+              <CommentThread
+                comments={comment.children}
+                showReplyForm={showReplyForm}
+                setShowReplyForm={setShowReplyForm}
+                replyText={replyText}
+                setReplyText={setReplyText}
+                isAuthenticated={isAuthenticated}
+                handleReplyButtonClick={handleReplyButtonClick}
+                handleReplySubmit={handleReplySubmit}
+                isSubmittingReply={isSubmittingReply}
+                processCommentContent={processCommentContent}
+                openCommentJson={openCommentJson}
+                styles={styles}
+                depth={depth + 1}
+              />
+            </div>
+          )}
+          
+          {/* Show collapsed indicator for deep threads */}
+          {depth >= maxDepth && comment.children.length > 0 && (
+            <div className={styles.collapsedThread}>
+              <span className={styles.collapsedIndicator}>
+                +{comment.children.length} more replies
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+});
+CommentThread.displayName = 'CommentThread';
+
 export default function BlogPost() {
   const params = useParams();
   const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce, updateAuthorProfile } = useBlog();
@@ -111,7 +397,7 @@ export default function BlogPost() {
   const [hasMarkedAsRead, setHasMarkedAsRead] = useState(false);
   const [standaloneNdk, setStandaloneNdk] = useState<NDK | null>(null);
   const [isLoadingAdditionalData, setIsLoadingAdditionalData] = useState(false);
-  const [reactionStats, setReactionStats] = useState<ReactionStats>({
+  const [statsSection, setStatsSection] = useState<ReactionStats>({
     likes: 0,
     comments: 0,
     zaps: 0,
@@ -140,15 +426,28 @@ export default function BlogPost() {
   const [comments, setComments] = useState<CommentData[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
-  const [showCommentJsonModal, setShowCommentJsonModal] = useState(false);
-  const [selectedCommentJson, setSelectedCommentJson] = useState<string | null>(null);
-  const [showZapJsonModal, setShowZapJsonModal] = useState(false);
-  const [selectedZapJson, setSelectedZapJson] = useState<string | null>(null);
+  const [jsonModal, setJsonModal] = useState<{
+    isOpen: boolean;
+    data: unknown;
+  }>({
+    isOpen: false,
+    data: null
+  });
   const [openReactionMenuId, setOpenReactionMenuId] = useState<string | null>(null);
   const [openZapMenuId, setOpenZapMenuId] = useState<string | null>(null);
 
-  const openCommentJson = (eventId: string) => {
-    const comment = comments.find(c => c.id === eventId);
+  // Comment form state
+  const [showCommentForm, setShowCommentForm] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  
+  // Reply form state
+  const [showReplyForm, setShowReplyForm] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+
+  const openCommentJson = useCallback((eventId: string) => {
+    const comment = findCommentById(comments, eventId);
     if (comment) {
       const fullEvent = {
         id: comment.event.id,
@@ -159,20 +458,18 @@ export default function BlogPost() {
         content: comment.event.content,
         sig: comment.event.sig
       };
-      setSelectedCommentJson(JSON.stringify(fullEvent, null, 2));
-      setShowCommentJsonModal(true);
+      setJsonModal({
+        isOpen: true,
+        data: fullEvent
+      });
     }
-  };
+  }, [comments]);
 
-  const closeCommentJson = () => {
-    setShowCommentJsonModal(false);
-    setSelectedCommentJson(null);
-  };
-
-
-  const closeZapJson = () => {
-    setShowZapJsonModal(false);
-    setSelectedZapJson(null);
+  const closeJsonModal = () => {
+    setJsonModal({
+      isOpen: false,
+      data: null
+    });
   };
 
   const handleZapMenuToggle = (zapId: string) => {
@@ -299,177 +596,6 @@ export default function BlogPost() {
     }
   };
 
-  // Recursive component to render threaded comments
-  const CommentThread = ({ comments, depth = 0 }: { comments: CommentData[], depth?: number }) => {
-    // Function to process comment content and convert nprofile strings to links
-    const processCommentContent = (content: string) => {
-      if (!content || typeof content !== 'string') {
-        return content;
-      }
-
-      // Process the content by replacing nostr links with React elements
-      const nostrLinkRegex = /(nostr:)?(nprofile1[a-zA-Z0-9]+|npub1[a-zA-Z0-9]+|note1[a-zA-Z0-9]+|nevent1[a-zA-Z0-9]+)/g;
-      
-      const elements: (string | React.ReactElement)[] = [];
-      let lastIndex = 0;
-      let match;
-      
-      while ((match = nostrLinkRegex.exec(content)) !== null) {
-        // Add text before the match
-        if (match.index > lastIndex) {
-          elements.push(content.slice(lastIndex, match.index));
-        }
-        
-        const fullMatch = match[0]; // The full matched string (including nostr: if present)
-        const cleanPart = fullMatch.replace(/^nostr:/, ''); // Remove nostr: prefix
-        
-        try {
-          const decoded = nip19.decode(cleanPart);
-          
-          switch (decoded.type) {
-            case 'nprofile':
-              const pubkey = decoded.data.pubkey;
-              if (pubkey) {
-                const profileUrl = `/profile/${nip19.npubEncode(pubkey)}`;
-                const cachedProfile = getAuthorProfile(pubkey);
-                const displayName = cachedProfile?.displayName || cachedProfile?.name;
-                
-                elements.push(
-                  <Link 
-                    key={`nostr-${match.index}`}
-                    href={profileUrl}
-                    className={styles.nostrLink}
-                    onClick={(e) => e.stopPropagation()}
-                    title={fullMatch}
-                  >
-                    {displayName ? `@${displayName}` : `@${pubkey.slice(0, 8)}...`}
-                  </Link>
-                );
-              } else {
-                elements.push(fullMatch);
-              }
-              break;
-            
-            case 'npub':
-              const npubUrl = `/profile/${cleanPart}`;
-              const npubPubkey = decoded.data;
-              const npubCachedProfile = getAuthorProfile(npubPubkey);
-              const npubDisplayName = npubCachedProfile?.displayName || npubCachedProfile?.name;
-              
-              elements.push(
-                <Link 
-                  key={`nostr-${match.index}`}
-                  href={npubUrl}
-                  className={styles.nostrLink}
-                  onClick={(e) => e.stopPropagation()}
-                  title={fullMatch}
-                >
-                  {npubDisplayName ? `@${npubDisplayName}` : `@${npubPubkey.slice(0, 8)}...`}
-                </Link>
-              );
-              break;
-            
-            case 'note':
-              const noteUrl = `https://njump.me/${cleanPart}`;
-              elements.push(
-                <a 
-                  key={`nostr-${match.index}`}
-                  href={noteUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.nostrLink}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {fullMatch}
-                </a>
-              );
-              break;
-            
-            case 'nevent':
-              const eventUrl = `https://njump.me/${cleanPart}`;
-              elements.push(
-                <a 
-                  key={`nostr-${match.index}`}
-                  href={eventUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.nostrLink}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {fullMatch}
-                </a>
-              );
-              break;
-            
-            default:
-              elements.push(fullMatch);
-          }
-        } catch (error) {
-          console.error('Error decoding nostr link:', fullMatch, error);
-          elements.push(fullMatch);
-        }
-        
-        lastIndex = match.index + fullMatch.length;
-      }
-      
-      // Add remaining text after the last match
-      if (lastIndex < content.length) {
-        elements.push(content.slice(lastIndex));
-      }
-      
-      return elements.length > 0 ? elements : content;
-    };
-
-    return (
-      <div className={styles.commentThread} style={{ marginLeft: `${depth * 20}px` }}>
-        {comments.map((comment) => (
-          <div key={comment.id} className={styles.commentItem}>
-            <div className={styles.commentHeader}>
-              <div className={styles.commentAuthor}>
-                {comment.authorPicture && (
-                  <Image 
-                    src={comment.authorPicture} 
-                    alt="Author" 
-                    width={32}
-                    height={32}
-                    className={styles.commentAuthorAvatar}
-                  />
-                )}
-                <span className={styles.commentAuthorName}>
-                  {comment.authorName || comment.pubkey.slice(0, 8) + '...'}
-                </span>
-              </div>
-              <div className={styles.commentHeaderRight}>
-                <span className={styles.commentDate}>
-                  {new Date(comment.created_at * 1000).toLocaleDateString()}
-                </span>
-                <div className={styles.commentMenuWrapper}>
-                  <button className={styles.commentMenuButton} onClick={(e) => {
-                    e.stopPropagation();
-                    const menu = (e.currentTarget.nextSibling as HTMLElement);
-                    if (menu) {
-                      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-                    }
-                  }}>
-                    <EllipsisVerticalIcon className={styles.commentMenuIcon} />
-                  </button>
-                  <div className={styles.commentMenu} onClick={(e) => e.stopPropagation()}>
-                    <button className={styles.commentMenuItem} onClick={() => openCommentJson(comment.id)}>View JSON</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className={styles.commentContent}>
-              {processCommentContent(comment.content)}
-            </div>
-            {comment.children.length > 0 && (
-              <CommentThread comments={comment.children} depth={depth + 1} />
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  };
   
   const endOfContentRef = useRef<HTMLDivElement>(null);
   
@@ -500,7 +626,7 @@ export default function BlogPost() {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) return;
 
-    setReactionStats(prev => ({ ...prev, isLoading: true }));
+    setStatsSection(prev => ({ ...prev, isLoading: true }));
 
     try {
       // Build article coordinate (a tag)
@@ -515,7 +641,7 @@ export default function BlogPost() {
 
       // Helper function to update stats incrementally
       const updateStats = () => {
-        setReactionStats({
+        setStatsSection({
           likes,
           comments,
           zaps,
@@ -584,7 +710,7 @@ export default function BlogPost() {
       updateStats();
 
       // Final update with loading complete
-      setReactionStats({
+      setStatsSection({
         likes,
         comments,
         zaps,
@@ -596,7 +722,7 @@ export default function BlogPost() {
 
     } catch (error) {
       console.error('Error fetching reaction stats:', error);
-      setReactionStats(prev => ({ ...prev, isLoading: false }));
+      setStatsSection(prev => ({ ...prev, isLoading: false }));
     }
   }, [contextNdk, standaloneNdk, post?.pubkey, params.d]);
 
@@ -1131,11 +1257,16 @@ export default function BlogPost() {
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
       const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
 
-      // Query both by '#e' (event id reference) and '#a' (article coordinate reference)
-      const [nip22ByE, nip22ByA, kind1ByE, kind1ByA] = await Promise.all([
+      // Query by multiple tag types to catch all comments:
+      // 1. '#e' (event id reference) - for comments that reference the article in lowercase 'e' tag
+      // 2. '#E' (event id reference) - for comments that reference the article in uppercase 'E' tag  
+      // 3. '#a' (article coordinate reference) - for comments that reference the article coordinate
+      const [nip22ByE, nip22ByE_upper, nip22ByA, kind1ByE, kind1ByE_upper, kind1ByA] = await Promise.all([
         ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId], limit: 200 }),
+        ndkToUse.fetchEvents({ kinds: [1111], '#E': [postId], limit: 200 }),
         aCoordinate ? ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate], limit: 200 }) : Promise.resolve(new Set()),
         ndkToUse.fetchEvents({ kinds: [1], '#e': [postId], limit: 500 }),
+        ndkToUse.fetchEvents({ kinds: [1], '#E': [postId], limit: 500 }),
         aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate], limit: 500 }) : Promise.resolve(new Set()),
       ]);
 
@@ -1143,12 +1274,31 @@ export default function BlogPost() {
       const combined: NDKEvent[] = [];
       const seen = new Set<string>();
       for (const ev of nip22ByE) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
+      for (const ev of nip22ByE_upper) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
       for (const ev of nip22ByA as Set<NDKEvent>) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
       for (const ev of kind1ByE) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
+      for (const ev of kind1ByE_upper) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
       for (const ev of kind1ByA as Set<NDKEvent>) if (!seen.has(ev.id)) { combined.push(ev); seen.add(ev.id); }
 
       // First, create comments with basic data (no profile fetching yet)
-      const allComments: CommentData[] = combined.map(ev => ({
+      const allComments: CommentData[] = combined.map(ev => {
+        // Find the parent comment ID
+        // For NIP-22 comments, we need to distinguish between:
+        // 1. Root comments: only have 'E' tag (article) and 'e' tag (same as article) - no parent
+        // 2. Reply comments: have 'E' tag (article) and 'e' tag (different from article) - parent is the 'e' tag
+        
+        const rootEventId = ev.tags.find(tag => tag[0] === 'E')?.[1]; // Root article event ID
+        const eTag = ev.tags.find(tag => tag[0] === 'e'); // Lowercase 'e' tag
+        
+        let parentId: string | undefined = undefined;
+        
+        if (eTag && eTag[1] && eTag[1] !== rootEventId) {
+          // The 'e' tag is different from the root article, so this is a reply
+          parentId = eTag[1];
+        }
+        // If 'e' tag is the same as root article or doesn't exist, this is a root comment
+        
+        return {
         id: ev.id,
         pubkey: ev.pubkey,
         content: ev.content,
@@ -1157,10 +1307,11 @@ export default function BlogPost() {
         authorPicture: undefined, // Will be populated later
         kind: ev.kind,
         event: ev,
-        parentId: ev.tags.find(tag => tag[0] === 'e')?.[1], // Assuming 'e' tag is the parent event
+          parentId: parentId,
         children: [],
         depth: 0
-      }));
+        };
+      });
 
       // Sort comments by creation date (newest first)
       allComments.sort((a, b) => b.created_at - a.created_at);
@@ -1181,6 +1332,9 @@ export default function BlogPost() {
           const parent = commentMap.get(comment.parentId)!;
           parent.children.push(comment);
           comment.depth = parent.depth + 1;
+        } else if (comment.parentId) {
+          // This is a reply but parent not found - add as root comment for now
+          rootComments.push(comment);
         } else {
           // This is a root comment
           rootComments.push(comment);
@@ -1267,6 +1421,313 @@ export default function BlogPost() {
       commentSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
+
+  const handleCommentSubmit = useCallback(async () => {
+    if (!commentText.trim() || !post || !isAuthenticated) {
+      return;
+    }
+
+    const ndkToUse = contextNdk;
+    if (!ndkToUse) {
+      alert('No connection available. Please try again.');
+      return;
+    }
+
+    setIsSubmittingComment(true);
+
+    try {
+      // Create NIP-22 comment event (kind 1111)
+      const ndkEvent = new NDKEvent(ndkToUse);
+      ndkEvent.kind = 1111;
+      ndkEvent.content = commentText.trim();
+      
+      // Get the d tag from the post or URL parameters
+      const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
+      
+      // Build article coordinate (a tag)
+      const aCoordinate = `30023:${post.pubkey}:${dTag || post.id}`;
+      
+      // Add required tags according to NIP-22
+      ndkEvent.tags = [
+        ['K', '30023'], // Kind of the article being commented on
+        ['P', post.pubkey], // Author of the article
+        ['E', post.id], // Event ID of the article
+        ['A', aCoordinate], // Article coordinate
+        ['k', '30023'], // Kind of the article (lowercase)
+        ['p', post.pubkey], // Author of the article (lowercase)
+        ['e', post.id], // Event ID of the article (lowercase)
+        ['a', aCoordinate], // Article coordinate (lowercase)
+        ['client', 'Longform._'] // Client identifier
+      ];
+
+      ndkEvent.created_at = Math.floor(Date.now() / 1000);
+
+      console.log('Publishing comment event:', {
+        kind: ndkEvent.kind,
+        content: ndkEvent.content,
+        tags: ndkEvent.tags,
+        created_at: ndkEvent.created_at
+      });
+
+      // Publish the comment event
+      await ndkEvent.publish();
+      
+      console.log('Comment created successfully:', ndkEvent.id);
+      
+      // Clear the form and hide it
+      setCommentText('');
+      setShowCommentForm(false);
+      
+      // Refresh comments to show the new one
+      if (post.id) {
+        await fetchComments(post.id);
+      }
+      
+      // Show success message
+      alert('Comment posted successfully!');
+      
+    } catch (error) {
+      console.error('Error creating comment:', error);
+      alert(`Error posting comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  }, [commentText, post, isAuthenticated, contextNdk, params.d, fetchComments]);
+
+  const handleCommentButtonClick = useCallback(() => {
+    if (!isAuthenticated) {
+      alert('Please log in to comment on this post.');
+      return;
+    }
+    setShowCommentForm(true);
+  }, [isAuthenticated]);
+
+  const handleReplySubmit = useCallback(async (parentCommentId: string) => {
+    if (!replyText.trim() || !post || !isAuthenticated) {
+      return;
+    }
+
+    const ndkToUse = contextNdk;
+    if (!ndkToUse) {
+      alert('No connection available. Please try again.');
+      return;
+    }
+
+    setIsSubmittingReply(true);
+
+    try {
+      // Find the parent comment to get its details
+      const findCommentById = (comments: CommentData[], id: string): CommentData | null => {
+        for (const comment of comments) {
+          if (comment.id === id) {
+            return comment;
+          }
+          if (comment.children.length > 0) {
+            const found = findCommentById(comment.children, id);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const parentComment = findCommentById(comments, parentCommentId);
+      if (!parentComment) {
+        alert('Parent comment not found');
+        return;
+      }
+
+      // Create NIP-22 reply event (kind 1111)
+      const ndkEvent = new NDKEvent(ndkToUse);
+      ndkEvent.kind = 1111;
+      ndkEvent.content = replyText.trim();
+      
+      // Get the d tag from the post or URL parameters
+      const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
+      
+      // Build article coordinate (a tag)
+      const aCoordinate = `30023:${post.pubkey}:${dTag || post.id}`;
+      
+      // Add required tags according to NIP-22 for replies
+      ndkEvent.tags = [
+        // Root event (the article)
+        ['E', post.id], // Event ID of the article
+        ['K', '30023'], // Kind of the article
+        ['P', post.pubkey], // Author of the article
+        ['A', aCoordinate], // Article coordinate
+        
+        // Parent event (the comment being replied to)
+        ['e', parentCommentId], // Event ID of the parent comment
+        ['k', parentComment.kind.toString()], // Kind of the parent comment (1 or 1111)
+        ['p', parentComment.pubkey], // Author of the parent comment
+        
+        ['client', 'Longform._'] // Client identifier
+      ];
+
+      ndkEvent.created_at = Math.floor(Date.now() / 1000);
+
+      console.log('Publishing reply event:', {
+        kind: ndkEvent.kind,
+        content: ndkEvent.content,
+        tags: ndkEvent.tags,
+        created_at: ndkEvent.created_at,
+        parentComment: {
+          id: parentComment.id,
+          kind: parentComment.kind,
+          pubkey: parentComment.pubkey
+        }
+      });
+
+      // Publish the reply event
+      await ndkEvent.publish();
+      
+      console.log('Reply created successfully:', ndkEvent.id);
+      
+      // Clear the form and hide it
+      setReplyText('');
+      setShowReplyForm(null);
+      
+      // Refresh comments to show the new reply
+      if (post.id) {
+        await fetchComments(post.id);
+      }
+      
+      // Show success message
+      alert('Reply posted successfully!');
+      
+    } catch (error) {
+      console.error('Error creating reply:', error);
+      alert(`Error posting reply: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSubmittingReply(false);
+    }
+  }, [replyText, post, isAuthenticated, contextNdk, params.d, fetchComments, comments]);
+
+  const handleReplyButtonClick = useCallback((commentId: string) => {
+    if (!isAuthenticated) {
+      alert('Please log in to reply to this comment.');
+      return;
+    }
+    setShowReplyForm(commentId);
+  }, [isAuthenticated]);
+
+  // Function to process comment content and convert nprofile strings to links
+  const processCommentContent = useCallback((content: string) => {
+    if (!content || typeof content !== 'string') {
+      return content;
+    }
+
+    // Process the content by replacing nostr links with React elements
+    const nostrLinkRegex = /(nostr:)?(nprofile1[a-zA-Z0-9]+|npub1[a-zA-Z0-9]+|note1[a-zA-Z0-9]+|nevent1[a-zA-Z0-9]+)/g;
+    
+    const elements: (string | React.ReactElement)[] = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = nostrLinkRegex.exec(content)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        elements.push(content.slice(lastIndex, match.index));
+      }
+      
+      const fullMatch = match[0]; // The full matched string (including nostr: if present)
+      const cleanPart = fullMatch.replace(/^nostr:/, ''); // Remove nostr: prefix
+      
+      try {
+        const decoded = nip19.decode(cleanPart);
+        
+        switch (decoded.type) {
+          case 'nprofile':
+            const pubkey = decoded.data.pubkey;
+            if (pubkey) {
+              const profileUrl = `/profile/${nip19.npubEncode(pubkey)}`;
+              const cachedProfile = getAuthorProfile(pubkey);
+              const displayName = cachedProfile?.displayName || cachedProfile?.name;
+              
+              elements.push(
+                <Link 
+                  key={`nostr-${match.index}`}
+                  href={profileUrl}
+                  className={styles.nostrLink}
+                  onClick={(e) => e.stopPropagation()}
+                  title={fullMatch}
+                >
+                  {displayName ? `@${displayName}` : `@${pubkey.slice(0, 8)}...`}
+                </Link>
+              );
+            } else {
+              elements.push(fullMatch);
+            }
+            break;
+          
+          case 'npub':
+            const npubUrl = `/profile/${cleanPart}`;
+            const npubPubkey = decoded.data;
+            const npubCachedProfile = getAuthorProfile(npubPubkey);
+            const npubDisplayName = npubCachedProfile?.displayName || npubCachedProfile?.name;
+            
+            elements.push(
+              <Link 
+                key={`nostr-${match.index}`}
+                href={npubUrl}
+                className={styles.nostrLink}
+                onClick={(e) => e.stopPropagation()}
+                title={fullMatch}
+              >
+                {npubDisplayName ? `@${npubDisplayName}` : `@${npubPubkey.slice(0, 8)}...`}
+              </Link>
+            );
+            break;
+          
+          case 'note':
+            const noteUrl = `https://njump.me/${cleanPart}`;
+            elements.push(
+              <a 
+                key={`nostr-${match.index}`}
+                href={noteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.nostrLink}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {fullMatch}
+              </a>
+            );
+            break;
+          
+          case 'nevent':
+            const eventUrl = `https://njump.me/${cleanPart}`;
+            elements.push(
+              <a 
+                key={`nostr-${match.index}`}
+                href={eventUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.nostrLink}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {fullMatch}
+              </a>
+            );
+            break;
+          
+          default:
+            elements.push(fullMatch);
+        }
+      } catch (error) {
+        console.error('Error decoding nostr link:', fullMatch, error);
+        elements.push(fullMatch);
+      }
+      
+      lastIndex = match.index + fullMatch.length;
+    }
+    
+    // Add remaining text after the last match
+    if (lastIndex < content.length) {
+      elements.push(content.slice(lastIndex));
+    }
+    
+    return elements.length > 0 ? elements : content;
+  }, [getAuthorProfile]);
 
   // Fetch comments when post is loaded
   useEffect(() => {
@@ -1513,6 +1974,14 @@ export default function BlogPost() {
       if (!reactionMenu || !reactionMenu.contains(target)) {
         closeReactionMenu();
       }
+    }
+    
+    // Handle comment menus - close all if clicking outside any menu
+    const clickedMenu = target.closest(`.${styles.commentMenu}`);
+    const clickedMenuButton = target.closest(`.${styles.commentMenuButton}`);
+    
+    if (!clickedMenu && !clickedMenuButton) {
+      closeAllCommentMenus();
     }
 
     // Handle zap context menus
@@ -1935,36 +2404,20 @@ export default function BlogPost() {
               </div>
             </div>
             
-            {/* Reaction Stats */}
-            <div className={styles.reactionStats}>
-              <div className={styles.reactionItem} onClick={handleZapsClick} style={{ cursor: 'pointer' }}>
-                <BoltIcon className={styles.reactionIcon} />
-                <span className={styles.reactionCount}>
-                  {reactionStats.zaps}
-                </span>
-                <span className={styles.reactionLabel}>Zaps</span>
-              </div>
-              <div className={styles.reactionItem} onClick={handleReactionsClick} style={{ cursor: 'pointer' }}>
-                <HeartIcon className={styles.reactionIcon} />
-                <span className={styles.reactionCount}>
-                  {reactionStats.likes}
-                </span>
-                <span className={styles.reactionLabel}>Reactions</span>
-              </div>
-              <div className={styles.reactionItem} onClick={handleCommentsClick} style={{ cursor: 'pointer' }}>
-                <ChatBubbleLeftIcon className={styles.reactionIcon} />
-                <span className={styles.reactionCount}>
-                  {reactionStats.comments}
-                </span>
-                <span className={styles.reactionLabel}>Comments</span>
-              </div>
-              <div className={styles.reactionItem} onClick={handleRepostsClick} style={{ cursor: 'pointer' }}>
-                <ArrowPathIcon className={styles.reactionIcon} />
-                <span className={styles.reactionCount}>
-                  {reactionStats.reposts}
-                </span>
-                <span className={styles.reactionLabel}>Reposts</span>
-              </div>
+            {/* Stats Section */}
+            <div className={styles.statsSection}>
+              <button className={styles.statItem} onClick={handleZapsClick}>
+                {statsSection.zaps} Zap{statsSection.zaps !== 1 ? 's' : ''}
+              </button>
+              <button className={styles.statItem} onClick={handleReactionsClick}>
+                {statsSection.likes} Reaction{statsSection.likes !== 1 ? 's' : ''}
+              </button>
+              <button className={styles.statItem} onClick={handleCommentsClick}>
+                {countTotalComments(comments)} Comment{countTotalComments(comments) !== 1 ? 's' : ''}
+              </button>
+              <button className={styles.statItem} onClick={handleRepostsClick}>
+                {statsSection.reposts} Repost{statsSection.reposts !== 1 ? 's' : ''}
+              </button>
             </div>
             
             {post.tags.length > 0 && (
@@ -1972,6 +2425,12 @@ export default function BlogPost() {
                 {post.tags.map((tag: string) => (
                   <span key={tag} className={styles.tag}>#{tag}</span>
                 ))}
+                <div className={styles.actionIcons}>
+                  <BoltIcon className={styles.actionIcon} />
+                  <HeartIcon className={styles.actionIcon} />
+                  <ChatBubbleLeftIcon className={styles.actionIcon} />
+                  <ArrowPathIcon className={styles.actionIcon} />
+                </div>
               </div>
             )}
           </header>
@@ -2170,15 +2629,74 @@ export default function BlogPost() {
         <div className={styles.commentSection}>
           <div className={styles.commentSectionHeader}>
             <h3 className={styles.commentSectionTitle}>
-              Comments ({reactionStats.comments})
+              Comments ({countTotalComments(comments)})
             </h3>
+            <div className={styles.commentSectionActions}>
             {isLoadingProfiles && (
               <div className={styles.profileLoadingIndicator}>
                 <div className={styles.profileLoadingSpinner}></div>
                 <span>Loading profiles...</span>
               </div>
             )}
+              <button 
+                className={styles.commentButton}
+                onClick={handleCommentButtonClick}
+                disabled={isSubmittingComment}
+              >
+                {isAuthenticated ? 'Add Comment' : 'Login to Comment'}
+              </button>
+            </div>
           </div>
+          
+          {/* Comment Form */}
+          {showCommentForm && isAuthenticated && (
+            <div className={styles.commentForm}>
+              <div className={styles.commentFormHeader}>
+                <h4>Write a comment</h4>
+                <button 
+                  className={styles.commentFormClose}
+                  onClick={() => {
+                    setShowCommentForm(false);
+                    setCommentText('');
+                  }}
+                >
+                  <XMarkIcon className={styles.commentFormCloseIcon} />
+                </button>
+              </div>
+              <textarea
+                className={styles.commentTextarea}
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Share your thoughts on this post..."
+                rows={4}
+                maxLength={2000}
+              />
+              <div className={styles.commentFormFooter}>
+                <span className={styles.commentCharCount}>
+                  {commentText.length}/2000
+                </span>
+                <div className={styles.commentFormActions}>
+                  <button 
+                    className={styles.commentCancelButton}
+                    onClick={() => {
+                      setShowCommentForm(false);
+                      setCommentText('');
+                    }}
+                    disabled={isSubmittingComment}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className={styles.commentSubmitButton}
+                    onClick={handleCommentSubmit}
+                    disabled={!commentText.trim() || isSubmittingComment}
+                  >
+                    {isSubmittingComment ? 'Posting...' : 'Post Comment'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           
           {isLoadingComments ? (
             <div className={styles.commentLoading}>
@@ -2193,7 +2711,20 @@ export default function BlogPost() {
             </div>
           ) : (
             <div className={styles.commentList}>
-              <CommentThread comments={comments} />
+              <CommentThread 
+                comments={comments}
+                showReplyForm={showReplyForm}
+                setShowReplyForm={setShowReplyForm}
+                replyText={replyText}
+                setReplyText={setReplyText}
+                isAuthenticated={isAuthenticated}
+                handleReplyButtonClick={handleReplyButtonClick}
+                handleReplySubmit={handleReplySubmit}
+                isSubmittingReply={isSubmittingReply}
+                processCommentContent={processCommentContent}
+                openCommentJson={openCommentJson}
+                styles={styles}
+              />
             </div>
           )}
         </div>
@@ -2275,8 +2806,10 @@ export default function BlogPost() {
                                 content: zap.content || '',
                                 sig: ''
                               };
-                              setSelectedZapJson(JSON.stringify(fullEvent, null, 2));
-                              setShowZapJsonModal(true);
+                              setJsonModal({
+                                isOpen: true,
+                                data: fullEvent
+                              });
                               closeZapMenu(); // Close the menu after opening the JSON modal
                             }}>View JSON</button>
                           </div>
@@ -2355,8 +2888,10 @@ export default function BlogPost() {
                                   content: reaction.content,
                                   sig: ''
                                 };
-                                setSelectedCommentJson(JSON.stringify(fullEvent, null, 2));
-                                setShowCommentJsonModal(true);
+                                setJsonModal({
+                                  isOpen: true,
+                                  data: fullEvent
+                                });
                                 closeReactionMenu(); // Close the menu after opening the JSON modal
                               }}>View JSON</button>
                            </div>
@@ -2435,8 +2970,10 @@ export default function BlogPost() {
                                 content: '',
                                 sig: ''
                               };
-                              setSelectedCommentJson(JSON.stringify(fullEvent, null, 2));
-                              setShowCommentJsonModal(true);
+                              setJsonModal({
+                                isOpen: true,
+                                data: fullEvent
+                              });
                               closeReactionMenu(); // Close the menu after opening the JSON modal
                             }}>View JSON</button>
                           </div>
@@ -2451,45 +2988,12 @@ export default function BlogPost() {
         </div>
       )}
 
-      {/* Comment JSON Modal */}
-      {showCommentJsonModal && (
-        <div className={styles.modalOverlay} onClick={closeCommentJson}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Event JSON</h2>
-              <button 
-                className={styles.modalCloseButton}
-                onClick={closeCommentJson}
-              >
-                <XMarkIcon className={styles.modalCloseIcon} />
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              <pre className={styles.jsonPre}>{selectedCommentJson}</pre>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Zap JSON Modal */}
-      {showZapJsonModal && (
-        <div className={styles.modalOverlay} onClick={closeZapJson}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Zap Event JSON</h2>
-              <button 
-                className={styles.modalCloseButton}
-                onClick={closeZapJson}
-              >
-                <XMarkIcon className={styles.modalCloseIcon} />
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              <pre className={styles.jsonPre}>{selectedZapJson}</pre>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Generic JSON Modal */}
+      <JsonModal
+        isOpen={jsonModal.isOpen}
+        onClose={closeJsonModal}
+        data={jsonModal.data}
+      />
 
                                    {/* Highlight Context Menu */}
         {showContextMenu && selectedText && (

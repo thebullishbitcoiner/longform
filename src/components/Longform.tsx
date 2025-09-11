@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlusIcon, TrashIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { copyToClipboard } from '@/utils/clipboard';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
+import JsonModal from './JsonModal';
 
 
 
@@ -46,8 +47,17 @@ export default function Longform() {
     y: 0,
     noteId: null
   });
-  const [jsonModal, setJsonModal] = useState<{ visible: boolean; data: Record<string, unknown> | null }>({
+  const [draftContextMenu, setDraftContextMenu] = useState<{ visible: boolean; x: number; y: number; draftId: string | null }>({
     visible: false,
+    x: 0,
+    y: 0,
+    draftId: null
+  });
+  const [jsonModal, setJsonModal] = useState<{
+    isOpen: boolean;
+    data: unknown;
+  }>({
+    isOpen: false,
     data: null
   });
   const [shareModal, setShareModal] = useState<{ visible: boolean; text: string; title: string }>({
@@ -475,7 +485,7 @@ export default function Longform() {
     const originalEvent = publishedEventsRef.current.find(event => event.id === note.id);
     if (originalEvent) {
       setJsonModal({
-        visible: true,
+        isOpen: true,
         data: {
           id: originalEvent.id,
           pubkey: originalEvent.pubkey,
@@ -547,17 +557,93 @@ export default function Longform() {
     setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
   };
 
+  const handleDraftContextMenu = (e: React.MouseEvent, draftId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Estimate menu dimensions
+    const estimatedMenuWidth = 150;
+    const estimatedMenuHeight = 80;
+    
+    // Get the button element to position menu relative to it
+    const buttonElement = e.currentTarget as HTMLElement;
+    const buttonRect = buttonElement.getBoundingClientRect();
+    
+    // Position menu below the button
+    let x = buttonRect.left;
+    let y = buttonRect.bottom + 5; // 5px gap below button
+    
+    // Adjust horizontal position if menu would go off-screen
+    if (x + estimatedMenuWidth > viewportWidth) {
+      x = viewportWidth - estimatedMenuWidth - 10; // 10px margin from right edge
+    }
+    
+    // If menu would go below viewport, position it above the button instead
+    if (y + estimatedMenuHeight > viewportHeight) {
+      y = buttonRect.top - estimatedMenuHeight - 5; // 5px gap above button
+    }
+    
+    // Ensure minimum position
+    x = Math.max(10, x);
+    y = Math.max(10, y);
+    
+    setDraftContextMenu({
+      visible: true,
+      x,
+      y,
+      draftId
+    });
+  };
+
+  const handleDraftContextMenuAction = (action: 'json' | 'delete') => {
+    const draft = drafts.find(d => d.id === draftContextMenu.draftId);
+    if (!draft) return;
+
+    if (action === 'json') {
+      // Find the actual Nostr event for this draft
+      const draftEvent = eventsRef.current.find(event => event.id === draft.id);
+      if (draftEvent) {
+        setJsonModal({
+          isOpen: true,
+          data: {
+            id: draftEvent.id,
+            pubkey: draftEvent.pubkey,
+            created_at: draftEvent.created_at,
+            kind: draftEvent.kind,
+            tags: draftEvent.tags,
+            content: draftEvent.content,
+            sig: draftEvent.sig
+          }
+        });
+      }
+    } else if (action === 'delete') {
+      handleDeleteDraft(draft.id, draft.title);
+    }
+    
+    setDraftContextMenu({ visible: false, x: 0, y: 0, draftId: null });
+  };
+
   // Close context menu when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = () => {
       if (contextMenu.visible) {
         setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
       }
+      if (draftContextMenu.visible) {
+        setDraftContextMenu({ visible: false, x: 0, y: 0, draftId: null });
+      }
     };
 
     const handleScroll = () => {
       if (contextMenu.visible) {
         setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
+      }
+      if (draftContextMenu.visible) {
+        setDraftContextMenu({ visible: false, x: 0, y: 0, draftId: null });
       }
     };
 
@@ -570,11 +656,11 @@ export default function Longform() {
       document.removeEventListener('scroll', handleScroll);
       window.removeEventListener('scroll', handleScroll);
     };
-  }, [contextMenu.visible]);
+  }, [contextMenu.visible, draftContextMenu.visible]);
 
   // Prevent scrolling when modals are open
   useEffect(() => {
-    const isModalOpen = jsonModal.visible || shareModal.visible;
+    const isModalOpen = jsonModal.isOpen || shareModal.visible;
     
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -586,7 +672,7 @@ export default function Longform() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [jsonModal.visible, shareModal.visible]);
+  }, [jsonModal.isOpen, shareModal.visible]);
 
   return (
     <>
@@ -631,6 +717,15 @@ export default function Longform() {
                   className="draft-item"
                   onClick={() => router.push(`/editor/${draft.id}`)}
                 >
+                  <div className="draft-header">
+                    <button
+                      onClick={(e) => handleDraftContextMenu(e, draft.id)}
+                      className="menu-button"
+                      title="More options"
+                    >
+                      <EllipsisVerticalIcon />
+                    </button>
+                  </div>
                   <div className="draft-content">
                     <div className="draft-info">
                       <div className="draft-title">
@@ -647,12 +742,6 @@ export default function Longform() {
                         })}
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => handleDeleteDraft(draft.id, draft.title, e)}
-                      className="delete-button"
-                    >
-                      <TrashIcon />
-                    </button>
                   </div>
                 </div>
               ))}
@@ -758,27 +847,38 @@ export default function Longform() {
         </div>
       )}
 
-      {/* JSON Modal */}
-      {jsonModal.visible && (
-        <div className="modal-overlay" onClick={() => setJsonModal({ visible: false, data: null })}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Raw Event Data</h3>
-              <button 
-                className="modal-close"
-                onClick={() => setJsonModal({ visible: false, data: null })}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <pre className="json-display">
-                {JSON.stringify(jsonModal.data, null, 2)}
-              </pre>
-            </div>
-          </div>
+      {/* Draft Context Menu */}
+      {draftContextMenu.visible && (
+        <div 
+          className="context-menu"
+          style={{
+            position: 'fixed',
+            top: draftContextMenu.y,
+            left: draftContextMenu.x,
+            zIndex: 1000
+          }}
+        >
+          <button 
+            className="context-menu-item"
+            onClick={() => handleDraftContextMenuAction('json')}
+          >
+            View JSON
+          </button>
+          <button 
+            className="context-menu-item"
+            onClick={() => handleDraftContextMenuAction('delete')}
+          >
+            Delete
+          </button>
         </div>
       )}
+
+      {/* JSON Modal */}
+      <JsonModal
+        isOpen={jsonModal.isOpen}
+        onClose={() => setJsonModal({ isOpen: false, data: null })}
+        data={jsonModal.data}
+      />
 
       {/* Share Modal */}
       {shareModal.visible && (

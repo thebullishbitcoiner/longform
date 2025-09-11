@@ -68,18 +68,11 @@
   background-color: var(--hover);
 }
 
-.draft-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.draft-content, .published-content {
   pointer-events: none;
 }
 
-.published-content {
-  pointer-events: none;
-}
-
-.published-header {
+.published-header, .draft-header {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
