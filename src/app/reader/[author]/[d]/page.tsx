@@ -7,10 +7,12 @@ import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ArrowUpIcon, HeartIcon, ChatBubbleLeftIcon, BoltIcon, XMarkIcon, PencilIcon, EllipsisVerticalIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { decode } from 'bolt11';
 import styles from './page.module.css';
 import { useNostr } from '@/contexts/NostrContext';
+import { useProStatus } from '@/hooks/useProStatus';
+import { getCustomEmojis } from '@/utils/supabase';
 import { nip19 } from 'nostr-tools';
 import NDK from '@nostr-dev-kit/ndk';
 import { resolveNip05 } from '@/utils/nostr';
@@ -382,8 +384,9 @@ CommentThread.displayName = 'CommentThread';
 export default function BlogPost() {
   const params = useParams();
   const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce, updateAuthorProfile } = useBlog();
-  const { ndk: contextNdk, isAuthenticated } = useNostr();
+  const { ndk: contextNdk, isAuthenticated, currentUser } = useNostr();
   const { getHighlightsForPost, addHighlight } = useHighlights();
+  const { isPro } = useProStatus();
   
   // Helper function for timestamped debug logs
   const debugLog = (message: string, ...args: unknown[]) => {
@@ -413,6 +416,22 @@ export default function BlogPost() {
   const [showRepostsModal, setShowRepostsModal] = useState(false);
   const [repostData, setRepostData] = useState<RepostData[]>([]);
   const [isLoadingReposts, setIsLoadingReposts] = useState(false);
+  const [isSubmittingHeartReaction, setIsSubmittingHeartReaction] = useState(false);
+  const [showEmojiModal, setShowEmojiModal] = useState(false);
+  const [customEmojis, setCustomEmojis] = useState<Array<{name: string, url: string}>>([]);
+  const [isLoadingCustomEmojis, setIsLoadingCustomEmojis] = useState(false);
+  const [preferredEmojis, setPreferredEmojis] = useState<string[]>([]);
+  const [showAddEmojiInput, setShowAddEmojiInput] = useState(false);
+  const [newEmojiInput, setNewEmojiInput] = useState('');
+  
+  // Basic emoji options for all users
+  const basicEmojis = [
+    { emoji: '💜', name: 'Purple Heart' },
+    { emoji: '🤙', name: 'Shaka' },
+    { emoji: '🫂', name: 'Hug' },
+    { emoji: '👍', name: 'Thumbs Up' },
+    { emoji: '🧡', name: 'Orange Heart' }
+  ];
   
   // Cache refs for modal data (using refs to avoid dependency issues)
   const zapDataCacheRef = useRef<Map<string, ZapData[]>>(new Map());
@@ -1246,6 +1265,179 @@ export default function BlogPost() {
     }
   };
 
+
+  // Load custom emojis for PRO and Legend users
+  const loadCustomEmojis = useCallback(async () => {
+    if (!isPro || !currentUser?.npub) return;
+    
+    setIsLoadingCustomEmojis(true);
+    try {
+      const emojis = await getCustomEmojis(currentUser.npub);
+      setCustomEmojis(emojis);
+    } catch (error) {
+      console.error('Error loading custom emojis:', error);
+    } finally {
+      setIsLoadingCustomEmojis(false);
+    }
+  }, [isPro, currentUser?.npub]);
+
+  // Load preferred emojis from localStorage
+  const loadPreferredEmojis = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('longform_emojis');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setPreferredEmojis(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch (error) {
+      console.error('Error loading preferred emojis:', error);
+      setPreferredEmojis([]);
+    }
+  }, []);
+
+  // Save preferred emojis to localStorage
+  const savePreferredEmojis = useCallback((emojis: string[]) => {
+    try {
+      localStorage.setItem('longform_emojis', JSON.stringify(emojis));
+      setPreferredEmojis(emojis);
+    } catch (error) {
+      console.error('Error saving preferred emojis:', error);
+    }
+  }, []);
+
+  // Add a new preferred emoji
+  const addPreferredEmoji = useCallback((emoji: string) => {
+    if (emoji && !preferredEmojis.includes(emoji)) {
+      const newPreferredEmojis = [...preferredEmojis, emoji];
+      savePreferredEmojis(newPreferredEmojis);
+    }
+  }, [preferredEmojis, savePreferredEmojis]);
+
+
+  // Load preferred emojis on component mount
+  useEffect(() => {
+    loadPreferredEmojis();
+  }, [loadPreferredEmojis]);
+
+  // Load custom emojis when PRO or Legend status changes
+  useEffect(() => {
+    if (isPro) {
+      loadCustomEmojis();
+    } else {
+      setCustomEmojis([]);
+    }
+  }, [isPro, loadCustomEmojis]);
+
+  // Handle heart icon click to open emoji modal
+  const handleHeartClick = useCallback(() => {
+    if (!isAuthenticated) {
+      alert('Please log in to react to this post.');
+      return;
+    }
+    setShowEmojiModal(true);
+  }, [isAuthenticated]);
+
+  // Handle adding new emoji
+  const handleAddEmoji = useCallback(() => {
+    if (newEmojiInput.trim()) {
+      addPreferredEmoji(newEmojiInput.trim());
+      setNewEmojiInput('');
+      setShowAddEmojiInput(false);
+    }
+  }, [newEmojiInput, addPreferredEmoji]);
+
+  // Handle emoji input key press
+  const handleEmojiInputKeyPress = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleAddEmoji();
+    } else if (e.key === 'Escape') {
+      setShowAddEmojiInput(false);
+      setNewEmojiInput('');
+    }
+  }, [handleAddEmoji]);
+
+  // Handle emoji selection
+  const handleEmojiSelect = useCallback(async (emoji: string) => {
+    if (!post || !isAuthenticated) {
+      alert('Please log in to react to this post.');
+      return;
+    }
+
+    if (isSubmittingHeartReaction) {
+      return; // Prevent multiple submissions
+    }
+
+    const ndkToUse = contextNdk || standaloneNdk;
+    if (!ndkToUse) {
+      console.error('No NDK instance available');
+      return;
+    }
+
+    setIsSubmittingHeartReaction(true);
+    setShowEmojiModal(false);
+
+    try {
+      // Create kind 7 reaction event
+      const ndkEvent = new NDKEvent(ndkToUse);
+      ndkEvent.kind = 7;
+      ndkEvent.content = emoji;
+      ndkEvent.created_at = Math.floor(Date.now() / 1000);
+
+      // Get the d tag from the post or URL parameters
+      const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
+      
+      // Build article coordinate (a tag)
+      const aCoordinate = post.pubkey && dTag ? `30023:${post.pubkey}:${dTag}` : undefined;
+
+      ndkEvent.tags = [
+        ['e', post.id], // Reference to the post
+        ['p', post.pubkey], // Reference to the post author
+      ];
+
+      // Add article coordinate tag if available
+      if (aCoordinate) {
+        ndkEvent.tags.push(['a', aCoordinate]);
+        ndkEvent.tags.push(['k', '30023']); // Kind tag for longform articles
+      }
+
+      // Add emoji tag for custom emojis
+      if (emoji.startsWith(':') && emoji.endsWith(':')) {
+        // This is a custom emoji, find its URL
+        const emojiName = emoji.slice(1, -1); // Remove the colons
+        const customEmoji = customEmojis.find(ce => ce.name === emojiName);
+        if (customEmoji) {
+          ndkEvent.tags.push(['emoji', emojiName, customEmoji.url]);
+        }
+      }
+
+      // Add client tag
+      ndkEvent.tags.push(['client', 'Longform._']);
+
+      console.log('Publishing reaction event:', {
+        kind: ndkEvent.kind,
+        content: ndkEvent.content,
+        tags: ndkEvent.tags,
+        created_at: ndkEvent.created_at
+      });
+
+      // Publish the reaction event
+      await ndkEvent.publish();
+      
+      console.log('Reaction created successfully:', ndkEvent.id);
+      
+      // Refresh reaction stats
+      if (fetchReactionStatsRef.current) {
+        fetchReactionStatsRef.current(post.id);
+      }
+
+    } catch (error) {
+      console.error('Error creating reaction:', error);
+      alert('Failed to create reaction. Please try again.');
+    } finally {
+      setIsSubmittingHeartReaction(false);
+    }
+  }, [post, isAuthenticated, contextNdk, standaloneNdk, params.d, fetchReactionStatsRef, isSubmittingHeartReaction, customEmojis]);
+
   const fetchComments = useCallback(async (postId: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) return;
@@ -1992,7 +2184,9 @@ export default function BlogPost() {
         closeZapMenu();
       }
     }
-  }, [showContextMenu, openReactionMenuId, openZapMenuId]);
+    
+    // Handle emoji modal - removed click-outside to close
+  }, [showContextMenu, openReactionMenuId, openZapMenuId, showEmojiModal]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -2007,8 +2201,9 @@ export default function BlogPost() {
       if (openZapMenuId) {
         closeZapMenu();
       }
+      // Emoji modal ESC key handling removed - only X button closes it
     }
-  }, [showContextMenu, openReactionMenuId, openZapMenuId]);
+  }, [showContextMenu, openReactionMenuId, openZapMenuId, showEmojiModal]);
 
   const handleContextMenu = useCallback((event: MouseEvent) => {
     // Prevent native context menu on all devices to avoid flashing
@@ -2404,6 +2599,14 @@ export default function BlogPost() {
               </div>
             </div>
             
+            {post.tags.length > 0 && (
+              <div className={styles.tags}>
+                {post.tags.map((tag: string) => (
+                  <span key={tag} className={styles.tag}>#{tag}</span>
+                ))}
+              </div>
+            )}
+            
             {/* Stats Section */}
             <div className={styles.statsSection}>
               <button className={styles.statItem} onClick={handleZapsClick}>
@@ -2420,19 +2623,15 @@ export default function BlogPost() {
               </button>
             </div>
             
-            {post.tags.length > 0 && (
-              <div className={styles.tags}>
-                {post.tags.map((tag: string) => (
-                  <span key={tag} className={styles.tag}>#{tag}</span>
-                ))}
                 <div className={styles.actionIcons}>
                   <BoltIcon className={styles.actionIcon} />
-                  <HeartIcon className={styles.actionIcon} />
+              <HeartIcon 
+                className={`${styles.actionIcon} ${isSubmittingHeartReaction ? styles.actionIconLoading : ''}`} 
+                onClick={handleHeartClick}
+              />
                   <ChatBubbleLeftIcon className={styles.actionIcon} />
                   <ArrowPathIcon className={styles.actionIcon} />
                 </div>
-              </div>
-            )}
           </header>
 
           {post.summary && (
@@ -3021,9 +3220,119 @@ export default function BlogPost() {
           </div>
         )}
 
-
-
-
+        {/* Emoji Modal */}
+        {showEmojiModal && (
+          <div className={styles.emojiModalOverlay}>
+            <div 
+              className={styles.emojiModal}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={styles.emojiMenuContent}>
+              <div className={styles.emojiMenuHeader}>
+                <span className={styles.emojiMenuTitle}>Send a reaction</span>
+                <button 
+                  className={styles.emojiMenuClose}
+                  onClick={() => setShowEmojiModal(false)}
+                >
+                  <XMarkIcon className={styles.emojiMenuCloseIcon} />
+                </button>
+              </div>
+              
+              <div className={styles.emojiGrid}>
+                {basicEmojis.map((emojiData) => (
+                  <button
+                    key={emojiData.emoji}
+                    className={styles.emojiButton}
+                    onClick={() => handleEmojiSelect(emojiData.emoji)}
+                    title={emojiData.name}
+                  >
+                    {emojiData.emoji}
+                  </button>
+                ))}
+                
+                {/* Preferred emojis */}
+                {preferredEmojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    className={styles.emojiButton}
+                    onClick={() => handleEmojiSelect(emoji)}
+                    title="Preferred emoji"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+                
+                {/* Add emoji button */}
+                {!showAddEmojiInput ? (
+                  <button
+                    className={styles.emojiButton}
+                    onClick={() => setShowAddEmojiInput(true)}
+                    title="Add emoji"
+                  >
+                    <PlusIcon className={styles.plusIcon} />
+                  </button>
+                ) : (
+                  <div className={styles.emojiInputContainer}>
+                    <input
+                      type="text"
+                      value={newEmojiInput}
+                      onChange={(e) => setNewEmojiInput(e.target.value)}
+                      onKeyDown={handleEmojiInputKeyPress}
+                      placeholder="Add emoji"
+                      className={styles.emojiInput}
+                      autoFocus
+                    />
+                    <button
+                      className={`${styles.emojiButton} ${styles.emojiSymbolButton}`}
+                      onClick={handleAddEmoji}
+                      title="Add"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      className={`${styles.emojiButton} ${styles.emojiSymbolButton}`}
+                      onClick={() => {
+                        setShowAddEmojiInput(false);
+                        setNewEmojiInput('');
+                      }}
+                      title="Cancel"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+                
+                {/* Custom emojis for PRO and Legend users */}
+                {isPro && customEmojis.length > 0 && (
+                  <>
+                    <div className={styles.emojiDivider} />
+                    {customEmojis.map((customEmoji) => (
+                      <button
+                        key={customEmoji.name}
+                        className={styles.emojiButton}
+                        onClick={() => handleEmojiSelect(`:${customEmoji.name}:`)}
+                        title={customEmoji.name}
+                      >
+                        <img 
+                          src={customEmoji.url} 
+                          alt={`:${customEmoji.name}:`}
+                          className={styles.customEmoji}
+                        />
+                      </button>
+                    ))}
+                  </>
+                )}
+                
+                {isPro && isLoadingCustomEmojis && (
+                  <div className={styles.emojiLoading}>
+                    Loading custom emojis...
+                  </div>
+                )}
+              </div>
+            </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 } 

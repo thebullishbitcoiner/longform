@@ -36,9 +36,12 @@ export function useProStatus() {
   const lastPayment = proStatus?.lastPayment;
   const isInBuffer = proStatus?.isInBuffer || false;
 
+  // isPro should be true if user is either PRO or Legend
+  const isProOrLegend = isPro || isLegend;
+
   return {
     // Status
-    isPro,
+    isPro: isProOrLegend,
     isLegend,
     isLoading: isLoading || isCheckingLegend,
     expiresAt,

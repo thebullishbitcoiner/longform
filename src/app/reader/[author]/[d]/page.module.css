@@ -98,6 +98,18 @@
     max-width: none !important;
   }
 
+  .actionIcons {
+    gap: 0.75rem;
+    padding: 0.375rem;
+    margin-top: 0.75rem;
+  }
+
+  .actionIcon {
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0.25rem;
+  }
+
   .metadata {
     flex-direction: column !important;
     align-items: flex-start !important;
@@ -352,8 +364,11 @@
 }
 
 .author .date {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin-top: 0.25rem;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
 }
 
 .statsSection {
@@ -421,20 +436,249 @@
 
 .actionIcons {
   display: flex;
-  gap: 0.75rem;
-  margin-left: 0.5rem;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background-color: var(--background-secondary);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  justify-content: center;
 }
 
 .actionIcon {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
   color: var(--text-secondary);
-  transition: color 0.2s ease;
+  transition: all 0.2s ease;
   cursor: pointer;
+  padding: 0.375rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .actionIcon:hover {
   color: var(--text);
+  background-color: var(--background);
+  transform: scale(1.1);
+}
+
+.actionIcon:active {
+  transform: scale(0.95);
+}
+
+.actionIconLoading {
+  opacity: 0.6;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Emoji Modal Styles */
+.emojiModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.emojiModal {
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.emojiMenuContent {
+  padding: 1rem;
+}
+
+.emojiMenuHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.emojiMenuTitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.emojiMenuClose {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: color 0.2s ease;
+}
+
+.emojiMenuClose:hover {
+  color: var(--text);
+}
+
+.emojiMenuCloseIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.emojiGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.emojiButton {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  aspect-ratio: 1;
+}
+
+.emojiButton:hover {
+  background-color: var(--background-secondary);
+  border-color: var(--text-secondary);
+  transform: scale(1.05);
+}
+
+.emojiButton:active {
+  transform: scale(0.95);
+}
+
+.customEmoji {
+  width: 1.25rem;
+  height: 1.25rem;
+  object-fit: contain;
+}
+
+.plusIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--text-secondary);
+}
+
+.emojiInputContainer {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  width: 100%;
+  flex-basis: 100%;
+}
+
+.emojiInput {
+  flex: 1;
+  padding: 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background-color: var(--background);
+  color: var(--text);
+  font-size: 0.875rem;
+  min-width: 0;
+  height: 2.25rem;
+}
+
+.emojiInput:focus {
+  outline: none;
+  border-color: var(--text-secondary);
+}
+
+.emojiButton.textButton {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  min-width: auto;
+  width: auto;
+  height: 2.5rem;
+}
+
+.emojiSymbolButton {
+  color: var(--text-secondary) !important;
+  font-weight: 600;
+  font-size: 1rem;
+  height: 2.25rem;
+  padding: 0.375rem;
+}
+
+.emojiDivider {
+  width: 100%;
+  height: 1px;
+  background-color: var(--border);
+  margin: 0.5rem 0;
+  flex-basis: 100%;
+}
+
+.emojiLoading {
+  width: 100%;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  padding: 0.5rem;
+  flex-basis: 100%;
+}
+
+/* Mobile styles for emoji modal */
+@media (max-width: 640px) {
+  .emojiModalOverlay {
+    padding: 0.5rem;
+  }
+  
+  .emojiModal {
+    max-width: 100%;
+    max-height: 90vh;
+  }
+  
+  .emojiGrid {
+    gap: 0.375rem;
+  }
+  
+  .emojiButton {
+    padding: 0.375rem;
+    font-size: 1.125rem;
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+  
+  .emojiSymbolButton {
+    font-size: 0.875rem !important;
+  }
+  
+  .customEmoji {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
 }
 
 .summary {
