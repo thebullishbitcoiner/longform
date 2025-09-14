@@ -1482,15 +1482,29 @@ export default function BlogPost() {
         // 2. Reply comments: have 'E' tag (article) and 'e' tag (different from article) - parent is the 'e' tag
         
         const rootEventId = ev.tags.find(tag => tag[0] === 'E')?.[1]; // Root article event ID
-        const eTag = ev.tags.find(tag => tag[0] === 'e'); // Lowercase 'e' tag
+        
+        // Look for 'e' tags, prioritizing the one marked as "reply"
+        const eTags = ev.tags.filter(tag => tag[0] === 'e');
+        const replyTag = eTags.find(tag => tag[3] === 'reply');
+        const rootTag = eTags.find(tag => tag[3] === 'root');
         
         let parentId: string | undefined = undefined;
         
-        if (eTag && eTag[1] && eTag[1] !== rootEventId) {
-          // The 'e' tag is different from the root article, so this is a reply
-          parentId = eTag[1];
+        // If there's a reply tag, use that as the parent
+        if (replyTag && replyTag[1] && replyTag[1] !== rootEventId) {
+          parentId = replyTag[1];
         }
-        // If 'e' tag is the same as root article or doesn't exist, this is a root comment
+        // Otherwise, if there's a root tag that's different from the article, use that
+        else if (rootTag && rootTag[1] && rootTag[1] !== rootEventId) {
+          parentId = rootTag[1];
+        }
+        // Fallback to any 'e' tag that's different from the root article
+        else {
+          const eTag = eTags.find(tag => tag[1] && tag[1] !== rootEventId);
+          if (eTag && eTag[1]) {
+            parentId = eTag[1];
+          }
+        }
         
         return {
         id: ev.id,
