@@ -930,6 +930,7 @@ export default function BlogPost() {
         const published_at = parseInt(event.tags.find(tag => tag[0] === 'published_at')?.[1] || event.created_at.toString());
         const image = event.tags.find(tag => tag[0] === 'image')?.[1];
         const tags = event.tags.filter(tag => tag[0] === 't').map(tag => tag[1]);
+        const client = event.tags.find(tag => tag[0] === 'client')?.[1];
 
         // Extract emoji tags for custom emoji processing
         const emojiTags = event.tags
@@ -946,7 +947,8 @@ export default function BlogPost() {
           published_at,
           image,
           tags,
-          emojiTags // Store emoji tags separately for processing
+          emojiTags, // Store emoji tags separately for processing
+          client // Store client identifier
         };
 
         debugLog('Created post data:', { 
@@ -2594,7 +2596,12 @@ export default function BlogPost() {
                 </div>
                 <div className={styles.date}>
                   <span className={styles.label}>Published:</span>
-                  <time>{new Date(post.created_at * 1000).toLocaleDateString()}</time>
+                  <time>
+                    {new Date(post.created_at * 1000).toLocaleDateString()}
+                    {post.client && (
+                      <span className={styles.clientInfo}> via {post.client}</span>
+                    )}
+                  </time>
                 </div>
               </div>
             </div>

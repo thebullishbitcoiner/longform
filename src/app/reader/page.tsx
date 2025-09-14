@@ -706,6 +706,7 @@ export default function ReaderPage() {
               const image = getTagValue(event.tags, 'image');
               const tags = getTagValues(event.tags, 't');
               const dTag = getTagValue(event.tags, 'd'); // Extract d tag
+              const client = getTagValue(event.tags, 'client'); // Extract client tag
 
               const post: BlogPost = {
                 id: event.id,
@@ -717,7 +718,8 @@ export default function ReaderPage() {
                 published_at,
                 image,
                 tags,
-                dTag
+                dTag,
+                client
               };
 
               console.log('✅ DEBUG: Adding post:', {

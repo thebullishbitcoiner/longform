@@ -22,6 +22,7 @@ export interface BlogPost {
   author?: AuthorProfile;
   dTag?: string; // Add d tag for replaceable events
   emojiTags?: Array<{ shortcode: string; url: string }>; // Store emoji tags for processing
+  client?: string; // Client identifier from tags
 }
 
 export type BlogContextType = {

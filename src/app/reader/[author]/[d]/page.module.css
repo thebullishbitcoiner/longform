@@ -346,6 +346,12 @@
   font-weight: 500;
 }
 
+.clientInfo {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-left: 0.25rem;
+}
+
 .authorValue {
   font-family: monospace;
 }
