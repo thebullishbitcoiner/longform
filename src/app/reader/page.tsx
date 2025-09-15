@@ -1098,7 +1098,7 @@ export default function ReaderPage() {
                       const info = `Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`;
                       setDebugInfo(info);
                       console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
-                      alert(info); // Force display
+                      toast(info); // Force display
                     }}
                     style={{
                       padding: '10px 15px',
@@ -1123,7 +1123,7 @@ export default function ReaderPage() {
                         firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
                       });
                       setDebugInfo(info);
-                      alert(info); // Force display
+                      toast(info); // Force display
                     }}
                     style={{
                       padding: '10px 15px',
@@ -1146,7 +1146,7 @@ export default function ReaderPage() {
                       const info = `Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`;
                       setDebugInfo(info);
                       console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
-                      alert(info); // Force display
+                      toast(info); // Force display
                     }}
                     style={{
                       padding: '10px 15px',

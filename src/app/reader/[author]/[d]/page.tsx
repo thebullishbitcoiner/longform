@@ -18,6 +18,7 @@ import NDK from '@nostr-dev-kit/ndk';
 import { resolveNip05 } from '@/utils/nostr';
 import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
+import toast from 'react-hot-toast';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
 import JsonModal from '@/components/JsonModal';
@@ -1333,7 +1334,7 @@ export default function BlogPost() {
   // Handle heart icon click to open emoji modal
   const handleHeartClick = useCallback(() => {
     if (!isAuthenticated) {
-      alert('Please log in to react to this post.');
+      toast.error('Please log in to react to this post.');
       return;
     }
     setShowEmojiModal(true);
@@ -1361,7 +1362,7 @@ export default function BlogPost() {
   // Handle emoji selection
   const handleEmojiSelect = useCallback(async (emoji: string) => {
     if (!post || !isAuthenticated) {
-      alert('Please log in to react to this post.');
+      toast.error('Please log in to react to this post.');
       return;
     }
 
@@ -1434,7 +1435,7 @@ export default function BlogPost() {
 
     } catch (error) {
       console.error('Error creating reaction:', error);
-      alert('Failed to create reaction. Please try again.');
+      toast.error('Failed to create reaction. Please try again.');
     } finally {
       setIsSubmittingHeartReaction(false);
     }
@@ -1637,7 +1638,7 @@ export default function BlogPost() {
 
     const ndkToUse = contextNdk;
     if (!ndkToUse) {
-      alert('No connection available. Please try again.');
+      toast.error('No connection available. Please try again.');
       return;
     }
 
@@ -1692,11 +1693,11 @@ export default function BlogPost() {
       }
       
       // Show success message
-      alert('Comment posted successfully!');
+      toast.success('Comment posted successfully!');
       
     } catch (error) {
       console.error('Error creating comment:', error);
-      alert(`Error posting comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Error posting comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmittingComment(false);
     }
@@ -1704,7 +1705,7 @@ export default function BlogPost() {
 
   const handleCommentButtonClick = useCallback(() => {
     if (!isAuthenticated) {
-      alert('Please log in to comment on this post.');
+      toast.error('Please log in to comment on this post.');
       return;
     }
     setShowCommentForm(true);
@@ -1717,7 +1718,7 @@ export default function BlogPost() {
 
     const ndkToUse = contextNdk;
     if (!ndkToUse) {
-      alert('No connection available. Please try again.');
+      toast.error('No connection available. Please try again.');
       return;
     }
 
@@ -1740,7 +1741,7 @@ export default function BlogPost() {
 
       const parentComment = findCommentById(comments, parentCommentId);
       if (!parentComment) {
-        alert('Parent comment not found');
+        toast.error('Parent comment not found');
         return;
       }
 
@@ -1800,11 +1801,11 @@ export default function BlogPost() {
       }
       
       // Show success message
-      alert('Reply posted successfully!');
+      toast.success('Reply posted successfully!');
       
     } catch (error) {
       console.error('Error creating reply:', error);
-      alert(`Error posting reply: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Error posting reply: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmittingReply(false);
     }
@@ -1812,7 +1813,7 @@ export default function BlogPost() {
 
   const handleReplyButtonClick = useCallback((commentId: string) => {
     if (!isAuthenticated) {
-      alert('Please log in to reply to this comment.');
+      toast.error('Please log in to reply to this comment.');
       return;
     }
     setShowReplyForm(commentId);
@@ -2254,7 +2255,7 @@ export default function BlogPost() {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) {
       console.error('No NDK available for creating highlight');
-      alert('No connection available. Please try again.');
+      toast.error('No connection available. Please try again.');
       return;
     }
 
@@ -2330,8 +2331,8 @@ export default function BlogPost() {
         highlightTextInElement(postContentRef.current, postHighlights, styles.userHighlight);
       }
       
-      // Show success message (you can replace this with a toast notification)
-      alert('Highlight created successfully!');
+      // Show success message
+      toast.success('Highlight created successfully!');
       
       // Clear selection and hide context menu
       window.getSelection()?.removeAllRanges();
@@ -2340,7 +2341,7 @@ export default function BlogPost() {
       
     } catch (error) {
       console.error('Error creating highlight:', error);
-      alert(`Error creating highlight: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Error creating highlight: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsCreatingHighlight(false);
     }

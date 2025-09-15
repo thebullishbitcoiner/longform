@@ -10,6 +10,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 import JsonModal from './JsonModal';
+import ConfirmModal from './ConfirmModal';
 
 
 
@@ -64,6 +65,18 @@ export default function Longform() {
     visible: false,
     text: '',
     title: ''
+  });
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: (() => void) | null;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
   });
   const eventsRef = useRef<NDKEvent[]>([]);
   const publishedEventsRef = useRef<NDKEvent[]>([]);
@@ -385,42 +398,67 @@ export default function Longform() {
     }
   };
 
-  const handleDeleteDraft = async (id: string, title: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
-      if (!ndk || !isAuthenticated) {
-        toast.error('Please log in to delete drafts.');
+  const handleDeleteDraft = async (id: string, title: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    
+    // Show confirmation modal
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Draft',
+      message: `Are you sure you want to delete "${title}"? This action cannot be undone.`,
+      onConfirm: () => performDeleteDraft(id)
+    });
+  };
+
+  const performDeleteDraft = async (id: string) => {
+    if (!ndk || !isAuthenticated) {
+      toast.error('Please log in to delete drafts.');
+      return;
+    }
+
+    try {
+      const nostr = window.nostr;
+      if (!nostr) {
+        toast.error('Nostr extension not found.');
         return;
       }
 
-      try {
-        const nostr = window.nostr;
-        if (!nostr) {
-          toast.error('Nostr extension not found.');
-          return;
-        }
+      // Create a deletion event (kind 5)
+      const deleteEvent = new NDKEvent(ndk);
+      deleteEvent.kind = 5; // Deletion event
+      deleteEvent.content = 'Deleted draft'; // Optional reason
+      deleteEvent.tags = [
+        ['e', id] // Reference to the event being deleted
+      ];
+      deleteEvent.created_at = Math.floor(Date.now() / 1000);
 
-        // Create a deletion event (kind 5)
-        const deleteEvent = new NDKEvent(ndk);
-        deleteEvent.kind = 5; // Deletion event
-        deleteEvent.content = 'Deleted draft'; // Optional reason
-        deleteEvent.tags = [
-          ['e', id] // Reference to the event being deleted
-        ];
-        deleteEvent.created_at = Math.floor(Date.now() / 1000);
-
-        // Publish the deletion event
-        await deleteEvent.publish();
-        
-        // Remove from local state
-        setDrafts(drafts.filter(draft => draft.id !== id));
-        
-        toast.success('Draft deleted from Nostr');
-          } catch (error) {
+      // Publish the deletion event
+      await deleteEvent.publish();
+      
+      // Remove from local state
+      setDrafts(drafts.filter(draft => draft.id !== id));
+      
+      toast.success('Draft deleted from Nostr');
+    } catch (error) {
       console.error('Longform: Error deleting draft:', error);
       toast.error('Failed to delete draft. Please try again.');
     }
+  };
+
+  const handleConfirmModalClose = () => {
+    setConfirmModal({
+      isOpen: false,
+      title: '',
+      message: '',
+      onConfirm: null
+    });
+  };
+
+  const handleConfirmModalConfirm = () => {
+    if (confirmModal.onConfirm) {
+      confirmModal.onConfirm();
     }
+    handleConfirmModalClose();
   };
 
   const handleViewPublished = (id: string) => {
@@ -621,7 +659,7 @@ export default function Longform() {
         });
       }
     } else if (action === 'delete') {
-      handleDeleteDraft(draft.id, draft.title, {} as React.MouseEvent);
+      handleDeleteDraft(draft.id, draft.title);
     }
     
     setDraftContextMenu({ visible: false, x: 0, y: 0, draftId: null });
@@ -878,6 +916,17 @@ export default function Longform() {
         isOpen={jsonModal.isOpen}
         onClose={() => setJsonModal({ isOpen: false, data: null })}
         data={jsonModal.data}
+      />
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={handleConfirmModalClose}
+        onConfirm={handleConfirmModalConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText="Yes"
+        cancelText="No"
       />
 
       {/* Share Modal */}

@@ -1,4 +1,5 @@
-import styles from './AddNpubModal.module.css';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import styles from './ConfirmModal.module.css';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -6,9 +7,19 @@ interface ConfirmModalProps {
   onConfirm: () => void;
   title: string;
   message: string;
+  confirmText?: string;
+  cancelText?: string;
 }
 
-export default function ConfirmModal({ isOpen, onClose, onConfirm, title, message }: ConfirmModalProps) {
+export default function ConfirmModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title, 
+  message,
+  confirmText = 'Yes',
+  cancelText = 'No'
+}: ConfirmModalProps) {
   if (!isOpen) return null;
 
   return (
@@ -16,16 +27,18 @@ export default function ConfirmModal({ isOpen, onClose, onConfirm, title, messag
       <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>{title}</h2>
-          <button className={styles.closeButton} onClick={onClose}>×</button>
+          <button className={styles.closeButton} onClick={onClose}>
+            <XMarkIcon className="w-6 h-6" />
+          </button>
         </div>
-        <div className={styles.modalForm}>
-          <p style={{ color: '#fff', marginBottom: '1rem' }}>{message}</p>
+        <div className={styles.modalBody}>
+          <p className={styles.message}>{message}</p>
           <div className={styles.buttonGroup}>
             <button onClick={onClose} className={styles.cancelButton}>
-              Cancel
+              {cancelText}
             </button>
-            <button onClick={onConfirm} className={styles.submitButton}>
-              Confirm
+            <button onClick={onConfirm} className={styles.confirmButton}>
+              {confirmText}
             </button>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { useNostr } from '@/contexts/NostrContext';
 import { useSupabase } from '@/contexts/SupabaseContext';
 import { formatExpirationDate, isExpiringSoon } from '@/utils/supabase';
 import { supabase } from '@/config/supabase';
+import toast from 'react-hot-toast';
 import './page.css';
 
 const SupportPage: React.FC = () => {
@@ -65,7 +66,7 @@ const SupportPage: React.FC = () => {
 
   const handleLegendSubscribe = async () => {
     if (!currentUser?.npub) {
-      alert('Please log in to become a Legend');
+      toast.error('Please log in to become a Legend');
       return;
     }
 
@@ -116,17 +117,17 @@ const SupportPage: React.FC = () => {
             hasLaunchedPaymentRef.current = false;
             
             // Show success message
-            alert('Congratulations! You are now a Longform Legend!');
+            toast.success('Congratulations! You are now a Longform Legend!');
           } catch (err) {
             console.error('Error updating legend status:', err);
-            alert('Payment successful but there was an error updating your status. Please contact support.');
+            toast.error('Payment successful but there was an error updating your status. Please contact support.');
             setIsGeneratingInvoice(false);
             hasLaunchedPaymentRef.current = false;
           }
         },
         onCancelled: () => {
           clearInterval(checkPaymentInterval);
-          alert('Payment cancelled');
+          toast.error('Payment cancelled');
           setIsGeneratingInvoice(false);
           hasLaunchedPaymentRef.current = false;
         },
@@ -156,7 +157,7 @@ const SupportPage: React.FC = () => {
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate invoice';
-      alert(`Payment error: ${errorMessage}`);
+      toast.error(`Payment error: ${errorMessage}`);
       setIsGeneratingInvoice(false);
       hasLaunchedPaymentRef.current = false;
     }
