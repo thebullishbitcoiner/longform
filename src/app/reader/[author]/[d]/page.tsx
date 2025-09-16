@@ -92,8 +92,6 @@ interface ContextMenuPosition {
 
 interface TextSelection {
   text: string;
-  startOffset: number;
-  endOffset: number;
   container: Node;
 }
 
@@ -2029,98 +2027,7 @@ export default function BlogPost() {
       return;
     }
 
-    // Ensure we have a valid selection
-    if (selectedTextString.length < 1) {
-      setShowContextMenu(false);
-      setSelectedText(null);
-      return;
-    }
-
-    // Calculate absolute position within the post content
-    let absoluteStartOffset = 0;
-    let absoluteEndOffset = 0;
-    
-    if (postContentRef.current) {
-      const walker = document.createTreeWalker(
-        postContentRef.current,
-        NodeFilter.SHOW_TEXT,
-        null
-      );
-
-      let currentNode: Text | null;
-      let currentOffset = 0;
-      let startFound = false;
-      let endFound = false;
-
-      console.log('🔍 Calculating absolute position for selection:', {
-        selectedText: selectedTextString,
-        rangeStartOffset: range.startOffset,
-        rangeEndOffset: range.endOffset,
-        startContainer: range.startContainer,
-        endContainer: range.endContainer
-      });
-
-      while (currentNode = walker.nextNode() as Text) {
-        const nodeLength = currentNode.textContent?.length || 0;
-        
-        // Check if this node contains the start of the selection
-        if (currentNode === range.startContainer) {
-          absoluteStartOffset = currentOffset + range.startOffset;
-          startFound = true;
-          console.log('🔍 Found start position:', {
-            nodeText: currentNode.textContent?.substring(0, 50) + '...',
-            currentOffset,
-            rangeStartOffset: range.startOffset,
-            absoluteStartOffset
-          });
-        }
-        
-        // Check if this node contains the end of the selection
-        if (currentNode === range.endContainer) {
-          absoluteEndOffset = currentOffset + range.endOffset;
-          endFound = true;
-          console.log('🔍 Found end position:', {
-            nodeText: currentNode.textContent?.substring(0, 50) + '...',
-            currentOffset,
-            rangeEndOffset: range.endOffset,
-            absoluteEndOffset
-          });
-          break; // We found both start and end, so we can stop
-        }
-        
-        currentOffset += nodeLength;
-      }
-
-      // If we didn't find the exact nodes, fall back to text content matching
-      if (!startFound || !endFound) {
-        console.log('🔍 Falling back to text content matching');
-        const postText = postContentRef.current.textContent || '';
-        const startIndex = postText.indexOf(selectedTextString);
-        if (startIndex !== -1) {
-          absoluteStartOffset = startIndex;
-          absoluteEndOffset = startIndex + selectedTextString.length;
-          console.log('🔍 Text matching found positions:', {
-            startIndex,
-            absoluteStartOffset,
-            absoluteEndOffset
-          });
-        } else {
-          // Fallback to relative offsets if text matching fails
-          absoluteStartOffset = range.startOffset;
-          absoluteEndOffset = range.endOffset;
-          console.log('🔍 Using fallback relative offsets:', {
-            absoluteStartOffset,
-            absoluteEndOffset
-          });
-        }
-      }
-
-      console.log('🔍 Final calculated positions:', {
-        absoluteStartOffset,
-        absoluteEndOffset,
-        selectedTextLength: selectedTextString.length
-      });
-    }
+    console.log('🔍 Text selected for highlighting:', selectedTextString);
 
     // Get the position for the context menu
     const rect = range.getBoundingClientRect();
@@ -2148,8 +2055,6 @@ export default function BlogPost() {
 
     setSelectedText({
       text: selectedTextString,
-      startOffset: absoluteStartOffset,
-      endOffset: absoluteEndOffset,
       container: range.commonAncestorContainer
     });
 
@@ -2246,8 +2151,12 @@ export default function BlogPost() {
       return;
     }
 
-    // Clean the selected text to remove any HTML tags or extra whitespace
-    const cleanText = selectedText.text.replace(/\s+/g, ' ').trim();
+    // Clean the selected text to remove any HTML tags, normalize whitespace, and handle quotes
+    const cleanText = selectedText.text
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/[""]/g, '"') // Normalize smart quotes to regular quotes
+      .replace(/['']/g, "'") // Normalize smart apostrophes to regular apostrophes
+      .trim();
     if (cleanText.length === 0) {
       console.log('Selected text is empty after cleaning');
       return;
@@ -2284,18 +2193,10 @@ export default function BlogPost() {
         ['client', 'Longform._']
       ];
 
-      // Add position information if available
-      if (selectedText.startOffset !== undefined && selectedText.endOffset !== undefined) {
-        ndkEvent.tags.push(['start', selectedText.startOffset.toString()]);
-        ndkEvent.tags.push(['end', selectedText.endOffset.toString()]);
-        console.log('🔍 Adding position tags to Nostr event:', {
-          start: selectedText.startOffset,
-          end: selectedText.endOffset,
-          selectedText: selectedText.text
-        });
-      } else {
-        console.log('🔍 No position information available for highlight');
-      }
+      console.log('🔍 Creating highlight with content-only approach:', {
+        selectedText: selectedText.text,
+        cleanText
+      });
 
       ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
@@ -2318,8 +2219,7 @@ export default function BlogPost() {
         created_at: Date.now(),
         postId: post.id,
         postAuthor: post.pubkey,
-        startOffset: selectedText.startOffset,
-        endOffset: selectedText.endOffset,
+        postDTag: dTag || post.id,
         eventTags: ndkEvent.tags
       };
       
@@ -2410,10 +2310,17 @@ export default function BlogPost() {
     let hasHighlights = false;
 
     postHighlights.forEach((highlight, index) => {
-      const highlightText = highlight.content || highlight.contextText || '';
+      const highlightText = highlight.content || '';
       
-      if (highlightText && remainingText.includes(highlightText)) {
-        const parts = remainingText.split(highlightText);
+      // Normalize the highlight text to match the same normalization used when creating highlights
+      const normalizedHighlightText = highlightText
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/[""]/g, '"') // Normalize smart quotes to regular quotes
+        .replace(/['']/g, "'") // Normalize smart apostrophes to regular apostrophes
+        .trim();
+      
+      if (normalizedHighlightText && remainingText.includes(normalizedHighlightText)) {
+        const parts = remainingText.split(normalizedHighlightText);
         
         if (parts.length > 1) {
           // Add text before highlight
@@ -2424,12 +2331,12 @@ export default function BlogPost() {
           // Add highlighted text
           result.push(
             <span key={`highlight-${highlight.id}-${index}`} className={styles.userHighlight}>
-              {highlightText}
+              {normalizedHighlightText}
             </span>
           );
           
           // Update remaining text to everything after the highlight
-          remainingText = parts.slice(1).join(highlightText);
+          remainingText = parts.slice(1).join(normalizedHighlightText);
           hasHighlights = true;
           
           console.log('🔍 Highlight applied:', {

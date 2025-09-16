@@ -139,8 +139,6 @@ export interface CachedHighlight {
   postAuthor: string;
   postAuthorNip05?: string;
   postDTag?: string;
-  startOffset?: number;
-  endOffset?: number;
   eventTags: string[][];
   // Store the complete event data for JSON viewing
   eventData?: {

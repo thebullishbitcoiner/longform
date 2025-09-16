@@ -17,6 +17,8 @@ import toast from 'react-hot-toast';
 import { useBlog } from '@/contexts/BlogContext';
 import { DEFAULT_RELAYS } from '@/config/relays';
 import JsonModal from '@/components/JsonModal';
+import ConfirmModal from '@/components/ConfirmModal';
+import { useHighlights } from '@/utils/highlights';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -55,8 +57,6 @@ interface ProfileHighlight {
   postAuthorDisplayName?: string;
   postAuthorNip05?: string;
   postDTag?: string;
-  startOffset?: number;
-  endOffset?: number;
   event?: NDKEvent; // Store the original NDKEvent for JSON viewing
 }
 
@@ -91,6 +91,20 @@ export default function ProfilePage() {
   const [isProfileLegend, setIsProfileLegend] = useState(false);
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: (() => void) | null;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+
+  // Use highlights hook for deletion functionality
+  const { deleteHighlight } = useHighlights();
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -157,8 +171,6 @@ export default function ProfilePage() {
            postAuthorDisplayName: undefined,
            postAuthorNip05: highlight.postAuthorNip05,
            postDTag: highlight.postDTag,
-           startOffset: highlight.startOffset,
-           endOffset: highlight.endOffset,
            event: undefined // Don't create synthetic events for cached highlights
          })).sort((a, b) => b.created_at - a.created_at);
         
@@ -394,8 +406,6 @@ export default function ProfilePage() {
           }
           
           const postId = event.tags.find(tag => tag[0] === 'e')?.[1] || ''; // Keep for backward compatibility
-          const startOffset = event.tags.find(tag => tag[0] === 'start')?.[1];
-          const endOffset = event.tags.find(tag => tag[0] === 'end')?.[1];
 
           // Get author display name
           const authorProfile = authorProfiles.get(postAuthor);
@@ -410,8 +420,6 @@ export default function ProfilePage() {
             postAuthorDisplayName,
             postAuthorNip05: authorProfile?.nip05,
             postDTag,
-            startOffset: startOffset ? parseInt(startOffset) : undefined,
-            endOffset: endOffset ? parseInt(endOffset) : undefined,
             event: event, // Store the original NDKEvent
           };
         })
@@ -429,8 +437,6 @@ export default function ProfilePage() {
           postAuthor: highlight.postAuthor,
           postAuthorNip05: highlight.postAuthorNip05,
           postDTag: highlight.postDTag,
-          startOffset: highlight.startOffset,
-          endOffset: highlight.endOffset,
           eventTags: highlight.event?.tags || [], // Store the original event tags
           eventData: highlight.event ? {
             id: highlight.event.id,
@@ -821,8 +827,6 @@ export default function ProfilePage() {
                 content: highlight.content,
                 postId: highlight.postId,
                 postAuthor: highlight.postAuthor,
-                startOffset: highlight.startOffset,
-                endOffset: highlight.endOffset,
                 created_at: Math.floor(highlight.created_at / 1000),
                 note: 'Original event not found on network. Showing cached data.'
               };
@@ -835,8 +839,6 @@ export default function ProfilePage() {
               content: highlight.content,
               postId: highlight.postId,
               postAuthor: highlight.postAuthor,
-              startOffset: highlight.startOffset,
-              endOffset: highlight.endOffset,
               created_at: Math.floor(highlight.created_at / 1000),
               note: 'No network connection available. Showing cached data.'
             };
@@ -850,8 +852,6 @@ export default function ProfilePage() {
             content: highlight.content,
             postId: highlight.postId,
             postAuthor: highlight.postAuthor,
-            startOffset: highlight.startOffset,
-            endOffset: highlight.endOffset,
             created_at: Math.floor(highlight.created_at / 1000),
             note: 'Error fetching original event. Showing cached data.'
           };
@@ -1051,6 +1051,50 @@ export default function ProfilePage() {
 
   const closeContextMenu = () => {
     setContextMenu({ visible: false, highlightId: null, postId: null, x: 0, y: 0 });
+  };
+
+  const handleDeleteHighlight = (highlightId: string) => {
+    const highlight = highlights.find(h => h.id === highlightId);
+    if (!highlight) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Highlight',
+      message: `Are you sure you want to delete this highlight? This action cannot be undone.`,
+      onConfirm: () => performDeleteHighlight(highlightId)
+    });
+  };
+
+  const performDeleteHighlight = async (highlightId: string) => {
+    try {
+      const success = await deleteHighlight(highlightId);
+      if (success) {
+        // Remove from local state
+        setHighlights(prev => prev.filter(h => h.id !== highlightId));
+        toast.success('Highlight deleted successfully');
+      } else {
+        toast.error('Failed to delete highlight');
+      }
+    } catch (error) {
+      console.error('Error deleting highlight:', error);
+      toast.error('Failed to delete highlight');
+    }
+  };
+
+  const handleConfirmModalClose = () => {
+    setConfirmModal({
+      isOpen: false,
+      title: '',
+      message: '',
+      onConfirm: null
+    });
+  };
+
+  const handleConfirmModalConfirm = () => {
+    if (confirmModal.onConfirm) {
+      confirmModal.onConfirm();
+    }
+    handleConfirmModalClose();
   };
 
   const renderPostsTab = () => (
@@ -1299,15 +1343,26 @@ export default function ProfilePage() {
             </button>
           )}
           {contextMenu.highlightId && (
-            <button 
-              className={styles.contextMenuItem}
-              onClick={async () => {
-                await handleCopyNoteId(contextMenu.highlightId!);
-                closeContextMenu();
-              }}
-            >
-              Copy Note ID
-            </button>
+            <>
+              <button 
+                className={styles.contextMenuItem}
+                onClick={async () => {
+                  await handleCopyNoteId(contextMenu.highlightId!);
+                  closeContextMenu();
+                }}
+              >
+                Copy Note ID
+              </button>
+              <button 
+                className={styles.contextMenuItem}
+                onClick={() => {
+                  handleDeleteHighlight(contextMenu.highlightId!);
+                  closeContextMenu();
+                }}
+              >
+                Delete Highlight
+              </button>
+            </>
           )}
           <button 
             className={styles.contextMenuItem}
@@ -1335,6 +1390,14 @@ export default function ProfilePage() {
         isOpen={jsonModal.visible}
         onClose={() => setJsonModal({ visible: false, data: null })}
         data={jsonModal.data}
+      />
+      
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={handleConfirmModalClose}
+        onConfirm={handleConfirmModalConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
       />
     </div>
   );

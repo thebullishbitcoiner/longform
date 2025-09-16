@@ -14,9 +14,6 @@ export interface Highlight {
   postId: string;
   postAuthor: string;
   postDTag?: string;
-  contextText?: string; // Primal-style highlighting
-  startOffset?: number; // Longform-style highlighting
-  endOffset?: number;   // Longform-style highlighting
   eventTags: string[][];
 }
 
@@ -47,14 +44,6 @@ export function useHighlights() {
       postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
     }
     
-    // Check for context tag (Primal-style highlighting)
-    const contextTag = event.tags.find(tag => tag[0] === 'context')?.[1];
-    
-    // Get start/end offsets (Longform-style highlighting)
-    const startTag = event.tags.find(tag => tag[0] === 'start')?.[1];
-    const endTag = event.tags.find(tag => tag[0] === 'end')?.[1];
-
-    
     return {
       id: event.id,
       content: event.content,
@@ -62,10 +51,6 @@ export function useHighlights() {
       postId: event.tags.find(tag => tag[0] === 'e')?.[1] || '', // Keep e tag for backward compatibility
       postAuthor,
       postDTag,
-      // Use context tag if available (Primal-style), otherwise use start/end offsets (Longform-style)
-      contextText: contextTag,
-      startOffset: startTag ? parseInt(startTag) : undefined,
-      endOffset: endTag ? parseInt(endTag) : undefined,
       eventTags: event.tags
     };
   }, []);
@@ -177,6 +162,44 @@ export function useHighlights() {
     return matches;
   }, [highlights]);
 
+  // Delete a highlight
+  const deleteHighlight = useCallback(async (highlightId: string) => {
+    if (!isAuthenticated || !currentUser?.pubkey || !ndk) {
+      console.error('Cannot delete highlight: not authenticated or no NDK');
+      return false;
+    }
+
+    try {
+      console.log('🗑️ Deleting highlight:', highlightId);
+      
+      // Create a deletion event (kind 5)
+      const deleteEvent = new NDKEvent(ndk);
+      deleteEvent.kind = 5; // Deletion event
+      deleteEvent.content = 'Deleted highlight'; // Optional reason
+      deleteEvent.tags = [
+        ['e', highlightId] // Reference to the highlight being deleted
+      ];
+      deleteEvent.created_at = Math.floor(Date.now() / 1000);
+
+      // Publish the deletion event
+      await deleteEvent.publish();
+      
+      // Remove from local state
+      setHighlights(prev => prev.filter(h => h.id !== highlightId));
+      
+      // Remove from cache
+      const cachedHighlights = getCachedHighlights(currentUser.pubkey) || [];
+      const updatedCachedHighlights = cachedHighlights.filter(h => h.id !== highlightId);
+      cacheUserHighlights(currentUser.pubkey, updatedCachedHighlights);
+      
+      console.log('🗑️ Highlight deleted successfully:', highlightId);
+      return true;
+    } catch (error) {
+      console.error('Error deleting highlight:', error);
+      return false;
+    }
+  }, [isAuthenticated, currentUser?.pubkey, ndk]);
+
   // Refresh highlights
   const refreshHighlights = useCallback(() => {
     fetchHighlights(true);
@@ -207,7 +230,8 @@ export function useHighlights() {
     fetchHighlights,
     addHighlight,
     getHighlightsForPost,
-    refreshHighlights
+    refreshHighlights,
+    deleteHighlight
   };
 }
 
@@ -225,9 +249,7 @@ export function highlightTextInElement(
     highlightClass,
     highlights: highlights.map(h => ({ 
       id: h.id,
-      content: h.content.substring(0, 50) + '...', 
-      startOffset: h.startOffset, 
-      endOffset: h.endOffset 
+      content: h.content.substring(0, 50) + '...'
     }))
   });
 
@@ -258,39 +280,14 @@ export function highlightTextInElement(
     }
   });
 
-  // Sort highlights by start offset to process them in order
-  const sortedHighlights = highlights
-    .filter(h => h.startOffset !== undefined && h.endOffset !== undefined)
-    .sort((a, b) => (a.startOffset || 0) - (b.startOffset || 0));
-
-  // Apply highlights using position-based approach
-  sortedHighlights.forEach((highlight, index) => {
-    console.log(`🔍 Processing highlight ${index + 1}/${sortedHighlights.length}:`, {
-      id: highlight.id,
-      content: highlight.content.substring(0, 50) + '...',
-      startOffset: highlight.startOffset,
-      endOffset: highlight.endOffset,
-      elementTextLength: element.textContent?.length
-    });
-    
-    if (highlight.startOffset !== undefined && highlight.endOffset !== undefined) {
-      console.log('🔍 Applying position-based highlight');
-      applyPositionBasedHighlight(element, highlight.startOffset, highlight.endOffset, highlightClass);
-    } else {
-      // Fallback to text-based highlighting for highlights without position data
-      console.log('🔍 Applying text-based highlight');
-      const highlightText = highlight.content.trim();
-      if (highlightText) {
-        applySimpleHighlight(element, highlightText, highlightClass);
-      }
-    }
-  });
-
-  // Apply text-based highlighting for highlights without position data
-  const textBasedHighlights = highlights.filter(h => h.startOffset === undefined || h.endOffset === undefined);
-  textBasedHighlights.forEach((highlight) => {
+  // Apply text-based highlighting for all highlights
+  highlights.forEach((highlight) => {
     const highlightText = highlight.content.trim();
     if (highlightText) {
+      console.log('🔍 Applying text-based highlight:', {
+        id: highlight.id,
+        content: highlight.content.substring(0, 50) + '...'
+      });
       applySimpleHighlight(element, highlightText, highlightClass);
     }
   });
@@ -305,8 +302,15 @@ function applySimpleHighlight(
   // Use a more robust approach: work with the element's HTML content
   const originalHTML = element.innerHTML;
   
-  // Escape the highlight text for regex
-  const escapedText = highlightText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Normalize the highlight text to match the same normalization used when creating highlights
+  const normalizedHighlightText = highlightText
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/[""]/g, '"') // Normalize smart quotes to regular quotes
+    .replace(/['']/g, "'") // Normalize smart apostrophes to regular apostrophes
+    .trim();
+  
+  // Escape the normalized highlight text for regex
+  const escapedText = normalizedHighlightText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escapedText})`, 'gi');
   
   // Replace the text with highlighted version
@@ -318,158 +322,3 @@ function applySimpleHighlight(
   }
 }
 
-// Position-based highlighting function that handles multi-node highlights
-function applyPositionBasedHighlight(
-  element: HTMLElement,
-  startOffset: number,
-  endOffset: number,
-  highlightClass: string
-) {
-  // Validate inputs
-  if (startOffset < 0 || endOffset < 0 || startOffset >= endOffset) {
-    console.warn('Invalid highlight offsets:', { startOffset, endOffset });
-    return;
-  }
-
-  // Create a tree walker to traverse all text nodes
-  const walker = document.createTreeWalker(
-    element,
-    NodeFilter.SHOW_TEXT,
-    null
-  );
-
-  let currentNode: Text | null;
-  let currentOffset = 0;
-  let startNode: Text | null = null;
-  let startNodeOffset = 0;
-  let endNode: Text | null = null;
-  let endNodeOffset = 0;
-
-  // Find the text nodes that contain the start and end positions
-  while (currentNode = walker.nextNode() as Text) {
-    const nodeLength = currentNode.textContent?.length || 0;
-    
-    // Check if this node contains the start position
-    if (!startNode && currentOffset + nodeLength > startOffset) {
-      startNode = currentNode;
-      startNodeOffset = Math.max(0, startOffset - currentOffset);
-    }
-    
-    // Check if this node contains the end position
-    if (!endNode && currentOffset + nodeLength >= endOffset) {
-      endNode = currentNode;
-      endNodeOffset = Math.min(nodeLength, endOffset - currentOffset);
-      break; // We found both start and end, so we can stop
-    }
-    
-    currentOffset += nodeLength;
-  }
-
-  // If we found both start and end nodes, apply the highlight
-  if (startNode && endNode) {
-    try {
-      applyHighlightToRange(startNode, startNodeOffset, endNode, endNodeOffset, highlightClass);
-    } catch (error) {
-      console.error('Error applying highlight range:', error);
-      // Fallback to simple text highlighting
-      const highlightText = element.textContent?.substring(startOffset, endOffset);
-      if (highlightText) {
-        applySimpleHighlight(element, highlightText, highlightClass);
-      }
-    }
-  } else {
-    console.warn('Could not find text nodes for highlight range:', { startOffset, endOffset });
-  }
-}
-
-// Apply highlight to a range spanning potentially multiple text nodes
-function applyHighlightToRange(
-  startNode: Text,
-  startOffset: number,
-  endNode: Text,
-  endOffset: number,
-  highlightClass: string
-) {
-  // Validate inputs and check if nodes are still in the DOM
-  if (!startNode.parentNode || !endNode.parentNode) {
-    console.warn('Nodes are no longer in the DOM, skipping highlight');
-    return;
-  }
-
-  const startNodeLength = startNode.textContent?.length || 0;
-  const endNodeLength = endNode.textContent?.length || 0;
-  
-  if (startOffset > startNodeLength || endOffset > endNodeLength) {
-    console.warn('Invalid node offsets:', { startOffset, startNodeLength, endOffset, endNodeLength });
-    return;
-  }
-
-  // If start and end are in the same node
-  if (startNode === endNode) {
-    try {
-      const range = document.createRange();
-      range.setStart(startNode, startOffset);
-      range.setEnd(endNode, endOffset);
-      
-      // Check if the range is valid
-      if (range.collapsed) {
-        console.warn('Range is collapsed, skipping highlight');
-        return;
-      }
-      
-      const span = document.createElement('span');
-      span.className = highlightClass;
-      
-      range.surroundContents(span);
-    } catch (error) {
-      console.error('Error surrounding contents with span:', error);
-      // Fallback to simple text highlighting
-      const highlightText = startNode.textContent?.substring(startOffset, endOffset);
-      if (highlightText) {
-        const parent = startNode.parentNode;
-        if (parent) {
-          const span = document.createElement('span');
-          span.className = highlightClass;
-          span.textContent = highlightText;
-          parent.replaceChild(span, startNode);
-        }
-      }
-    }
-    return;
-  }
-
-  // Handle multi-node highlighting
-  try {
-    const range = document.createRange();
-    range.setStart(startNode, startOffset);
-    range.setEnd(endNode, endOffset);
-
-    // Check if the range is valid
-    if (range.collapsed) {
-      console.warn('Range is collapsed, skipping highlight');
-      return;
-    }
-
-    // Extract the content and create a highlighted span
-    const fragment = range.extractContents();
-    const span = document.createElement('span');
-    span.className = highlightClass;
-    span.appendChild(fragment);
-    
-    // Insert the highlighted content back
-    range.insertNode(span);
-  } catch (error) {
-    console.error('Error applying multi-node highlight:', error);
-    // If all else fails, try simple text highlighting
-    const highlightText = startNode.textContent?.substring(startOffset, endOffset);
-    if (highlightText) {
-      const parent = startNode.parentNode;
-      if (parent) {
-        const span = document.createElement('span');
-        span.className = highlightClass;
-        span.textContent = highlightText;
-        parent.replaceChild(span, startNode);
-      }
-    }
-  }
-}
