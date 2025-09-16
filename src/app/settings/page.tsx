@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import {
     isValidRelayUrl,
@@ -21,9 +21,17 @@ import { cleanupStorage } from '@/utils/storage';
 import { ProFeature } from '@/components/ProFeature';
 import { getCustomEmojis, addCustomEmoji, removeCustomEmoji } from '@/utils/supabase';
 import { CustomEmoji } from '@/config/supabase';
+import JSZip from 'jszip';
 import './page.css';
 
-
+interface BackupPost {
+    id: string;
+    title: string;
+    content: string;
+    created_at: number;
+    tags: string[][];
+    dTag?: string;
+}
 
 export default function SettingsPage() {
     const { isAuthenticated, currentUser, ndk } = useNostr();
@@ -43,6 +51,10 @@ export default function SettingsPage() {
     const [newEmojiUrl, setNewEmojiUrl] = useState('');
     const [newEmojiName, setNewEmojiName] = useState('');
     const [isLoadingEmojis, setIsLoadingEmojis] = useState(false);
+    const [backupPosts, setBackupPosts] = useState<BackupPost[]>([]);
+    const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set());
+    const [isLoadingBackup, setIsLoadingBackup] = useState(false);
+    const [isCreatingBackup, setIsCreatingBackup] = useState(false);
 
     const loadPreferredRelays = useCallback(async () => {
         if (currentUser?.pubkey) {
@@ -373,6 +385,70 @@ export default function SettingsPage() {
         }
     }, [isAuthenticated, currentUser?.npub, loadCustomEmojis]);
 
+    // Backup functions
+    const loadBackupPosts = useCallback(async () => {
+        if (!currentUser?.pubkey || !ndk) return;
+
+        setIsLoadingBackup(true);
+        try {
+            // Fetch user's published posts (kind 30023)
+            const postsQuery = await ndk.fetchEvents({
+                kinds: [30023],
+                authors: [currentUser.pubkey],
+                limit: 100,
+            });
+
+            // Fetch deletion events (kind 5) to filter out deleted posts
+            const deletionQuery = await ndk.fetchEvents({
+                kinds: [5],
+                authors: [currentUser.pubkey],
+                limit: 100,
+            });
+
+            // Create a set of deleted event IDs
+            const deletedEventIds = new Set<string>();
+            deletionQuery.forEach(deletionEvent => {
+                deletionEvent.tags.forEach((tag: string[]) => {
+                    if (tag[0] === 'e') {
+                        deletedEventIds.add(tag[1]);
+                    }
+                });
+            });
+
+            const allPosts = Array.from(postsQuery);
+            const backupPosts: BackupPost[] = allPosts
+                .filter(event => !deletedEventIds.has(event.id))
+                .map(event => {
+                    const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
+                    const dTag = event.tags.find(tag => tag[0] === 'd')?.[1];
+
+                    return {
+                        id: event.id,
+                        title,
+                        content: event.content,
+                        created_at: event.created_at || 0,
+                        tags: event.tags,
+                        dTag
+                    };
+                })
+                .sort((a, b) => b.created_at - a.created_at);
+
+            setBackupPosts(backupPosts);
+        } catch (error) {
+            console.error('Error loading backup posts:', error);
+            toast.error('Failed to load posts for backup');
+        } finally {
+            setIsLoadingBackup(false);
+        }
+    }, [currentUser?.pubkey, ndk]);
+
+    // Load backup posts on component mount
+    useEffect(() => {
+        if (isAuthenticated && currentUser?.pubkey) {
+            loadBackupPosts();
+        }
+    }, [isAuthenticated, currentUser?.pubkey, loadBackupPosts]);
+
     // Custom emoji functions
     const handleAddCustomEmoji = async () => {
         if (!currentUser?.npub) {
@@ -443,6 +519,72 @@ export default function SettingsPage() {
         } catch (error) {
             console.error('Error removing custom emoji:', error);
             toast.error('Failed to remove custom emoji');
+        }
+    };
+
+    const togglePostSelection = (postId: string) => {
+        setSelectedPosts(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(postId)) {
+                newSet.delete(postId);
+            } else {
+                newSet.add(postId);
+            }
+            return newSet;
+        });
+    };
+
+    const selectAllPosts = () => {
+        setSelectedPosts(new Set(backupPosts.map(post => post.id)));
+    };
+
+    const deselectAllPosts = () => {
+        setSelectedPosts(new Set());
+    };
+
+    const createBackup = async () => {
+        if (selectedPosts.size === 0) {
+            toast.error('Please select at least one post to backup');
+            return;
+        }
+
+        setIsCreatingBackup(true);
+        try {
+            const zip = new JSZip();
+            const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-dd format
+            
+            // Add selected posts to zip
+            for (const postId of selectedPosts) {
+                const post = backupPosts.find(p => p.id === postId);
+                if (post) {
+                    // Use d-tag as filename, fallback to post ID if no d-tag
+                    const filename = `${post.dTag || post.id}.md`;
+                    
+                    // Only include the post content
+                    const markdownContent = post.content;
+
+                    zip.file(filename, markdownContent);
+                }
+            }
+
+            // Generate and download the zip file
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(zipBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `longform_backup_${timestamp}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast.success(`Backup created with ${selectedPosts.size} posts`);
+            setSelectedPosts(new Set());
+        } catch (error) {
+            console.error('Error creating backup:', error);
+            toast.error('Failed to create backup');
+        } finally {
+            setIsCreatingBackup(false);
         }
     };
 
@@ -797,6 +939,93 @@ export default function SettingsPage() {
                                     </div>
                                 ))}
                             </div>
+                        )}
+                    </ProFeature>
+                </section>
+
+                <section className="settings-section">
+                    <div className="section-header">
+                        <h2>Backup ({backupPosts.length})</h2>
+                        <ProFeature>
+                            <button
+                                onClick={loadBackupPosts}
+                                className="refresh-button"
+                                title="Refresh posts list"
+                                disabled={isLoadingBackup}
+                            >
+                                {isLoadingBackup ? 'Loading...' : 'Refresh'}
+                            </button>
+                        </ProFeature>
+                    </div>
+
+                    <ProFeature showUpgradePrompt={true}>
+                        {isLoadingBackup ? (
+                            <div className="loading-backup">
+                                <div className="loading-spinner"></div>
+                                <p>Loading your posts...</p>
+                            </div>
+                        ) : backupPosts.length === 0 ? (
+                            <p className="no-posts">No published posts found. Create and publish some posts to backup them.</p>
+                        ) : (
+                            <>
+                                <div className="backup-controls">
+                                    <div className="selection-controls">
+                                        <button
+                                            onClick={selectAllPosts}
+                                            className="select-all-button"
+                                            disabled={selectedPosts.size === backupPosts.length}
+                                        >
+                                            Select All
+                                        </button>
+                                        <button
+                                            onClick={deselectAllPosts}
+                                            className="deselect-all-button"
+                                            disabled={selectedPosts.size === 0}
+                                        >
+                                            Deselect All
+                                        </button>
+                                        <span className="selection-count">
+                                            {selectedPosts.size} of {backupPosts.length} selected
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="backup-posts-list">
+                                    {backupPosts.map((post) => (
+                                        <div key={post.id} className="backup-post-item">
+                                            <div className="post-checkbox">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedPosts.has(post.id)}
+                                                    onChange={() => togglePostSelection(post.id)}
+                                                    id={`post-${post.id}`}
+                                                />
+                                                <label htmlFor={`post-${post.id}`} className="checkbox-label">
+                                                    <div className="post-info">
+                                                        <div className="post-title">{post.title}</div>
+                                                        <div className="post-meta">
+                                                            {new Date(post.created_at * 1000).toLocaleDateString()} • 
+                                                            {post.content.length} characters
+                                                            {post.dTag && ` • ${post.dTag}`}
+                                                        </div>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="backup-actions">
+                                    <button
+                                        onClick={createBackup}
+                                        className="create-backup-button"
+                                        disabled={selectedPosts.size === 0 || isCreatingBackup}
+                                    >
+                                        <DocumentArrowDownIcon />
+                                        {isCreatingBackup ? 'Creating Backup...' : 'Create Backup'}
+                                    </button>
+                                </div>
+                            </>
                         )}
                     </ProFeature>
                 </section>

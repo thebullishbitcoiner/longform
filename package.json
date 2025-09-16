@@ -1,6 +1,6 @@
 {
   "name": "longform",
-  "version": "0.5.11",
+  "version": "0.5.12",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -23,6 +23,7 @@
     "bolt11": "^1.4.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.10.5",
+    "jszip": "^3.10.1",
     "next": "15.3.1",
     "nostr-login": "^1.7.11",
     "react": "^19.0.0",
@@ -35,6 +36,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/bech32": "^1.1.8",
+    "@types/jszip": "^3.4.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
