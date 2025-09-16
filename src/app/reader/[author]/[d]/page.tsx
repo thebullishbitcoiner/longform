@@ -20,7 +20,7 @@ import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import toast from 'react-hot-toast';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
-import { useHighlights, highlightTextInElement } from '@/utils/highlights';
+import { useHighlights } from '@/utils/highlights';
 import JsonModal from '@/components/JsonModal';
 
 // Create a standalone NDK instance for public access
@@ -948,6 +948,7 @@ export default function BlogPost() {
           published_at,
           image,
           tags,
+          dTag, // Store the d tag from URL parameters
           emojiTags, // Store emoji tags separately for processing
           client // Store client identifier
         };
@@ -2325,11 +2326,8 @@ export default function BlogPost() {
       // Add to highlights cache
       addHighlight(newHighlight);
       
-      // Re-apply highlights to the content
-      if (postContentRef.current) {
-        const postHighlights = getHighlightsForPost(post.id);
-        highlightTextInElement(postContentRef.current, postHighlights, styles.userHighlight);
-      }
+      // Highlights will be automatically applied through ReactMarkdown's text component
+      console.log('🔍 Highlight created and will be applied through React rendering');
       
       // Show success message
       toast.success('Highlight created successfully!');
@@ -2396,56 +2394,60 @@ export default function BlogPost() {
     };
   }, [post, hasMarkedAsRead, markPostAsRead, isAuthenticated]);
 
-  // Apply highlights to post content when it's loaded and highlights are available
-  useEffect(() => {
-    if (!post || !postContentRef.current || !isAuthenticated) return;
+  // Get highlights for the current post
+  const postHighlights = post ? getHighlightsForPost(post.id, post.pubkey, post.dTag) : [];
 
-    // Function to apply highlights
-    const applyHighlights = () => {
-      const postHighlights = getHighlightsForPost(post.id);
-      
-      if (postHighlights.length > 0) {
-        console.log(`🔍 Applying ${postHighlights.length} highlights to post content`);
-        try {
-          // Wait for ReactMarkdown to finish rendering
-          const checkContent = () => {
-            if (postContentRef.current && postContentRef.current.children.length > 0) {
-              console.log('🔍 Content is ready, applying highlights with class:', styles.userHighlight);
-              highlightTextInElement(postContentRef.current!, postHighlights, styles.userHighlight);
-              console.log('🔍 Highlights applied successfully');
-            } else {
-              // If content isn't ready yet, try again in a bit
-              setTimeout(checkContent, 100);
-            }
-          };
-          checkContent();
-        } catch (error) {
-          console.error('🔍 Error applying highlights:', error);
-        }
-      } else {
-        console.log('🔍 No highlights found for this post');
-      }
-    };
 
-    // Apply highlights with a delay to ensure ReactMarkdown has rendered
-    const timer = setTimeout(applyHighlights, 1000);
-    return () => clearTimeout(timer);
-  }, [post, processedContent, getHighlightsForPost, isAuthenticated]);
-
-  // Re-apply highlights when highlights are updated (triggered by changes in highlights cache)
-  useEffect(() => {
-    if (!post || !postContentRef.current || !isAuthenticated) return;
-
-    const postHighlights = getHighlightsForPost(post.id);
-    if (postHighlights.length > 0 && processedContent) {
-      console.log(`🔍 Re-applying ${postHighlights.length} highlights after update`);
-      try {
-        highlightTextInElement(postContentRef.current!, postHighlights, styles.userHighlight);
-      } catch (error) {
-        console.error('🔍 Error re-applying highlights:', error);
-      }
+  // Function to apply highlights to text content
+  const applyHighlightsToText = (text: string): React.ReactNode => {
+    if (!postHighlights.length || !text) {
+      return text;
     }
-  }, [post?.id, processedContent, isAuthenticated, getHighlightsForPost]);
+
+    // Simple approach: search for highlight content in this text segment
+    const result: React.ReactNode[] = [];
+    let remainingText = text;
+    let hasHighlights = false;
+
+    postHighlights.forEach((highlight, index) => {
+      const highlightText = highlight.content || highlight.contextText || '';
+      
+      if (highlightText && remainingText.includes(highlightText)) {
+        const parts = remainingText.split(highlightText);
+        
+        if (parts.length > 1) {
+          // Add text before highlight
+          if (parts[0]) {
+            result.push(parts[0]);
+          }
+          
+          // Add highlighted text
+          result.push(
+            <span key={`highlight-${highlight.id}-${index}`} className={styles.userHighlight}>
+              {highlightText}
+            </span>
+          );
+          
+          // Update remaining text to everything after the highlight
+          remainingText = parts.slice(1).join(highlightText);
+          hasHighlights = true;
+          
+          console.log('🔍 Highlight applied:', {
+            highlightId: highlight.id,
+            highlightText: highlightText.substring(0, 50) + '...'
+          });
+        }
+      }
+    });
+
+    // Add any remaining text
+    if (remainingText) {
+      result.push(remainingText);
+    }
+
+    return hasHighlights ? result : text;
+  };
+
 
   // Function to render custom emojis and reactions as JSX
   const renderReactionContentJSX = (content: string, event?: NDKEvent) => {
@@ -2672,6 +2674,27 @@ export default function BlogPost() {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                // Custom text component to handle HTML entities
+                text: ({ children }) => {
+                  if (typeof children === 'string') {
+                    console.log('🔍 Text component called with:', children);
+                    
+                    // Decode HTML entities in text content
+                    const decodedContent = children
+                      .replace(/&lt;/g, '<')
+                      .replace(/&gt;/g, '>')
+                      .replace(/&amp;/g, '&')
+                      .replace(/&quot;/g, '"')
+                      .replace(/&#x27;/g, "'")
+                      .replace(/&#x20;/g, ' ')
+                      .replace(/\\&lt;/g, '<')
+                      .replace(/\\&gt;/g, '>');
+                    
+                    console.log('🔍 Decoded content:', decodedContent);
+                    return <>{decodedContent}</>;
+                  }
+                  return <>{children}</>;
+                },
                 // Custom code component to handle HTML entities
                 code: ({ children, className, ...props }) => {
                   // Decode HTML entities in code content
@@ -2693,29 +2716,156 @@ export default function BlogPost() {
                     </pre>
                   );
                 },
-                // Custom text component to handle emojis in post content
-                text: ({ children }) => {
-                  try {
-                    if (!post?.emojiTags || typeof children !== 'string') {
-                      return <span>{children}</span>;
+                // Custom paragraph component to handle highlights
+                p: ({ children, ...props }) => {
+                  // Process children to apply highlights
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      // Decode HTML entities first
+                      const decodedText = children
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&#x27;/g, "'")
+                        .replace(/&#x20;/g, ' ')
+                        .replace(/\\&lt;/g, '<')
+                        .replace(/\\&gt;/g, '>');
+                      
+                      console.log('🔍 Paragraph processing text:', {
+                        original: children,
+                        decoded: decodedText,
+                        hasEntities: children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;')
+                      });
+                      
+                      return applyHighlightsToText(decodedText);
                     }
                     
-                    // Create emoji map from stored emoji tags
-                    const emojiMap = new Map<string, string>();
-                    post.emojiTags.forEach(tag => {
-                      emojiMap.set(tag.shortcode, tag.url);
-                    });
-                    
-                    if (emojiMap.size === 0) {
-                      return <span>{children}</span>;
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
                     }
                     
-                    const renderedParts = renderCustomEmojis(children, emojiMap);
-                    return <span>{renderedParts}</span>;
-                  } catch (error) {
-                    console.error('Error rendering emoji in text:', error);
-                    return <span>{children}</span>;
-                  }
+                    return children;
+                  };
+                  
+                  return (
+                    <p className={styles.paragraph} {...props}>
+                      {processChildren(children)}
+                    </p>
+                  );
+                },
+                // Custom heading components to handle highlights
+                h1: ({ children, ...props }) => {
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      // Decode HTML entities first
+                      const decodedText = children
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&#x27;/g, "'")
+                        .replace(/&#x20;/g, ' ')
+                        .replace(/\\&lt;/g, '<')
+                        .replace(/\\&gt;/g, '>');
+                      
+                      return applyHighlightsToText(decodedText);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+                  return <h1 className={styles.heading1} {...props}>{processChildren(children)}</h1>;
+                },
+                h2: ({ children, ...props }) => {
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      return applyHighlightsToText(children);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+                  return <h2 className={styles.heading2} {...props}>{processChildren(children)}</h2>;
+                },
+                h3: ({ children, ...props }) => {
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      return applyHighlightsToText(children);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+                  return <h3 className={styles.heading3} {...props}>{processChildren(children)}</h3>;
+                },
+                h4: ({ children, ...props }) => {
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      return applyHighlightsToText(children);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+                  return <h4 className={styles.heading4} {...props}>{processChildren(children)}</h4>;
+                },
+                h5: ({ children, ...props }) => {
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      return applyHighlightsToText(children);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+                  return <h5 className={styles.heading5} {...props}>{processChildren(children)}</h5>;
+                },
+                h6: ({ children, ...props }) => {
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      return applyHighlightsToText(children);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+                  return <h6 className={styles.heading6} {...props}>{processChildren(children)}</h6>;
+                },
+                // Custom blockquote component to handle highlights
+                blockquote: ({ children, ...props }) => {
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      return applyHighlightsToText(children);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+                  return <blockquote className={styles.blockquote} {...props}>{processChildren(children)}</blockquote>;
                 },
                 img: ({ src, alt }: React.ComponentPropsWithoutRef<'img'>) => {
                   if (!src || typeof src !== 'string') return null;
@@ -2738,17 +2888,36 @@ export default function BlogPost() {
                     />
                   );
                 },
-                a: ({ ...props }) => {
+                a: ({ children, ...props }) => {
                   const isNostrLink = props.href?.includes('njump.me');
                   const isVideoLink = props.href ? isVideoUrl(props.href) : false;
                   const isImageUrl = props.href?.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i);
+                  
+                  // Decode HTML entities in link text
+                  const decodedChildren = typeof children === 'string' 
+                    ? children
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&#x27;/g, "'")
+                        .replace(/&#x20;/g, ' ')
+                        .replace(/\\&lt;/g, '<')
+                        .replace(/\\&gt;/g, '>')
+                    : children;
+                  
+                  console.log('🔍 Link processing text:', {
+                    original: children,
+                    decoded: decodedChildren,
+                    hasEntities: typeof children === 'string' && (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;'))
+                  });
                   
                                      // If this is an image URL, render it as an image instead of a link
                    if (isImageUrl && props.href) {
                      return (
                        <Image
                          src={props.href}
-                         alt={props.children?.toString() || 'Image'}
+                         alt={decodedChildren?.toString() || 'Image'}
                          width={800}
                          height={600}
                          style={{ width: '100%', height: 'auto' }}
@@ -2792,7 +2961,7 @@ export default function BlogPost() {
                           )}
                           <span className={styles.videoCaption}>
                             <a href={props.href} target="_blank" rel="noopener noreferrer" className={styles.videoLink}>
-                              {props.children}
+                              {decodedChildren}
                             </a>
                           </span>
                         </span>
@@ -2809,20 +2978,35 @@ export default function BlogPost() {
                       className={linkClass}
                       target="_blank"
                       rel="noopener noreferrer"
-                    />
+                    >
+                      {decodedChildren}
+                    </a>
                   );
                 },
                 li: ({ children, ...props }: React.ComponentPropsWithoutRef<'li'>) => {
+                  // Process children to apply highlights
+                  const processChildren = (children: React.ReactNode): React.ReactNode => {
+                    if (typeof children === 'string') {
+                      return applyHighlightsToText(children);
+                    }
+                    if (Array.isArray(children)) {
+                      return children.map((child, index) => (
+                        <span key={index}>{processChildren(child)}</span>
+                      ));
+                    }
+                    return children;
+                  };
+
                   // Check if this is a task list item (checkbox)
                   const child = children as React.ReactElement;
                   if (child && typeof child === 'object' && child.props && typeof child.props === 'object' && 'checked' in child.props) {
                     return (
                       <li {...props} className={styles.taskListItem}>
-                        {children}
+                        {processChildren(children)}
                       </li>
                     );
                   }
-                  return <li {...props}>{children}</li>;
+                  return <li className={styles.listItem} {...props}>{processChildren(children)}</li>;
                 },
                                  input: ({ checked, type, ...props }: React.ComponentPropsWithoutRef<'input'>) => {
                    if (type === 'checkbox') {

@@ -16,6 +16,7 @@ import { hexToNote1 } from '@/utils/nostr';
 import toast from 'react-hot-toast';
 import { useBlog } from '@/contexts/BlogContext';
 import { DEFAULT_RELAYS } from '@/config/relays';
+import JsonModal from '@/components/JsonModal';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -158,7 +159,7 @@ export default function ProfilePage() {
            postDTag: highlight.postDTag,
            startOffset: highlight.startOffset,
            endOffset: highlight.endOffset,
-                       event: undefined // Don't create synthetic events for cached highlights
+           event: undefined // Don't create synthetic events for cached highlights
          })).sort((a, b) => b.created_at - a.created_at);
         
         setHighlights(profileHighlights);
@@ -254,26 +255,62 @@ export default function ProfilePage() {
 
       // Update count immediately when we get the raw highlights
       setHighlights(() => {
-        const tempHighlights = highlightsArray.map(event => ({
-          id: event.id,
-          content: event.content,
-          created_at: event.created_at * 1000,
-          postId: event.tags.find(tag => tag[0] === 'e')?.[1] || '',
-          postAuthor: event.tags.find(tag => tag[0] === 'p')?.[1] || '',
-          postAuthorDisplayName: undefined,
-          postAuthorNip05: undefined,
-          postDTag: undefined,
-          startOffset: event.tags.find(tag => tag[0] === 'start')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'start')?.[1] || '0') : undefined,
-          endOffset: event.tags.find(tag => tag[0] === 'end')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'end')?.[1] || '0') : undefined,
-          event: event, // Store the original NDKEvent
-        }));
+        const tempHighlights = highlightsArray.map(event => {
+          // Parse the "a" tag to get author pubkey and d tag
+          const aTag = event.tags.find(tag => tag[0] === 'a')?.[1];
+          let postAuthor = '';
+          let postDTag = '';
+          
+          if (aTag) {
+            // Parse "a" tag format: "kind:author_pubkey:d_tag"
+            const aTagParts = aTag.split(':');
+            if (aTagParts.length >= 3) {
+              postAuthor = aTagParts[1]; // author pubkey
+              postDTag = aTagParts[2];   // d tag
+            }
+          }
+          
+          // Fallback to "p" tag if "a" tag parsing fails
+          if (!postAuthor) {
+            postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
+          }
+          
+          return {
+            id: event.id,
+            content: event.content,
+            created_at: event.created_at * 1000,
+            postId: event.tags.find(tag => tag[0] === 'e')?.[1] || '', // Keep e tag for backward compatibility
+            postAuthor,
+            postAuthorDisplayName: undefined,
+            postAuthorNip05: undefined,
+            postDTag,
+            startOffset: event.tags.find(tag => tag[0] === 'start')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'start')?.[1] || '0') : undefined,
+            endOffset: event.tags.find(tag => tag[0] === 'end')?.[1] ? parseInt(event.tags.find(tag => tag[0] === 'end')?.[1] || '0') : undefined,
+            event: event, // Store the original NDKEvent
+          };
+        });
         return tempHighlights.sort((a, b) => b.created_at - a.created_at);
       });
 
       // Get unique author pubkeys from highlights
       const authorPubkeys = new Set<string>();
       highlightsArray.forEach(event => {
-        const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1];
+        // Try to get author from "a" tag first
+        const aTag = event.tags.find(tag => tag[0] === 'a')?.[1];
+        let postAuthor = '';
+        
+        if (aTag) {
+          const aTagParts = aTag.split(':');
+          if (aTagParts.length >= 3) {
+            postAuthor = aTagParts[1]; // author pubkey from a tag
+          }
+        }
+        
+        // Fallback to "p" tag if "a" tag parsing fails
+        if (!postAuthor) {
+          postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
+        }
+        
         if (postAuthor) {
           authorPubkeys.add(postAuthor);
         }
@@ -334,47 +371,35 @@ export default function ProfilePage() {
           await fetchAuthorProfile(authorPubkey);
         }
 
-      // Fetch the original posts to get their d tags
-      const postIds = new Set<string>();
-      highlightsArray.forEach(event => {
-        const postId = event.tags.find(tag => tag[0] === 'e')?.[1];
-        if (postId) {
-          postIds.add(postId);
-        }
-      });
-
-      // Fetch the original posts to get their d tags
-      const postsMap = new Map<string, { dTag?: string; author: string }>();
-      if (postIds.size > 0) {
-        const postsQuery = await ndkToUse.fetchEvents({
-          kinds: [30023],
-          ids: Array.from(postIds),
-          limit: 100,
-        });
-
-        postsQuery.forEach(post => {
-          const dTag = post.tags.find(tag => tag[0] === 'd')?.[1];
-          postsMap.set(post.id, {
-            dTag,
-            author: post.pubkey,
-          });
-        });
-      }
-
-      // Now update with full data
+      // Now update with full data using "a" tag information
       const profileHighlights: ProfileHighlight[] = highlightsArray
         .map(event => {
-          const postId = event.tags.find(tag => tag[0] === 'e')?.[1] || '';
-          const postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
+          // Parse the "a" tag to get author pubkey and d tag
+          const aTag = event.tags.find(tag => tag[0] === 'a')?.[1];
+          let postAuthor = '';
+          let postDTag = '';
+          
+          if (aTag) {
+            // Parse "a" tag format: "kind:author_pubkey:d_tag"
+            const aTagParts = aTag.split(':');
+            if (aTagParts.length >= 3) {
+              postAuthor = aTagParts[1]; // author pubkey
+              postDTag = aTagParts[2];   // d tag
+            }
+          }
+          
+          // Fallback to "p" tag if "a" tag parsing fails
+          if (!postAuthor) {
+            postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
+          }
+          
+          const postId = event.tags.find(tag => tag[0] === 'e')?.[1] || ''; // Keep for backward compatibility
           const startOffset = event.tags.find(tag => tag[0] === 'start')?.[1];
           const endOffset = event.tags.find(tag => tag[0] === 'end')?.[1];
 
           // Get author display name
           const authorProfile = authorProfiles.get(postAuthor);
           const postAuthorDisplayName = authorProfile?.displayName || authorProfile?.name || postAuthor.slice(0, 8) + '...';
-
-          // Get post info for link generation
-          const postInfo = postsMap.get(postId);
 
           return {
             id: event.id,
@@ -384,7 +409,7 @@ export default function ProfilePage() {
             postAuthor,
             postAuthorDisplayName,
             postAuthorNip05: authorProfile?.nip05,
-            postDTag: postInfo?.dTag,
+            postDTag,
             startOffset: startOffset ? parseInt(startOffset) : undefined,
             endOffset: endOffset ? parseInt(endOffset) : undefined,
             event: event, // Store the original NDKEvent
@@ -1106,7 +1131,8 @@ export default function ProfilePage() {
       ) : (
         <div className={styles.highlightsGrid}>
           {highlights.map((highlight) => {
-          // Generate the correct link using NIP-05 and d tag
+          // Generate the correct link using data from "a" tag (author pubkey and d tag)
+          // This is more reliable than using "e" tag which can become incorrect
           const authorIdentifier = highlight.postAuthorNip05 || highlight.postAuthor;
           const postIdentifier = highlight.postDTag || highlight.postId;
           
@@ -1305,26 +1331,11 @@ export default function ProfilePage() {
       )}
 
       {/* JSON Modal */}
-      {jsonModal.visible && (
-        <div className={styles.modalOverlay} onClick={() => setJsonModal({ visible: false, data: null })}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h3>Raw Event Data</h3>
-              <button 
-                className={styles.modalClose}
-                onClick={() => setJsonModal({ visible: false, data: null })}
-              >
-                ×
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              <pre className={styles.jsonDisplay}>
-                {JSON.stringify(jsonModal.data, null, 2)}
-              </pre>
-            </div>
-          </div>
-        </div>
-      )}
+      <JsonModal
+        isOpen={jsonModal.visible}
+        onClose={() => setJsonModal({ visible: false, data: null })}
+        data={jsonModal.data}
+      />
     </div>
   );
 } 

@@ -13,8 +13,10 @@ export interface Highlight {
   created_at: number;
   postId: string;
   postAuthor: string;
-  startOffset?: number;
-  endOffset?: number;
+  postDTag?: string;
+  contextText?: string; // Primal-style highlighting
+  startOffset?: number; // Longform-style highlighting
+  endOffset?: number;   // Longform-style highlighting
   eventTags: string[][];
 }
 
@@ -26,16 +28,44 @@ export function useHighlights() {
 
   // Convert NDK event to Highlight interface
   const eventToHighlight = useCallback((event: NDKEvent): Highlight => {
+    // Parse the "a" tag to get author pubkey and d tag
+    const aTag = event.tags.find(tag => tag[0] === 'a')?.[1];
+    let postAuthor = '';
+    let postDTag = '';
+    
+    if (aTag) {
+      // Parse "a" tag format: "kind:author_pubkey:d_tag"
+      const aTagParts = aTag.split(':');
+      if (aTagParts.length >= 3) {
+        postAuthor = aTagParts[1]; // author pubkey
+        postDTag = aTagParts[2];   // d tag
+      }
+    }
+    
+    // Fallback to "p" tag if "a" tag parsing fails
+    if (!postAuthor) {
+      postAuthor = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
+    }
+    
+    // Check for context tag (Primal-style highlighting)
+    const contextTag = event.tags.find(tag => tag[0] === 'context')?.[1];
+    
+    // Get start/end offsets (Longform-style highlighting)
+    const startTag = event.tags.find(tag => tag[0] === 'start')?.[1];
+    const endTag = event.tags.find(tag => tag[0] === 'end')?.[1];
+
+    
     return {
       id: event.id,
       content: event.content,
       created_at: event.created_at * 1000, // Convert to milliseconds
-      postId: event.tags.find(tag => tag[0] === 'e')?.[1] || '',
-      postAuthor: event.tags.find(tag => tag[0] === 'p')?.[1] || '',
-      startOffset: event.tags.find(tag => tag[0] === 'start')?.[1] ? 
-        parseInt(event.tags.find(tag => tag[0] === 'start')?.[1] || '0') : undefined,
-      endOffset: event.tags.find(tag => tag[0] === 'end')?.[1] ? 
-        parseInt(event.tags.find(tag => tag[0] === 'end')?.[1] || '0') : undefined,
+      postId: event.tags.find(tag => tag[0] === 'e')?.[1] || '', // Keep e tag for backward compatibility
+      postAuthor,
+      postDTag,
+      // Use context tag if available (Primal-style), otherwise use start/end offsets (Longform-style)
+      contextText: contextTag,
+      startOffset: startTag ? parseInt(startTag) : undefined,
+      endOffset: endTag ? parseInt(endTag) : undefined,
       eventTags: event.tags
     };
   }, []);
@@ -102,8 +132,49 @@ export function useHighlights() {
   }, [currentUser?.pubkey]);
 
   // Get highlights for a specific post
-  const getHighlightsForPost = useCallback((postId: string): Highlight[] => {
-    return highlights.filter(h => h.postId === postId);
+  const getHighlightsForPost = useCallback((postId: string, postAuthor?: string, postDTag?: string): Highlight[] => {
+    console.log('🔍 getHighlightsForPost called with:', {
+      postId,
+      postAuthor,
+      postDTag,
+      totalHighlights: highlights.length,
+      highlights: highlights.map(h => ({
+        id: h.id,
+        postId: h.postId,
+        postAuthor: h.postAuthor,
+        aTag: h.eventTags.find(tag => tag[0] === 'a')?.[1]
+      }))
+    });
+    
+    const matches = highlights.filter(h => {
+      // First try to match by postId (e tag) for backward compatibility
+      if (h.postId === postId) {
+        console.log('🔍 Matched by e tag:', h.id);
+        return true;
+      }
+      
+      // If we have author and d tag info, try to match using a tag data
+      if (postAuthor && postDTag) {
+        // Check if this highlight has a tag data that matches
+        const aTag = h.eventTags.find(tag => tag[0] === 'a')?.[1];
+        if (aTag) {
+          const aTagParts = aTag.split(':');
+          if (aTagParts.length >= 3) {
+            const highlightAuthor = aTagParts[1];
+            const highlightDTag = aTagParts[2];
+            if (highlightAuthor === postAuthor && highlightDTag === postDTag) {
+              console.log('🔍 Matched by a tag:', h.id);
+              return true;
+            }
+          }
+        }
+      }
+      
+      return false;
+    });
+    
+    console.log('🔍 getHighlightsForPost result:', matches.length, 'matches');
+    return matches;
   }, [highlights]);
 
   // Refresh highlights
@@ -113,9 +184,17 @@ export function useHighlights() {
 
   // Load highlights on mount and when user changes
   useEffect(() => {
+    console.log('🔍 useHighlights useEffect triggered:', {
+      isAuthenticated,
+      currentUserPubkey: currentUser?.pubkey,
+      highlightsCount: highlights.length
+    });
+    
     if (isAuthenticated && currentUser?.pubkey) {
+      console.log('🔍 Fetching highlights for user:', currentUser.pubkey);
       fetchHighlights();
     } else {
+      console.log('🔍 Clearing highlights - not authenticated or no user');
       setHighlights([]);
       setLastFetched(null);
     }
@@ -140,13 +219,32 @@ export function highlightTextInElement(
 ) {
   console.log('🔍 highlightTextInElement called with:', {
     element: !!element,
+    elementTagName: element?.tagName,
+    elementTextLength: element?.textContent?.length,
     highlightsCount: highlights.length,
     highlightClass,
-    highlights: highlights.map(h => ({ content: h.content, startOffset: h.startOffset, endOffset: h.endOffset }))
+    highlights: highlights.map(h => ({ 
+      id: h.id,
+      content: h.content.substring(0, 50) + '...', 
+      startOffset: h.startOffset, 
+      endOffset: h.endOffset 
+    }))
   });
 
   if (!element || highlights.length === 0) {
     console.log('🔍 No element or highlights, returning early');
+    return;
+  }
+
+  // Check if element is still in the DOM
+  if (!element.parentNode && element !== document.body) {
+    console.log('🔍 Element is no longer in the DOM, skipping highlights');
+    return;
+  }
+
+  // Check if element has content
+  if (!element.textContent || element.textContent.trim().length === 0) {
+    console.log('🔍 Element has no text content, skipping highlights');
     return;
   }
 
@@ -166,11 +264,13 @@ export function highlightTextInElement(
     .sort((a, b) => (a.startOffset || 0) - (b.startOffset || 0));
 
   // Apply highlights using position-based approach
-  sortedHighlights.forEach((highlight) => {
-    console.log('🔍 Processing highlight:', {
-      content: highlight.content,
+  sortedHighlights.forEach((highlight, index) => {
+    console.log(`🔍 Processing highlight ${index + 1}/${sortedHighlights.length}:`, {
+      id: highlight.id,
+      content: highlight.content.substring(0, 50) + '...',
       startOffset: highlight.startOffset,
-      endOffset: highlight.endOffset
+      endOffset: highlight.endOffset,
+      elementTextLength: element.textContent?.length
     });
     
     if (highlight.startOffset !== undefined && highlight.endOffset !== undefined) {
@@ -290,7 +390,12 @@ function applyHighlightToRange(
   endOffset: number,
   highlightClass: string
 ) {
-  // Validate offsets
+  // Validate inputs and check if nodes are still in the DOM
+  if (!startNode.parentNode || !endNode.parentNode) {
+    console.warn('Nodes are no longer in the DOM, skipping highlight');
+    return;
+  }
+
   const startNodeLength = startNode.textContent?.length || 0;
   const endNodeLength = endNode.textContent?.length || 0;
   
@@ -301,43 +406,50 @@ function applyHighlightToRange(
 
   // If start and end are in the same node
   if (startNode === endNode) {
-    const range = document.createRange();
-    range.setStart(startNode, startOffset);
-    range.setEnd(endNode, endOffset);
-    
-    // Check if the range is valid
-    if (range.collapsed) {
-      console.warn('Range is collapsed, skipping highlight');
-      return;
-    }
-    
-    const span = document.createElement('span');
-    span.className = highlightClass;
-    
     try {
+      const range = document.createRange();
+      range.setStart(startNode, startOffset);
+      range.setEnd(endNode, endOffset);
+      
+      // Check if the range is valid
+      if (range.collapsed) {
+        console.warn('Range is collapsed, skipping highlight');
+        return;
+      }
+      
+      const span = document.createElement('span');
+      span.className = highlightClass;
+      
       range.surroundContents(span);
     } catch (error) {
       console.error('Error surrounding contents with span:', error);
-      // Fallback: extract and reinsert
-      const fragment = range.extractContents();
-      span.appendChild(fragment);
-      range.insertNode(span);
+      // Fallback to simple text highlighting
+      const highlightText = startNode.textContent?.substring(startOffset, endOffset);
+      if (highlightText) {
+        const parent = startNode.parentNode;
+        if (parent) {
+          const span = document.createElement('span');
+          span.className = highlightClass;
+          span.textContent = highlightText;
+          parent.replaceChild(span, startNode);
+        }
+      }
     }
     return;
   }
 
   // Handle multi-node highlighting
-  const range = document.createRange();
-  range.setStart(startNode, startOffset);
-  range.setEnd(endNode, endOffset);
-
-  // Check if the range is valid
-  if (range.collapsed) {
-    console.warn('Range is collapsed, skipping highlight');
-    return;
-  }
-
   try {
+    const range = document.createRange();
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+
+    // Check if the range is valid
+    if (range.collapsed) {
+      console.warn('Range is collapsed, skipping highlight');
+      return;
+    }
+
     // Extract the content and create a highlighted span
     const fragment = range.extractContents();
     const span = document.createElement('span');
@@ -348,13 +460,16 @@ function applyHighlightToRange(
     range.insertNode(span);
   } catch (error) {
     console.error('Error applying multi-node highlight:', error);
-    // If extraction fails, try a different approach
-    try {
-      const span = document.createElement('span');
-      span.className = highlightClass;
-      range.surroundContents(span);
-    } catch (surroundError) {
-      console.error('Error with surroundContents fallback:', surroundError);
+    // If all else fails, try simple text highlighting
+    const highlightText = startNode.textContent?.substring(startOffset, endOffset);
+    if (highlightText) {
+      const parent = startNode.parentNode;
+      if (parent) {
+        const span = document.createElement('span');
+        span.className = highlightClass;
+        span.textContent = highlightText;
+        parent.replaceChild(span, startNode);
+      }
     }
   }
 }
