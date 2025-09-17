@@ -20,7 +20,8 @@ import { AuthGuard } from '@/components/AuthGuard';
 import { cleanupStorage } from '@/utils/storage';
 import { ProFeature } from '@/components/ProFeature';
 import { getCustomEmojis, addCustomEmoji, removeCustomEmoji } from '@/utils/supabase';
-import { CustomEmoji } from '@/config/supabase';
+import { CustomEmoji, EmojiSet } from '@/config/supabase';
+import { hardcodedEmojiSets } from '@/data/emojiSets';
 import JSZip from 'jszip';
 import './page.css';
 
@@ -48,13 +49,16 @@ export default function SettingsPage() {
     const [showCacheInfoModal, setShowCacheInfoModal] = useState(false);
     const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
     const [showAddEmojiModal, setShowAddEmojiModal] = useState(false);
-    const [newEmojiUrl, setNewEmojiUrl] = useState('');
-    const [newEmojiName, setNewEmojiName] = useState('');
     const [isLoadingEmojis, setIsLoadingEmojis] = useState(false);
     const [backupPosts, setBackupPosts] = useState<BackupPost[]>([]);
     const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set());
     const [isLoadingBackup, setIsLoadingBackup] = useState(false);
     const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+    const [emojiSets, setEmojiSets] = useState<EmojiSet[]>([]);
+    const [isLoadingEmojiSets, setIsLoadingEmojiSets] = useState(false);
+    const [selectedEmojiSet, setSelectedEmojiSet] = useState<EmojiSet | null>(null);
+    const [selectedEmojis, setSelectedEmojis] = useState<Set<string>>(new Set());
+    const [showEmojiSetModal, setShowEmojiSetModal] = useState(false);
 
     const loadPreferredRelays = useCallback(async () => {
         if (currentUser?.pubkey) {
@@ -120,7 +124,7 @@ export default function SettingsPage() {
 
     // Prevent scrolling when modal is open
     useEffect(() => {
-        if (showInfoModal || showRelayListInfoModal || showCacheInfoModal || showAddEmojiModal) {
+        if (showInfoModal || showRelayListInfoModal || showCacheInfoModal || showAddEmojiModal || showEmojiSetModal) {
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = 'unset';
@@ -130,7 +134,7 @@ export default function SettingsPage() {
         return () => {
             document.body.style.overflow = 'unset';
         };
-    }, [showInfoModal, showRelayListInfoModal, showCacheInfoModal, showAddEmojiModal]);
+    }, [showInfoModal, showRelayListInfoModal, showCacheInfoModal, showAddEmojiModal, showEmojiSetModal]);
 
     const handleSavePreferredRelays = (relays: PreferredRelay[]) => {
         setPreferredRelays(relays);
@@ -385,6 +389,27 @@ export default function SettingsPage() {
         }
     }, [isAuthenticated, currentUser?.npub, loadCustomEmojis]);
 
+    // Load emoji sets from hardcoded data
+    const loadEmojiSets = useCallback(async () => {
+        setIsLoadingEmojiSets(true);
+        try {
+            // Use hardcoded emoji sets from external file
+            setEmojiSets(hardcodedEmojiSets);
+        } catch (error) {
+            console.error('Error loading emoji sets:', error);
+            toast.error('Failed to load emoji sets');
+        } finally {
+            setIsLoadingEmojiSets(false);
+        }
+    }, []);
+
+    // Load emoji sets on component mount
+    useEffect(() => {
+        if (isAuthenticated) {
+            loadEmojiSets();
+        }
+    }, [isAuthenticated, loadEmojiSets]);
+
     // Backup functions
     const loadBackupPosts = useCallback(async () => {
         if (!currentUser?.pubkey || !ndk) return;
@@ -450,57 +475,6 @@ export default function SettingsPage() {
     }, [isAuthenticated, currentUser?.pubkey, loadBackupPosts]);
 
     // Custom emoji functions
-    const handleAddCustomEmoji = async () => {
-        if (!currentUser?.npub) {
-            toast.error('User not authenticated');
-            return;
-        }
-
-        if (!newEmojiUrl.trim()) {
-            toast.error('Please enter an emoji URL');
-            return;
-        }
-
-        if (!newEmojiName.trim()) {
-            toast.error('Please enter an emoji name');
-            return;
-        }
-
-        // Basic URL validation
-        try {
-            new URL(newEmojiUrl);
-        } catch {
-            toast.error('Please enter a valid URL');
-            return;
-        }
-
-        // Check if emoji already exists
-        if (customEmojis.some(emoji => emoji.url === newEmojiUrl || emoji.name === newEmojiName)) {
-            toast.error('This emoji already exists');
-            return;
-        }
-
-        try {
-            const newEmoji = await addCustomEmoji(
-                currentUser.npub,
-                newEmojiName.trim(),
-                newEmojiUrl.trim()
-            );
-
-            if (newEmoji) {
-                setCustomEmojis(prev => [newEmoji, ...prev]);
-                setNewEmojiUrl('');
-                setNewEmojiName('');
-                setShowAddEmojiModal(false);
-                toast.success('Custom emoji added successfully');
-            } else {
-                toast.error('Failed to add custom emoji');
-            }
-        } catch (error) {
-            console.error('Error adding custom emoji:', error);
-            toast.error('Failed to add custom emoji');
-        }
-    };
 
     const handleRemoveCustomEmoji = async (name: string) => {
         if (!currentUser?.npub) {
@@ -519,6 +493,76 @@ export default function SettingsPage() {
         } catch (error) {
             console.error('Error removing custom emoji:', error);
             toast.error('Failed to remove custom emoji');
+        }
+    };
+
+    // Emoji set functions
+
+    const openEmojiSet = (emojiSet: EmojiSet) => {
+        setSelectedEmojiSet(emojiSet);
+        setSelectedEmojis(new Set());
+        setShowAddEmojiModal(false); // Close the add emoji modal
+        setShowEmojiSetModal(true);
+    };
+
+    const toggleEmojiSelection = (emojiName: string) => {
+        setSelectedEmojis(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(emojiName)) {
+                newSet.delete(emojiName);
+            } else {
+                newSet.add(emojiName);
+            }
+            return newSet;
+        });
+    };
+
+    const selectAllEmojis = () => {
+        if (selectedEmojiSet) {
+            setSelectedEmojis(new Set(selectedEmojiSet.emojis.map(emoji => emoji.name)));
+        }
+    };
+
+    const deselectAllEmojis = () => {
+        setSelectedEmojis(new Set());
+    };
+
+    const addSelectedEmojis = async () => {
+        if (!currentUser?.npub || !selectedEmojiSet || selectedEmojis.size === 0) {
+            toast.error('Please select at least one emoji');
+            return;
+        }
+
+        try {
+            let addedCount = 0;
+            for (const emojiName of selectedEmojis) {
+                const emoji = selectedEmojiSet.emojis.find(e => e.name === emojiName);
+                if (emoji) {
+                    // Check if emoji already exists
+                    if (!customEmojis.some(e => e.name === emoji.name)) {
+                        const newEmoji = await addCustomEmoji(
+                            currentUser.npub,
+                            emoji.name,
+                            emoji.url
+                        );
+                        if (newEmoji) {
+                            setCustomEmojis(prev => [newEmoji, ...prev]);
+                            addedCount++;
+                        }
+                    }
+                }
+            }
+
+            if (addedCount > 0) {
+                toast.success(`Added ${addedCount} emoji${addedCount > 1 ? 's' : ''} to your collection`);
+                setShowEmojiSetModal(false);
+                setSelectedEmojis(new Set());
+            } else {
+                toast.error('No new emojis were added (they may already exist)');
+            }
+        } catch (error) {
+            console.error('Error adding selected emojis:', error);
+            toast.error('Failed to add selected emojis');
         }
     };
 
@@ -654,10 +698,10 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                    <div className="relays-list">
-                        {preferredRelays.length > 0 && (
-                            preferredRelays.map((relay, index) => (
-                                <div key={index} className="relay-item">
+                    {preferredRelays.length > 0 ? (
+                        <div className="preferred-relays-listbox" role="listbox" aria-label="Preferred relays list">
+                            {preferredRelays.map((relay, index) => (
+                                <div key={index} className="relay-item" role="option" aria-selected="false">
                                     <div className="relay-info">
                                         <span className="relay-url">{relay.url}</span>
                                     </div>
@@ -699,9 +743,9 @@ export default function SettingsPage() {
                                         </div>
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            ))}
                     </div>
+                    ) : null}
                     
                     <div className="section-actions">
                         <button
@@ -755,10 +799,10 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                    <div className="relays-list">
+                    <div className="relays-listbox" role="listbox" aria-label="Relay list">
                         {relayList.length > 0 && (
                             relayList.map((relay, index) => (
-                                                                 <div key={index} className="relay-item">
+                                <div key={index} className="relay-item" role="option" aria-selected="false">
                                      <div className="relay-info">
                                          <span className="relay-url">{relay.url}</span>
                                      </div>
@@ -830,7 +874,7 @@ export default function SettingsPage() {
                     <div className="cache-info">
                         <p>Available Storage: <strong>Browser managed</strong></p>
                         <p>Cache Entries: <strong>{cacheData.length}</strong></p>
-                        <p>Total Cache Size: <strong>{Math.round(cacheData.reduce((sum, item) => sum + item.size, 0) / 1024)}KB</strong></p>
+                        <p>Total Cache Size: <strong>{(cacheData.reduce((sum, item) => sum + item.size, 0) / (1024 * 1024)).toFixed(2)}MB</strong></p>
                     </div>
 
                     <div className="cache-actions">
@@ -858,10 +902,9 @@ export default function SettingsPage() {
                     </div>
 
                     {cacheData.length > 0 ? (
-                        <div className="cache-list">
-                            <h3>Cache Entries</h3>
+                        <div className="cache-listbox" role="listbox" aria-label="Cache entries list">
                             {cacheData.map((item, index) => (
-                                <div key={index} className="cache-item">
+                                <div key={index} className="cache-item" role="option" aria-selected="false">
                                     <div className="cache-item-info">
                                         <div className="cache-key">{item.key}</div>
                                         <div className="cache-size">{Math.round(item.size / 1024)}KB</div>
@@ -906,11 +949,11 @@ export default function SettingsPage() {
                                 <p>Loading custom emojis...</p>
                             </div>
                         ) : customEmojis.length === 0 ? (
-                            <p className="no-emojis">No custom emojis configured. Add some emojis below.</p>
+                            <p className="no-emojis">No custom emojis configured. Click the + button to add some emojis.</p>
                         ) : (
-                            <div className="emojis-list">
+                            <div className="emojis-listbox" role="listbox" aria-label="Custom emojis list">
                                 {customEmojis.map((emoji) => (
-                                    <div key={`${emoji.npub}-${emoji.name}`} className="emoji-item">
+                                    <div key={`${emoji.npub}-${emoji.name}`} className="emoji-item" role="option" aria-selected="false">
                                         <div className="emoji-preview">
                                             <img 
                                                 src={emoji.url} 
@@ -970,20 +1013,22 @@ export default function SettingsPage() {
                             <>
                                 <div className="backup-controls">
                                     <div className="selection-controls">
-                                        <button
-                                            onClick={selectAllPosts}
-                                            className="select-all-button"
-                                            disabled={selectedPosts.size === backupPosts.length}
-                                        >
-                                            Select All
-                                        </button>
-                                        <button
-                                            onClick={deselectAllPosts}
-                                            className="deselect-all-button"
-                                            disabled={selectedPosts.size === 0}
-                                        >
-                                            Deselect All
-                                        </button>
+                                        <div className="selection-buttons">
+                                            <button
+                                                onClick={selectAllPosts}
+                                                className="select-all-button"
+                                                disabled={selectedPosts.size === backupPosts.length}
+                                            >
+                                                Select All
+                                            </button>
+                                            <button
+                                                onClick={deselectAllPosts}
+                                                className="deselect-all-button"
+                                                disabled={selectedPosts.size === 0}
+                                            >
+                                                Deselect All
+                                            </button>
+                                        </div>
                                         <span className="selection-count">
                                             {selectedPosts.size} of {backupPosts.length} selected
                                         </span>
@@ -1160,9 +1205,9 @@ export default function SettingsPage() {
             {/* Add Emoji Modal */}
             {showAddEmojiModal && (
                 <div className="modal-overlay" onClick={() => setShowAddEmojiModal(false)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-content emoji-sets-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3>Add Custom Emoji</h3>
+                            <h3>Add Custom Emojis</h3>
                             <button
                                 onClick={() => setShowAddEmojiModal(false)}
                                 className="modal-close-button"
@@ -1172,62 +1217,140 @@ export default function SettingsPage() {
                             </button>
                         </div>
                         <div className="modal-body">
-                            <div className="emoji-form">
-                                <div className="form-group">
-                                    <label htmlFor="emoji-name">Emoji Name</label>
-                                    <input
-                                        id="emoji-name"
-                                        type="text"
-                                        value={newEmojiName}
-                                        onChange={(e) => setNewEmojiName(e.target.value)}
-                                        placeholder="e.g., :custom_emoji:"
-                                        className="emoji-input"
-                                    />
+                            <div className="emoji-sets-modal-content">
+                                <p className="modal-description">Choose from popular emoji sets to add to your collection.</p>
+                                
+                                {isLoadingEmojiSets ? (
+                                    <div className="loading-emoji-sets">
+                                        <div className="loading-spinner"></div>
+                                        <p>Loading emoji sets...</p>
+                                    </div>
+                                ) : emojiSets.length === 0 ? (
+                                    <p className="no-emoji-sets">No emoji sets available.</p>
+                                ) : (
+                                    <div className="emoji-sets-grid">
+                                        {emojiSets.map((emojiSet) => (
+                                            <div 
+                                                key={emojiSet.id} 
+                                                className="emoji-set-card"
+                                                onClick={() => openEmojiSet(emojiSet)}
+                                            >
+                                                <div className="emoji-set-header">
+                                                    <div className="emoji-set-title-section">
+                                                        <h4 className="emoji-set-title">{emojiSet.title} <span className="emoji-set-creator">by {emojiSet.creator}</span></h4>
+                                                    </div>
+                                                    <span className="emoji-count">{emojiSet.emojis.length} emojis</span>
+                                                </div>
+                                                <div className="emoji-set-preview">
+                                                    {emojiSet.emojis.slice(0, 6).map((emoji, index) => (
+                                                        <img
+                                                            key={index}
+                                                            src={emoji.url}
+                                                            alt={emoji.name}
+                                                            className="emoji-preview-small"
+                                                            onError={(e) => {
+                                                                e.currentTarget.style.display = 'none';
+                                                            }}
+                                                        />
+                                                    ))}
+                                                    {emojiSet.emojis.length > 6 && (
+                                                        <div className="emoji-more">+{emojiSet.emojis.length - 6}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Emoji Set Selection Modal */}
+            {showEmojiSetModal && selectedEmojiSet && (
+                <div className="modal-overlay" onClick={() => setShowEmojiSetModal(false)}>
+                    <div className="modal-content emoji-set-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div className="modal-header-left">
+                                <button
+                                    onClick={() => {
+                                        setShowEmojiSetModal(false);
+                                        setShowAddEmojiModal(true);
+                                    }}
+                                    className="modal-back-button"
+                                    title="Back to emoji sets"
+                                >
+                                    ←
+                                </button>
+                                <h3>{selectedEmojiSet.title}</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowEmojiSetModal(false)}
+                                className="modal-close-button"
+                                title="Close"
+                            >
+                                <XMarkIcon />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="emoji-set-selection">
+                                <div className="selection-controls">
+                                    <div className="selection-buttons">
+                                        <button
+                                            onClick={selectAllEmojis}
+                                            className="select-all-button"
+                                            disabled={selectedEmojis.size === selectedEmojiSet.emojis.length}
+                                        >
+                                            Select All
+                                        </button>
+                                        <button
+                                            onClick={deselectAllEmojis}
+                                            className="deselect-all-button"
+                                            disabled={selectedEmojis.size === 0}
+                                        >
+                                            Deselect All
+                                        </button>
+                                    </div>
+                                    <span className="selection-count">
+                                        {selectedEmojis.size} of {selectedEmojiSet.emojis.length} selected
+                                    </span>
                                 </div>
-                                <div className="form-group">
-                                    <label htmlFor="emoji-url">Emoji URL</label>
-                                    <input
-                                        id="emoji-url"
-                                        type="url"
-                                        value={newEmojiUrl}
-                                        onChange={(e) => setNewEmojiUrl(e.target.value)}
-                                        placeholder="https://example.com/emoji.png"
-                                        className="emoji-input"
-                                    />
-                                </div>
-                                <div className="emoji-preview-section">
-                                    <label>Preview</label>
-                                    <div className="emoji-preview-container">
-                                        {newEmojiUrl && (
-                                            <img 
-                                                src={newEmojiUrl} 
-                                                alt="Preview"
-                                                className="emoji-preview-image"
+
+                                <div className="emoji-selection-grid">
+                                    {selectedEmojiSet.emojis.map((emoji) => (
+                                        <div 
+                                            key={emoji.name} 
+                                            className={`emoji-selection-item ${selectedEmojis.has(emoji.name) ? 'selected' : ''}`}
+                                            onClick={() => toggleEmojiSelection(emoji.name)}
+                                        >
+                                            <img
+                                                src={emoji.url}
+                                                alt={emoji.name}
+                                                className="emoji-selection-image"
                                                 onError={(e) => {
                                                     e.currentTarget.style.display = 'none';
-                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
                                                 }}
                                             />
-                                        )}
-                                        <div className="emoji-preview-fallback hidden">❓</div>
-                                        {!newEmojiUrl && (
-                                            <div className="emoji-preview-placeholder">Enter URL to see preview</div>
-                                        )}
-                                    </div>
+                                            <span className="emoji-selection-name">{emoji.name}</span>
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="emoji-form-actions">
+
+                                <div className="emoji-selection-actions">
                                     <button
-                                        onClick={() => setShowAddEmojiModal(false)}
+                                        onClick={() => setShowEmojiSetModal(false)}
                                         className="cancel-button"
                                     >
                                         Cancel
                                     </button>
                                     <button
-                                        onClick={handleAddCustomEmoji}
-                                        className="add-emoji-submit-button"
-                                        disabled={!newEmojiName.trim() || !newEmojiUrl.trim()}
+                                        onClick={addSelectedEmojis}
+                                        className="add-selected-emojis-button"
+                                        disabled={selectedEmojis.size === 0}
                                     >
-                                        Add Emoji
+                                        <PlusIcon />
+                                        Add Selected ({selectedEmojis.size})
                                     </button>
                                 </div>
                             </div>

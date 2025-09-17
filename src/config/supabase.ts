@@ -46,6 +46,21 @@ export interface CustomEmoji {
   created_at?: string;
 }
 
+export interface EmojiSet {
+  id: string;
+  pubkey: string;
+  title: string;
+  dTag: string;
+  creator: string;
+  created_at: number;
+  emojis: EmojiFromSet[];
+}
+
+export interface EmojiFromSet {
+  name: string;
+  url: string;
+}
+
 export interface ActionQueue {
   id?: number; // int8 (bigint) with auto-increment in Supabase
   author: string;
