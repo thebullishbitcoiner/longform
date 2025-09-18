@@ -579,7 +579,9 @@ const SubscribersPage: React.FC = () => {
                             alt={subscriber.displayName || subscriber.name || 'Subscriber'}
                             width={48}
                             height={48}
+                            sizes="48px"
                             className={styles['avatar-image']}
+                            unoptimized
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
                               e.currentTarget.nextElementSibling?.classList.remove('hidden');

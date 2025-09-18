@@ -1124,6 +1124,7 @@ export default function ProfilePage() {
                       alt={post.title}
                       width={400}
                       height={200}
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 400px"
                       className={styles.postImageContent}
                     />
                   </div>
@@ -1235,7 +1236,9 @@ export default function ProfilePage() {
                   alt={displayName}
                   width={120}
                   height={120}
+                  sizes="(max-width: 768px) 80px, 120px"
                   className={`${styles.avatar} ${isProfileLegend ? styles.legendAvatar : ''}`}
+                  unoptimized
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.nextElementSibling?.classList.remove(styles.hidden);

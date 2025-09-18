@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
 import {
@@ -955,10 +956,14 @@ export default function SettingsPage() {
                                 {customEmojis.map((emoji) => (
                                     <div key={`${emoji.npub}-${emoji.name}`} className="emoji-item" role="option" aria-selected="false">
                                         <div className="emoji-preview">
-                                            <img 
+                                            <Image 
                                                 src={emoji.url} 
                                                 alt={emoji.name}
+                                                width={32}
+                                                height={32}
+                                                sizes="32px"
                                                 className="emoji-image"
+                                                unoptimized
                                                 onError={(e) => {
                                                     e.currentTarget.style.display = 'none';
                                                     e.currentTarget.nextElementSibling?.classList.remove('hidden');
@@ -1243,10 +1248,14 @@ export default function SettingsPage() {
                                                 </div>
                                                 <div className="emoji-set-preview">
                                                     {emojiSet.emojis.slice(0, 6).map((emoji, index) => (
-                                                        <img
+                                                        <Image
                                                             key={index}
                                                             src={emoji.url}
                                                             alt={emoji.name}
+                                                            width={24}
+                                                            height={24}
+                                                            sizes="24px"
+                                                            unoptimized
                                                             className="emoji-preview-small"
                                                             onError={(e) => {
                                                                 e.currentTarget.style.display = 'none';
@@ -1324,10 +1333,14 @@ export default function SettingsPage() {
                                             className={`emoji-selection-item ${selectedEmojis.has(emoji.name) ? 'selected' : ''}`}
                                             onClick={() => toggleEmojiSelection(emoji.name)}
                                         >
-                                            <img
+                                            <Image
                                                 src={emoji.url}
                                                 alt={emoji.name}
+                                                width={20}
+                                                height={20}
+                                                sizes="20px"
                                                 className="emoji-selection-image"
+                                                unoptimized
                                                 onError={(e) => {
                                                     e.currentTarget.style.display = 'none';
                                                 }}

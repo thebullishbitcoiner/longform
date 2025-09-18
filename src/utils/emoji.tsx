@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 
 export interface CustomEmoji {
@@ -61,12 +62,15 @@ export function renderCustomEmojis(content: string, emojiMap: Map<string, string
     }
     
     if (emojiUrl) {
-             // Render as image
+             // Render as optimized image
        parts.push(
-         <img
+         <Image
            key={`emoji-${shortcode}-${match.index}`}
            src={emojiUrl}
            alt={`:${shortcode}:`}
+           width={20}
+           height={20}
+           sizes="20px"
            className="inline-block align-text-bottom"
            style={{ 
              verticalAlign: 'text-bottom',
@@ -76,6 +80,7 @@ export function renderCustomEmojis(content: string, emojiMap: Map<string, string
              height: '1.25rem',
              objectFit: 'contain'
            }}
+           unoptimized
            onError={(e) => {
              // Fallback to text if image fails to load
              const target = e.target as HTMLImageElement;

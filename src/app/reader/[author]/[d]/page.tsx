@@ -2483,7 +2483,16 @@ export default function BlogPost() {
         <article className={styles.post}>
           {post.image && (
             <div className={styles.postImage}>
-              <Image src={post.image} alt={post.title} width={800} height={400} style={{ width: '100%', height: 'auto' }} />
+              <Image 
+                src={post.image} 
+                alt={post.title} 
+                width={800} 
+                height={400} 
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
+                style={{ width: '100%', height: 'auto' }} 
+                priority
+                unoptimized 
+              />
             </div>
           )}
 
@@ -2783,6 +2792,7 @@ export default function BlogPost() {
                       alt={alt || 'Image'}
                       width={800}
                       height={600}
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
                       style={{ width: '100%', height: 'auto' }}
                       className={styles.markdownImage}
                       onError={(e) => {
@@ -2827,6 +2837,7 @@ export default function BlogPost() {
                          alt={decodedChildren?.toString() || 'Image'}
                          width={800}
                          height={600}
+                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
                          style={{ width: '100%', height: 'auto' }}
                          className={styles.markdownImage}
                          onError={(e) => {
@@ -3426,10 +3437,14 @@ export default function BlogPost() {
                         onClick={() => handleEmojiSelect(`:${customEmoji.name}:`)}
                         title={customEmoji.name}
                       >
-                        <img 
+                        <Image 
                           src={customEmoji.url} 
                           alt={`:${customEmoji.name}:`}
+                          width={20}
+                          height={20}
+                          sizes="20px"
                           className={styles.customEmoji}
+                          unoptimized
                         />
                       </button>
                     ))}

@@ -53,7 +53,9 @@ const Header: React.FC = () => {
                 alt={currentUser.displayName || currentUser.name || 'Profile'}
                 width={32}
                 height={32}
+                sizes="32px"
                 className="profile-picture"
+                unoptimized
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling?.classList.remove('hidden');
