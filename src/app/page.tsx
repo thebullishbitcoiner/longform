@@ -20,6 +20,7 @@ export default function Home() {
   const eventCountRef = useRef(0);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleLogin = () => {
     // Launch nostr-login welcome screen
@@ -78,13 +79,34 @@ export default function Home() {
   const setupSubscription = useCallback(async () => {
     if (!ndk) {
       console.log('Home: No NDK available');
+      setIsLoading(false);
       return;
+    }
+
+    // Check if NDK is connected
+    const connectedRelays = ndk.pool.connectedRelays();
+    if (connectedRelays.length === 0) {
+      console.log('Home: No connected relays, waiting for connection...');
+      // Wait a bit for connection, but don't wait indefinitely
+      setTimeout(() => {
+        const stillConnected = ndk.pool.connectedRelays();
+        if (stillConnected.length === 0) {
+          console.log('Home: Still no connected relays after timeout, stopping loading');
+          setIsLoading(false);
+        }
+      }, 3000);
     }
 
     // Clear previous subscription
     if (subscriptionRef.current) {
       subscriptionRef.current.stop();
       subscriptionRef.current = null;
+    }
+
+    // Clear any existing fallback timeout
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+      fallbackTimeoutRef.current = null;
     }
 
     setIsLoading(true);
@@ -167,6 +189,16 @@ export default function Home() {
         }
       });
 
+      // Stop loading immediately after processing existing events
+      // This ensures we don't show "Loading posts..." indefinitely when no posts are found
+      setIsLoading(false);
+
+      // Set up a fallback timeout to ensure loading stops even if there are network issues
+      fallbackTimeoutRef.current = setTimeout(() => {
+        console.log('Home: Fallback timeout reached, ensuring loading state is stopped');
+        setIsLoading(false);
+      }, 10000); // 10 second fallback
+
       subscriptionRef.current = ndk.subscribe(
         filter,
         { 
@@ -242,11 +274,6 @@ export default function Home() {
         }
       );
 
-      // Stop loading after a reasonable timeout
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 5000);
-
     } catch (error) {
       console.error('Error setting up subscription:', error);
       setIsLoading(false);
@@ -261,6 +288,11 @@ export default function Home() {
     return () => {
       if (subscriptionRef.current) {
         subscriptionRef.current.stop();
+      }
+      // Clear any pending fallback timeout
+      if (fallbackTimeoutRef.current) {
+        clearTimeout(fallbackTimeoutRef.current);
+        fallbackTimeoutRef.current = null;
       }
     };
   }, [ndk, setupSubscription]);
