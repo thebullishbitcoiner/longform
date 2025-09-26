@@ -1065,9 +1065,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       ) : !draft ? null : (
       <main className="container editor-page">
       <div className="editor-content">
-        <button onClick={() => router.push('/editor')} className="back-button">
+        <button onClick={() => router.push('/')} className="back-button">
           <ArrowLeftIcon />
-          Back to Editor
+          Back to Posts
         </button>
         <h1 className="editor-title">
           {draft.kind === 30023 ? 'Edit Post' : 'Edit Draft'}

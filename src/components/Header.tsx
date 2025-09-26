@@ -88,11 +88,6 @@ const Header: React.FC = () => {
                 Profile
               </Link>
             )}
-            {isAuthenticated && (
-              <Link href="/editor" className="menu-link" onClick={handleLinkClick}>
-                Editor
-              </Link>
-            )}
             <Link href="/reader" className="menu-link" onClick={handleLinkClick}>
               Reader
             </Link>

@@ -224,20 +224,6 @@ export const isValidPublicKey = (publicKey: string): boolean => {
     return true;
   }
   return false;
-};
-
-/**
- * Get a single tag value by tag name
- */
-export const getTagValue = (tags: string[][], tagName: string): string | undefined => {
-  return tags.find(tag => tag[0] === tagName)?.[1];
-};
-
-/**
- * Get all tag values by tag name
- */
-export const getTagValues = (tags: string[][], tagName: string): string[] => {
-  return tags.filter(tag => tag[0] === tagName).map(tag => tag[1]);
 }; 
 
 /**
