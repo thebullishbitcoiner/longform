@@ -21,6 +21,7 @@ const STORAGE_KEYS = {
   AUTHOR_PROFILES: 'longform_authorProfiles',
   USER_HIGHLIGHTS: 'longform_userHighlights',
   USER_POSTS: 'longform_userPosts',
+  USER_DRAFTS: 'longform_userDrafts',
   HIGHLIGHT_CACHE_TIMESTAMP: 'longform_highlightCacheTimestamp',
   RELAY_LIST_PREFIX: 'longform_relay_list_'
 };
@@ -249,7 +250,7 @@ export interface CachedPost {
     kind: number;
     tags: string[][];
     content: string;
-    sig: string;
+    sig?: string;
   };
 }
 
@@ -303,6 +304,79 @@ export function getCachedPosts(pubkey: string): CachedPost[] | null {
 // Clear post cache
 export function clearPostCache(): void {
   if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEYS.USER_POSTS);
+}
+
+// Longform caching functions
+export interface CachedDraft {
+  id: string;
+  title: string;
+  content: string;
+  lastModified: string;
+  dTag?: string;
+  // Store the complete event data for JSON viewing
+  eventData?: {
+    id: string;
+    pubkey: string;
+    created_at: number;
+    kind: number;
+    tags: string[][];
+    content: string;
+    sig?: string;
+  };
+}
+
+// Cache user drafts
+export function cacheUserDrafts(pubkey: string, drafts: CachedDraft[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const draftsData = {
+      pubkey,
+      drafts,
+      timestamp: Date.now()
+    };
+    
+    const success = safeSetItem(STORAGE_KEYS.USER_DRAFTS, JSON.stringify(draftsData));
+    if (!success) {
+      console.warn('Failed to cache drafts due to storage constraints');
+    }
+  } catch (error) {
+    console.error('Error caching drafts:', error);
+  }
+}
+
+// Get cached drafts for a user
+export function getCachedDrafts(pubkey: string): CachedDraft[] | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const cached = localStorage.getItem(STORAGE_KEYS.USER_DRAFTS);
+    if (!cached) return null;
+    
+    const data = JSON.parse(cached);
+    
+    // Check if cache is for the same user
+    if (data.pubkey !== pubkey) return null;
+    
+    // Check if cache is fresh (less than 1 hour old)
+    const cacheAge = Date.now() - data.timestamp;
+    if (cacheAge > 60 * 60 * 1000) { // 1 hour
+      console.log('Draft cache expired, will refresh');
+      return null;
+    }
+    
+    return data.drafts || [];
+  } catch (error) {
+    console.error('Error reading cached drafts:', error);
+    return null;
+  }
+}
+
+// Clear longform caches
+export function clearLongformCache(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEYS.USER_DRAFTS);
   localStorage.removeItem(STORAGE_KEYS.USER_POSTS);
 }
 

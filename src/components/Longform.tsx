@@ -7,6 +7,15 @@ import { useNostr } from '@/contexts/NostrContext';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { copyToClipboard } from '@/utils/clipboard';
+import { 
+  getCachedDrafts, 
+  getCachedPosts, 
+  cacheUserDrafts, 
+  cacheUserPosts,
+  clearLongformCache,
+  CachedDraft,
+  CachedPost
+} from '@/utils/storage';
 import './Longform.css';
 import { toast } from 'react-hot-toast';
 import JsonModal from './JsonModal';
@@ -93,6 +102,12 @@ export default function Longform() {
     eventsRef.current = [];
     publishedEventsRef.current = [];
     deletionEventsRef.current = [];
+    
+    // Clear cache to force fresh data fetch
+    if (currentUser?.pubkey) {
+      clearLongformCache();
+    }
+    
     // The useEffect will automatically retry since we changed the loading states
   };
 
@@ -126,6 +141,44 @@ export default function Longform() {
         
         const pubkey = currentUser.pubkey;
         console.log('Longform: Using pubkey from context:', pubkey);
+
+        // Try to load from cache first
+        const cachedDrafts = getCachedDrafts(pubkey);
+        const cachedPosts = getCachedPosts(pubkey);
+        
+        if (cachedDrafts && cachedPosts) {
+          console.log('Longform: Loading from cache -', cachedDrafts.length, 'drafts,', cachedPosts.length, 'published notes');
+          
+          // Convert cached data to component state format
+          const draftsFromCache: Draft[] = cachedDrafts.map(cached => ({
+            id: cached.id,
+            title: cached.title,
+            content: cached.content,
+            lastModified: cached.lastModified,
+            dTag: cached.dTag
+          }));
+          
+          const publishedNotesFromCache: PublishedNote[] = cachedPosts.map(cached => ({
+            id: cached.id,
+            pubkey: pubkey, // Use current user's pubkey
+            title: cached.title,
+            content: cached.summary, // Use summary as content for display
+            publishedAt: new Date(cached.published_at * 1000).toISOString(),
+            summary: cached.summary,
+            dTag: cached.dTag,
+            createdAt: new Date(cached.published_at * 1000).toISOString()
+          }));
+          
+          setDrafts(draftsFromCache);
+          setPublishedNotes(publishedNotesFromCache);
+          setIsLoading(false);
+          setIsLoadingPublished(false);
+          
+          // Still fetch fresh data in background for updates
+          console.log('Longform: Cache loaded, fetching fresh data in background...');
+        } else {
+          console.log('Longform: No valid cache found, fetching from Nostr...');
+        }
         
         console.log('Longform: Setting up Nostr subscriptions...');
         
@@ -241,6 +294,28 @@ export default function Longform() {
           
           setDrafts(finalDrafts);
           setIsLoading(false);
+
+          // Cache the processed drafts
+          const cachedDrafts: CachedDraft[] = finalDrafts.map(draft => {
+            const event = eventsRef.current.find(event => event.id === draft.id);
+            return {
+              id: draft.id,
+              title: draft.title,
+              content: draft.content,
+              lastModified: draft.lastModified,
+              dTag: draft.dTag,
+              eventData: event ? {
+                id: event.id,
+                pubkey: event.pubkey,
+                created_at: event.created_at,
+                kind: event.kind,
+                tags: event.tags as string[][],
+                content: event.content,
+                sig: event.sig
+              } : undefined
+            };
+          });
+          cacheUserDrafts(pubkey, cachedDrafts);
 
           // Process published notes - also filter out deleted ones
           const uniquePublishedEvents = publishedEventsRef.current.filter((event, index, self) => 
@@ -360,6 +435,30 @@ export default function Longform() {
           
           setPublishedNotes(sortedPublishedNotes);
           setIsLoadingPublished(false);
+
+          // Cache the processed published notes as posts
+          const cachedPosts: CachedPost[] = sortedPublishedNotes.map(note => {
+            const event = publishedEventsRef.current.find(event => event.id === note.id);
+            return {
+              id: note.id,
+              title: note.title,
+              summary: note.summary || note.content.substring(0, 200) + '...',
+              published_at: Math.floor(new Date(note.publishedAt).getTime() / 1000),
+              dTag: note.dTag,
+              tags: [], // Extract tags from event if needed
+              eventData: event ? {
+                id: event.id,
+                pubkey: event.pubkey,
+                created_at: event.created_at,
+                kind: event.kind,
+                tags: event.tags as string[][],
+                content: event.content,
+                sig: event.sig || ''
+              } : undefined
+            };
+          });
+          cacheUserPosts(pubkey, cachedPosts);
+
           console.log(`Longform: Loading complete! Found ${finalDrafts.length} drafts and ${sortedPublishedNotes.length} published articles`);
         }, timeoutDuration);
 
@@ -437,6 +536,15 @@ export default function Longform() {
       
       // Remove from local state
       setDrafts(drafts.filter(draft => draft.id !== id));
+      
+      // Update cache by removing the deleted draft
+      if (currentUser?.pubkey) {
+        const cachedDrafts = getCachedDrafts(currentUser.pubkey);
+        if (cachedDrafts) {
+          const updatedCachedDrafts = cachedDrafts.filter(draft => draft.id !== id);
+          cacheUserDrafts(currentUser.pubkey, updatedCachedDrafts);
+        }
+      }
       
       toast.success('Draft deleted from Nostr');
     } catch (error) {
