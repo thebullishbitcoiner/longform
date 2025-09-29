@@ -202,6 +202,8 @@ export default function ProfilePage() {
                         name: profile.name,
                         displayName: profile.displayName,
                         nip05: profile.nip05,
+                        image: profile.image,
+                        picture: profile.picture
                       };
                     }
                     return null;
@@ -329,7 +331,7 @@ export default function ProfilePage() {
       });
 
                      // Fetch profiles for all authors progressively, prioritizing recent highlights
-        const authorProfiles = new Map<string, { name?: string; displayName?: string; nip05?: string }>();
+        const authorProfiles = new Map<string, { name?: string; displayName?: string; nip05?: string; image?: string; picture?: string }>();
         const fetchAuthorProfile = async (authorPubkey: string) => {
           try {
             const authorUser = ndkToUse.getUser({ pubkey: authorPubkey });
@@ -338,6 +340,8 @@ export default function ProfilePage() {
               name: authorProfile?.name,
               displayName: authorProfile?.displayName,
               nip05: authorProfile?.nip05,
+              image: authorProfile?.image,
+              picture: authorProfile?.picture
             };
             authorProfiles.set(authorPubkey, profileData);
             

@@ -7,6 +7,8 @@ interface AuthorProfile {
   name?: string;
   displayName?: string;
   nip05?: string;
+  image?: string;
+  picture?: string;
 }
 
 export interface BlogPost {

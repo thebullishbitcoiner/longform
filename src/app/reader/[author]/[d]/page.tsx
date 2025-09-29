@@ -568,8 +568,14 @@ export default function BlogPost() {
             const user = ndkToUse.getUser({ pubkey });
             const profile = await user.fetchProfile();
             if (profile) {
-              // Cache the profile for future use
-              updateAuthorProfile(pubkey, profile);
+              // Cache the profile for future use with image data
+              updateAuthorProfile(pubkey, {
+                name: profile.name,
+                displayName: profile.displayName,
+                nip05: profile.nip05,
+                image: profile.image,
+                picture: profile.picture
+              });
             }
             return { pubkey, profile };
           }
@@ -866,11 +872,16 @@ export default function BlogPost() {
             if (profile) {
               debugLog('Fetched profile:', {
                 name: profile.name,
-                displayName: profile.displayName
+                displayName: profile.displayName,
+                image: profile.image,
+                picture: profile.picture
               });
               return {
                 name: profile.name,
-                displayName: profile.displayName
+                displayName: profile.displayName,
+                nip05: profile.nip05,
+                image: profile.image,
+                picture: profile.picture
               };
             }
             debugLog('No profile found for:', postData.pubkey);
@@ -1122,8 +1133,14 @@ export default function BlogPost() {
               if (profile) {
                 authorName = profile.displayName || profile.name;
                 console.log('Fetched profile for zap author:', zapperPubkey, '->', authorName, profile);
-                // Cache the profile for future use
-                updateAuthorProfile(zapperPubkey, profile);
+                // Cache the profile for future use with image data
+                updateAuthorProfile(zapperPubkey, {
+                  name: profile.name,
+                  displayName: profile.displayName,
+                  nip05: profile.nip05,
+                  image: profile.image,
+                  picture: profile.picture
+                });
               } else {
                 console.log('No profile found for zap author:', zapperPubkey);
               }
@@ -1226,8 +1243,14 @@ export default function BlogPost() {
               const profile = await user.fetchProfile();
               if (profile) {
                 authorName = profile.displayName || profile.name;
-                // Cache the profile for future use
-                updateAuthorProfile(reaction.pubkey, profile);
+                // Cache the profile for future use with image data
+                updateAuthorProfile(reaction.pubkey, {
+                  name: profile.name,
+                  displayName: profile.displayName,
+                  nip05: profile.nip05,
+                  image: profile.image,
+                  picture: profile.picture
+                });
               }
             }
           } catch (error) {

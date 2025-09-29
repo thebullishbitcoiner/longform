@@ -745,7 +745,10 @@ export default function ReaderPage() {
                     });
                     return {
                       name: profile.name,
-                      displayName: profile.displayName
+                      displayName: profile.displayName,
+                      nip05: profile.nip05,
+                      image: profile.image,
+                      picture: profile.picture
                     };
                   }
                   return null;
