@@ -10,6 +10,13 @@
   padding: 2rem 1rem;
 }
 
+@media (max-width: 768px) {
+  .mainContent {
+    max-width: 100%;
+    padding: 1.5rem 1rem;
+  }
+}
+
 @media (max-width: 640px) {
   .mainContent {
     max-width: 100%;
@@ -422,11 +429,13 @@
   transition: all 0.2s ease;
   border: 1px solid rgb(39 39 42);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  min-height: 180px; /* Minimum height for cards */
 }
 
 @media (max-width: 640px) {
   .postCard {
     flex-direction: column;
+    height: auto; /* Allow natural height on mobile */
   }
 }
 
@@ -437,12 +446,23 @@
 }
 
 .postImage {
-  width: 280px;
-  height: 187px; /* 3:2 aspect ratio */
+  width: 40%;
+  height: 180px; /* Match card height */
   overflow: hidden;
   background-color: #000000;
   flex-shrink: 0;
   position: relative;
+}
+
+@media (max-width: 768px) {
+  .postImage {
+    width: 40%;
+    height: 180px; /* Match card height */
+  }
+  
+  .postContent {
+    min-height: 180px; /* Match card height */
+  }
 }
 
 @media (max-width: 640px) {
@@ -472,25 +492,25 @@
 }
 
 .postContent {
-  padding: 1.5rem;
+  padding: 1rem;
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 187px; /* Match the image height to prevent gaps */
+  min-height: 180px; /* Match card minimum height */
   position: relative;
 }
 
 .postHeader {
   position: absolute;
-  top: 1.5rem; /* Align with the first line of the title */
-  right: 0.75rem;
+  top: 1rem; /* Align with the first line of the title */
+  right: 0.5rem;
   z-index: 10;
 }
 
 @media (max-width: 640px) {
   .postContent {
-    min-height: auto;
+    height: auto; /* Allow natural height on mobile */
     padding: 1rem;
   }
   
@@ -504,20 +524,21 @@
   font-size: 1.125rem;
   font-weight: 600;
   color: rgb(244 244 245);
-  margin-bottom: 0.75rem;
-  line-height: 1.4;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  flex: 1;
+  flex: 0 0 auto;
+  max-height: calc(1.125rem * 1.3 * 2); /* Exactly 2 lines */
 }
 
 .postSummary {
   color: rgb(161 161 170);
   font-size: 0.875rem;
   line-height: 1.5;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
