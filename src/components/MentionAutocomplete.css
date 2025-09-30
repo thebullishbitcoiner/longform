@@ -121,3 +121,42 @@
 .mention-autocomplete * {
   background-color: inherit;
 }
+
+/* Mobile-specific styles */
+.mention-autocomplete-mobile {
+  max-width: calc(100vw - 20px) !important;
+  min-width: 280px !important;
+  max-height: 250px !important;
+  left: 10px !important;
+  right: 10px !important;
+  width: auto !important;
+}
+
+.mention-autocomplete-mobile .mention-suggestions {
+  padding: 0.5rem;
+}
+
+.mention-autocomplete-mobile .mention-suggestion {
+  padding: 0.75rem;
+  font-size: 1rem;
+}
+
+.mention-autocomplete-mobile .mention-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1rem;
+}
+
+.mention-autocomplete-mobile .mention-name {
+  font-size: 1rem;
+}
+
+.mention-autocomplete-mobile .mention-nip05,
+.mention-autocomplete-mobile .mention-npub {
+  font-size: 0.875rem;
+}
+
+/* Add a subtle shadow for better visibility on mobile */
+.mention-autocomplete-mobile {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+}

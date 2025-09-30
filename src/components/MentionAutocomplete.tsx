@@ -174,10 +174,13 @@ export default function MentionAutocomplete({
     );
   }
 
+  // Mobile detection for responsive styling
+  const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+
   return (
     <div 
       ref={containerRef}
-      className="mention-autocomplete"
+      className={`mention-autocomplete ${isMobile ? 'mention-autocomplete-mobile' : ''}`}
       style={{
         position: 'fixed',
         top: position.top,

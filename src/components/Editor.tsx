@@ -107,8 +107,33 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ draft, onSave, onContentCha
         
         // Approximate character width (this is a rough estimate)
         const charWidth = 8;
-        const left = rect.left + (charInLine * charWidth);
-        const top = rect.top + (currentLine * lineHeight) + lineHeight;
+        let left = rect.left + (charInLine * charWidth);
+        let top = rect.top + (currentLine * lineHeight) + lineHeight;
+        
+        // Mobile-specific positioning adjustments
+        const isMobile = window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+          // On mobile, position the dropdown above the textarea to avoid keyboard issues
+          // and ensure it's visible in the viewport
+          const dropdownHeight = 200; // Approximate height of dropdown
+          const viewportHeight = window.innerHeight;
+          const availableSpaceAbove = rect.top;
+          const availableSpaceBelow = viewportHeight - rect.bottom;
+          
+          // Position above the textarea if there's more space above, otherwise below
+          if (availableSpaceAbove > dropdownHeight && availableSpaceAbove > availableSpaceBelow) {
+            top = rect.top - dropdownHeight - 10; // 10px gap
+          } else {
+            top = rect.bottom + 10; // 10px gap below
+          }
+          
+          // Center horizontally on mobile for better UX
+          left = Math.max(10, Math.min(left, window.innerWidth - 300)); // Keep within viewport
+        } else {
+          // Desktop positioning - show below cursor
+          top = rect.top + (currentLine * lineHeight) + lineHeight;
+        }
         
         setMentionState({
           isOpen: true,
@@ -245,15 +270,34 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ draft, onSave, onContentCha
       }
     };
 
+    const handleResize = () => {
+      if (mentionState.isOpen) {
+        const textarea = containerRef.current?.querySelector('textarea');
+        if (textarea) {
+          const cursorPosition = textarea.selectionStart;
+          detectMention(localDraft.content, cursorPosition);
+        }
+      }
+    };
+
     const textarea = containerRef.current?.querySelector('textarea');
     if (textarea) {
       textarea.addEventListener('keyup', handleCursorMove);
       textarea.addEventListener('click', handleCursorMove);
-      return () => {
+    }
+    
+    // Listen for viewport changes (mobile keyboard, orientation, etc.)
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      if (textarea) {
         textarea.removeEventListener('keyup', handleCursorMove);
         textarea.removeEventListener('click', handleCursorMove);
-      };
-    }
+      }
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, [mentionState.isOpen, localDraft.content, detectMention]);
 
   return (
