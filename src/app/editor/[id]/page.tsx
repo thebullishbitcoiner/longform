@@ -17,6 +17,23 @@ import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 import Image from 'next/image';
 import React from 'react';
 
+// Memoized cover image component to prevent re-renders
+const CoverImage = React.memo(({ src, onError }: { src: string; onError: (e: React.SyntheticEvent<HTMLImageElement>) => void }) => {
+  return (
+    <Image 
+      src={src}
+      alt="Cover" 
+      className="cover-image"
+      width={800}
+      height={400}
+      style={{ width: '100%', height: 'auto' }}
+      onError={onError}
+      priority={false}
+      unoptimized
+    />
+  );
+});
+CoverImage.displayName = 'CoverImage';
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -30,6 +47,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const { ndk, isConnected, isAuthenticated, currentUser } = useNostr();
   const editorRef = useRef<EditorRef | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // State declarations
+  const [hashtagInput, setHashtagInput] = useState('');
+  const [showCoverImageTooltip, setShowCoverImageTooltip] = useState(false);
+  const [coverImageMode, setCoverImageMode] = useState<'upload' | 'url'>('upload');
+  const [coverImageUrl, setCoverImageUrl] = useState('');
 
   // Auto-save function
   const autoSaveDraft = (currentDraft: Draft) => {
@@ -57,6 +80,30 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       }
     };
   }, []);
+
+  // Close tooltip when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showCoverImageTooltip && 
+          !target.closest('.cover-image-tooltip') && 
+          !target.closest('.cover-image-tooltip-placeholder') &&
+          !target.closest('.cover-image-icon-wrapper') &&
+          !target.closest('.cover-image-upload-btn')) {
+        setShowCoverImageTooltip(false);
+        setCoverImageMode('upload');
+        setCoverImageUrl('');
+      }
+    };
+
+    if (showCoverImageTooltip) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCoverImageTooltip]);
 
   useEffect(() => {
     const loadDraft = async () => {
@@ -298,8 +345,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     setHasUnsavedChanges(true);
     debouncedAutoSave(updatedDraft);
   };
-
-  const [hashtagInput, setHashtagInput] = useState('');
 
   // Use a ref to store the cover image URL and prevent unnecessary re-renders
   const coverImageRef = useRef<string>('');
@@ -821,6 +866,55 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     input.click();
   }, [draft, isAuthenticated, uploader, setDraft, setHasUnsavedChanges, debouncedAutoSave]);
 
+  const handleCoverImageUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCoverImageUrl(e.target.value);
+  };
+
+  const handleCoverImageUrlSubmit = () => {
+    if (!draft) return;
+    
+    const trimmedUrl = coverImageUrl.trim();
+    if (!trimmedUrl) {
+      toast.error('Please enter a valid URL');
+      return;
+    }
+
+    // Basic URL validation
+    try {
+      new URL(trimmedUrl);
+    } catch {
+      toast.error('Please enter a valid URL');
+      return;
+    }
+
+    const updatedDraft = {
+      ...draft,
+      coverImage: trimmedUrl,
+      lastModified: new Date().toISOString(),
+    };
+    setDraft(updatedDraft);
+    setHasUnsavedChanges(true);
+    debouncedAutoSave(updatedDraft);
+    setCoverImageUrl('');
+    setShowCoverImageTooltip(false);
+    toast.success('Cover image URL set successfully!');
+  };
+
+  const handleChooseFromLibrary = () => {
+    setShowCoverImageTooltip(false);
+    handleCoverImageUpload();
+  };
+
+  const handleShowUrlInput = () => {
+    setCoverImageMode('url');
+    // Keep tooltip open to show URL input
+  };
+
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    console.error('Failed to load cover image:', draft?.coverImage);
+    e.currentTarget.style.display = 'none';
+  }, [draft?.coverImage]);
+
   const handlePublish = async () => {
     if (!draft || !ndk || !isAuthenticated) {
       toast.error('Please log in with nostr-login to publish.');
@@ -1076,39 +1170,145 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         {/* Cover Image Section - First */}
         <div className="cover-image-section">
           {draft.coverImage ? (
-            <div className="cover-image-preview">
-              <Image 
-                src={coverImageRef.current} 
-                alt="Cover" 
-                className="cover-image"
-                width={800}
-                height={400}
-                style={{ width: '100%', height: 'auto' }}
-                onError={(e) => {
-                  console.error('Failed to load cover image:', draft.coverImage);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-              <div className="cover-image-overlay">
+            <div className="cover-image-container">
+              <div className="cover-image-preview">
+                <CoverImage 
+                  src={draft.coverImage}
+                  onError={handleImageError}
+                />
+              </div>
+              <div className="cover-image-icon-wrapper">
                 <button 
-                  onClick={handleCoverImageUpload}
-                  className="cover-image-action"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowCoverImageTooltip(!showCoverImageTooltip);
+                  }}
+                  className="cover-image-icon-btn"
                   title="Change Cover Image"
                 >
                   <PhotoIcon />
                 </button>
+                {showCoverImageTooltip && (
+                  <div className="cover-image-tooltip">
+                    {coverImageMode === 'url' ? (
+                      <div className="tooltip-url-input">
+                        <input
+                          type="text"
+                          value={coverImageUrl}
+                          onChange={handleCoverImageUrlChange}
+                          placeholder="Enter image URL"
+                          className="tooltip-input"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleCoverImageUrlSubmit();
+                            } else if (e.key === 'Escape') {
+                              setShowCoverImageTooltip(false);
+                              setCoverImageMode('upload');
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={handleCoverImageUrlSubmit}
+                          className="tooltip-submit-btn"
+                        >
+                          Set
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCoverImageMode('upload');
+                            setCoverImageUrl('');
+                          }}
+                          className="tooltip-back-btn"
+                        >
+                          ← Back
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="tooltip-options">
+                        <button 
+                          onClick={handleShowUrlInput}
+                          className="tooltip-option"
+                        >
+                          Image URL
+                        </button>
+                        <button 
+                          onClick={handleChooseFromLibrary}
+                          className="tooltip-option"
+                        >
+                          Choose from library
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
             <div className="cover-image-placeholder">
               <button 
-                onClick={handleCoverImageUpload}
+                onClick={() => setShowCoverImageTooltip(!showCoverImageTooltip)}
                 className="cover-image-upload-btn"
                 title="Add Cover Image"
               >
                 <PhotoIcon />
                 <span>Add Cover Image</span>
               </button>
+              {showCoverImageTooltip && (
+                <div className="cover-image-tooltip-placeholder">
+                  {coverImageMode === 'url' ? (
+                    <div className="tooltip-url-input">
+                      <input
+                        type="text"
+                        value={coverImageUrl}
+                        onChange={handleCoverImageUrlChange}
+                        placeholder="Enter image URL"
+                        className="tooltip-input"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCoverImageUrlSubmit();
+                          } else if (e.key === 'Escape') {
+                            setShowCoverImageTooltip(false);
+                            setCoverImageMode('upload');
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={handleCoverImageUrlSubmit}
+                        className="tooltip-submit-btn"
+                      >
+                        Set
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCoverImageMode('upload');
+                          setCoverImageUrl('');
+                        }}
+                        className="tooltip-back-btn"
+                      >
+                        ← Back
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="tooltip-options">
+                      <button 
+                        onClick={handleShowUrlInput}
+                        className="tooltip-option"
+                      >
+                        Image URL
+                      </button>
+                      <button 
+                        onClick={handleChooseFromLibrary}
+                        className="tooltip-option"
+                      >
+                        Choose from library
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
