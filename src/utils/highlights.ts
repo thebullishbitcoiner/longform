@@ -118,18 +118,10 @@ export function useHighlights() {
 
   // Get highlights for a specific post
   const getHighlightsForPost = useCallback((postId: string, postAuthor?: string, postDTag?: string): Highlight[] => {
-    console.log('🔍 getHighlightsForPost called with:', {
-      postId,
-      postAuthor,
-      postDTag,
-      totalHighlights: highlights.length,
-      highlights: highlights.map(h => ({
-        id: h.id,
-        postId: h.postId,
-        postAuthor: h.postAuthor,
-        aTag: h.eventTags.find(tag => tag[0] === 'a')?.[1]
-      }))
-    });
+    // Debug: Only log if there are highlights to search through
+    if (highlights.length > 0) {
+      console.log('🔍 Searching highlights for post:', postId, '(', highlights.length, 'total highlights)');
+    }
     
     const matches = highlights.filter(h => {
       // First try to match by postId (e tag) for backward compatibility
@@ -241,17 +233,10 @@ export function highlightTextInElement(
   highlights: Highlight[], 
   highlightClass = 'userHighlight'
 ) {
-  console.log('🔍 highlightTextInElement called with:', {
-    element: !!element,
-    elementTagName: element?.tagName,
-    elementTextLength: element?.textContent?.length,
-    highlightsCount: highlights.length,
-    highlightClass,
-    highlights: highlights.map(h => ({ 
-      id: h.id,
-      content: h.content.substring(0, 50) + '...'
-    }))
-  });
+  // Debug: Only log if there are highlights to apply
+  if (highlights.length > 0) {
+    console.log('🔍 Applying highlights:', highlights.length, 'highlights to', element?.tagName);
+  }
 
   if (!element || highlights.length === 0) {
     console.log('🔍 No element or highlights, returning early');
@@ -284,10 +269,10 @@ export function highlightTextInElement(
   highlights.forEach((highlight) => {
     const highlightText = highlight.content.trim();
     if (highlightText) {
-      console.log('🔍 Applying text-based highlight:', {
-        id: highlight.id,
-        content: highlight.content.substring(0, 50) + '...'
-      });
+      // Debug: Only log if highlight is substantial
+      if (highlight.content.length > 10) {
+        console.log('🔍 Applying highlight:', highlight.content.substring(0, 30) + '...');
+      }
       applySimpleHighlight(element, highlightText, highlightClass);
     }
   });

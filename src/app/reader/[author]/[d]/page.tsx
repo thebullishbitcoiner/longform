@@ -628,6 +628,10 @@ export default function BlogPost() {
   const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition>({ x: 0, y: 0 });
   const [selectedText, setSelectedText] = useState<TextSelection | null>(null);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
+  const [showFloatingPencil, setShowFloatingPencil] = useState(true); // Always visible
+  const [showHighlightModal, setShowHighlightModal] = useState(false);
+  const [isHighlightMode, setIsHighlightMode] = useState(false);
+  const [showPencilMenu, setShowPencilMenu] = useState(false);
   const postContentRef = useRef<HTMLDivElement>(null);
   
 
@@ -2026,6 +2030,11 @@ export default function BlogPost() {
 
 
 
+  // Mobile detection utility
+  const isMobile = useCallback(() => {
+    return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
+
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
@@ -2050,46 +2059,73 @@ export default function BlogPost() {
       return;
     }
 
-    console.log('🔍 Text selected for highlighting:', selectedTextString);
-
-    // Get the position for the context menu
-    const rect = range.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    
-    // Calculate initial position
-    let x = rect.left + rect.width / 2;
-    let y = rect.top - 10;
-    
-    // Ensure the context menu stays within viewport bounds
-    const menuWidth = 120; // Approximate menu width
-    const menuHeight = 40; // Approximate menu height
-    
-    if (x + menuWidth / 2 > viewportWidth) {
-      x = viewportWidth - menuWidth / 2 - 10;
-    } else if (x - menuWidth / 2 < 0) {
-      x = menuWidth / 2 + 10;
+    // Debug: Only log if selection is substantial
+    if (selectedTextString.length > 20) {
+      console.log('🔍 Text selected:', selectedTextString.substring(0, 30) + '...');
     }
-    
-    if (y - menuHeight < 0) {
-      y = rect.bottom + 10;
-    }
-    
-    setContextMenuPosition({ x, y });
 
     setSelectedText({
       text: selectedTextString,
       container: range.commonAncestorContainer
     });
 
-    setShowContextMenu(true);
-  }, []);
+    // If in highlight mode, immediately show the highlight modal
+    if (isHighlightMode) {
+      setShowHighlightModal(true);
+      setShowContextMenu(false);
+      return;
+    }
+
+    // If NOT in highlight mode, don't interfere with normal text selection
+    // Both mobile and desktop should work the same way - no context menu interference
+    setShowContextMenu(false);
+  }, [isMobile, isHighlightMode]);
 
   const handleMouseUp = useCallback(() => {
-    // Small delay to ensure selection is complete
+    // Always handle text selection, but only show highlight modal if in highlight mode
+    setTimeout(handleTextSelection, 50);
+  }, [handleTextSelection]);
+
+  // Handle touch end for mobile devices
+  const handleTouchEnd = useCallback(() => {
+    // Always handle text selection, but only show highlight modal if in highlight mode
     setTimeout(handleTextSelection, 50);
   }, [handleTextSelection]);
 
 
+
+  // Handle floating pencil icon click
+  const handleFloatingPencilClick = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    // Only show menu if not in highlight mode
+    if (!isHighlightMode) {
+      setShowPencilMenu(!showPencilMenu);
+    }
+  }, [showPencilMenu, isHighlightMode]);
+
+  // Handle entering highlight mode
+  const handleEnterHighlightMode = useCallback(() => {
+    setIsHighlightMode(true);
+    setShowPencilMenu(false);
+  }, []);
+
+  // Handle exiting highlight mode
+  const handleExitHighlightMode = useCallback(() => {
+    setIsHighlightMode(false);
+    setShowHighlightModal(false);
+    setSelectedText(null);
+    window.getSelection()?.removeAllRanges();
+    // Pencil icon will automatically reappear since showFloatingPencil is still true
+  }, []);
+
+  // Handle highlight modal close
+  const handleHighlightModalClose = useCallback(() => {
+    setShowHighlightModal(false);
+    setSelectedText(null);
+    window.getSelection()?.removeAllRanges();
+    // Don't exit highlight mode automatically - let user decide
+  }, []);
 
   const handleClickOutside = useCallback((event: MouseEvent) => {
     const target = event.target as Element;
@@ -2102,6 +2138,28 @@ export default function BlogPost() {
         setShowContextMenu(false);
         setSelectedText(null);
         window.getSelection()?.removeAllRanges();
+      }
+    }
+
+    // Handle pencil menu
+    if (showPencilMenu) {
+      const pencilMenu = document.querySelector(`.${styles.pencilMenu}`);
+      const floatingPencil = document.querySelector(`.${styles.floatingPencil}`);
+      
+      if (!pencilMenu || !pencilMenu.contains(target)) {
+        if (!floatingPencil || !floatingPencil.contains(target)) {
+          setShowPencilMenu(false);
+        }
+      }
+    }
+
+    // Handle highlight modal
+    if (showHighlightModal) {
+      const highlightModal = document.querySelector(`.${styles.highlightModalOverlay}`);
+      
+      if (!highlightModal || !highlightModal.contains(target)) {
+        // Only close modal if clicking outside, don't clear selection
+        setShowHighlightModal(false);
       }
     }
     
@@ -2255,10 +2313,12 @@ export default function BlogPost() {
       // Show success message
       toast.success('Highlight created successfully!');
       
-      // Clear selection and hide context menu
+      // Clear selection and hide highlight modal, but keep highlight mode active
       window.getSelection()?.removeAllRanges();
       setShowContextMenu(false);
+      setShowHighlightModal(false);
       setSelectedText(null);
+      // Note: Don't exit highlight mode or hide pencil - user can create more highlights
       
     } catch (error) {
       console.error('Error creating highlight:', error);
@@ -2362,10 +2422,10 @@ export default function BlogPost() {
           remainingText = parts.slice(1).join(normalizedHighlightText);
           hasHighlights = true;
           
-          console.log('🔍 Highlight applied:', {
-            highlightId: highlight.id,
-            highlightText: highlightText.substring(0, 50) + '...'
-          });
+          // Debug: Only log if highlight is substantial
+          if (highlightText.length > 10) {
+            console.log('🔍 Highlight applied:', highlightText.substring(0, 30) + '...');
+          }
         }
       }
     });
@@ -2601,7 +2661,12 @@ export default function BlogPost() {
             <div className={styles.summary}>{post.summary}</div>
           )}
 
-          <div className={styles.postContent} ref={postContentRef}>
+          <div 
+            className={styles.postContent} 
+            ref={postContentRef}
+            onMouseUp={handleMouseUp}
+            onTouchEnd={handleTouchEnd}
+          >
             {isLoadingAdditionalData && processedContent === post.content && (
               <div className={styles.processingIndicator}>
                 Processing content...
@@ -2616,7 +2681,10 @@ export default function BlogPost() {
                 // Custom text component to handle HTML entities
                 text: ({ children }) => {
                   if (typeof children === 'string') {
-                    console.log('🔍 Text component called with:', children);
+                    // Debug: Only log if there are HTML entities
+                    if (typeof children === 'string' && (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;'))) {
+                      console.log('🔍 Text component with entities:', children.substring(0, 50) + '...');
+                    }
                     
                     // Decode HTML entities in text content
                     const decodedContent = children
@@ -2629,7 +2697,10 @@ export default function BlogPost() {
                       .replace(/\\&lt;/g, '<')
                       .replace(/\\&gt;/g, '>');
                     
-                    console.log('🔍 Decoded content:', decodedContent);
+                    // Debug: Only log if content changed after decoding
+                    if (decodedContent !== children) {
+                      console.log('🔍 Content decoded:', decodedContent.substring(0, 50) + '...');
+                    }
                     return <>{decodedContent}</>;
                   }
                   return <>{children}</>;
@@ -2671,11 +2742,14 @@ export default function BlogPost() {
                         .replace(/\\&lt;/g, '<')
                         .replace(/\\&gt;/g, '>');
                       
-                      console.log('🔍 Paragraph processing text:', {
-                        original: children,
-                        decoded: decodedText,
-                        hasEntities: children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;')
-                      });
+                      // Debug: Only log if there are HTML entities to decode
+                      if (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;')) {
+                        console.log('🔍 Paragraph processing text with entities:', {
+                          original: children.substring(0, 50) + '...',
+                          decoded: decodedText.substring(0, 50) + '...',
+                          hasEntities: true
+                        });
+                      }
                       
                       return applyHighlightsToText(decodedText);
                     }
@@ -2846,11 +2920,10 @@ export default function BlogPost() {
                         .replace(/\\&gt;/g, '>')
                     : children;
                   
-                  console.log('🔍 Link processing text:', {
-                    original: children,
-                    decoded: decodedChildren,
-                    hasEntities: typeof children === 'string' && (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;'))
-                  });
+                  // Debug: Only log if there are HTML entities
+                  if (typeof children === 'string' && (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;'))) {
+                    console.log('🔍 Link processing with entities:', children.substring(0, 50) + '...');
+                  }
                   
                                      // If this is an image URL, render it as an image instead of a link
                    if (isImageUrl && props.href) {
@@ -3364,6 +3437,81 @@ export default function BlogPost() {
                 Please log in to create highlights
               </div>
             )}
+          </div>
+        )}
+
+        {/* Floating Pencil Icon - Hidden in Highlight Mode */}
+        {showFloatingPencil && !isHighlightMode && (
+          <div 
+            className={styles.floatingPencil}
+            onClick={handleFloatingPencilClick}
+          >
+            <PencilIcon className={styles.floatingPencilIcon} />
+          </div>
+        )}
+
+        {/* Pencil Menu */}
+        {showPencilMenu && !isHighlightMode && (
+          <div className={styles.pencilMenu}>
+            <button 
+              className={styles.pencilMenuItem}
+              onClick={handleEnterHighlightMode}
+            >
+              <PencilIcon className={styles.pencilMenuIcon} />
+              Highlight Mode
+            </button>
+          </div>
+        )}
+        
+        {/* Highlight Mode Status Bar */}
+        {isHighlightMode && (
+          <div className={styles.highlightModeStatus}>
+            <div className={styles.highlightModeLabel}>
+              Highlight Mode
+            </div>
+            <button 
+              className={styles.highlightModeExit}
+              onClick={handleExitHighlightMode}
+              title="Exit Highlight Mode"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+
+        {/* Highlight Modal for Mobile */}
+        {showHighlightModal && selectedText && (
+          <div className={styles.highlightModalOverlay} onClick={handleHighlightModalClose}>
+            <div className={styles.highlightModal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.highlightModalHeader}>
+                <h3>Create Highlight</h3>
+                <button 
+                  className={styles.highlightModalClose}
+                  onClick={handleHighlightModalClose}
+                >
+                  ×
+                </button>
+              </div>
+              <div className={styles.highlightModalContent}>
+                <p className={styles.selectedTextPreview}>
+                  "{selectedText.text.substring(0, 100)}{selectedText.text.length > 100 ? '...' : ''}"
+                </p>
+                {isAuthenticated ? (
+                  <button 
+                    className={styles.highlightModalButton}
+                    onClick={createHighlight}
+                    disabled={isCreatingHighlight}
+                  >
+                    {isCreatingHighlight ? 'Creating Highlight...' : 'Create Highlight'}
+                  </button>
+                ) : (
+                  <div className={styles.highlightModalMessage}>
+                    Please log in to create highlights
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

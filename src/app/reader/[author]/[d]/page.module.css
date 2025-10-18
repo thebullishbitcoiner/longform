@@ -2250,4 +2250,308 @@
   word-break: break-word;
 }
 
+/* Floating Pencil Icon - Always Visible */
+.floatingPencil {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  background-color: rgba(139, 92, 246, 0.3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+  z-index: 1000;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.floatingPencil:hover {
+  background-color: rgba(139, 92, 246, 0.6);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+
+.floatingPencilIcon {
+  width: 20px;
+  height: 20px;
+  color: white;
+}
+
+/* Pencil Menu */
+.pencilMenu {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  z-index: 1001;
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.pencilMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.pencilMenuItem:hover {
+  background-color: var(--hover);
+}
+
+.pencilMenuItem:first-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.pencilMenuIcon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Highlight Mode Status Bar */
+.highlightModeStatus {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(139, 92, 246, 0.3);
+  color: white;
+  border-radius: 25px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+  z-index: 1002;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  animation: slideUp 0.3s ease-out;
+  transition: all 0.2s ease;
+}
+
+.highlightModeStatus:hover {
+  background-color: rgba(139, 92, 246, 0.6);
+  transform: translateX(-50%) scale(1.05);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateX(-50%) translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.highlightModeLabel {
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.highlightModeExit {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.highlightModeExit:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+  border-radius: 50%;
+}
+
+/* Highlight Modal for Mobile */
+.highlightModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  padding: 20px;
+}
+
+.highlightModal {
+  background-color: var(--background);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.highlightModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--background-secondary);
+}
+
+.highlightModalHeader h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.highlightModalClose {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.highlightModalClose:hover {
+  background-color: var(--hover);
+  color: var(--text);
+}
+
+.highlightModalContent {
+  padding: 24px;
+}
+
+.selectedTextPreview {
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 0 0 20px 0;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.highlightModalButton {
+  width: 100%;
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 16px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 48px;
+}
+
+.highlightModalButton:hover:not(:disabled) {
+  background-color: #7c3aed;
+  transform: translateY(-1px);
+}
+
+.highlightModalButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.highlightModalMessage {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 20px;
+  font-size: 0.9rem;
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+  .floatingPencil {
+    bottom: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+  }
+  
+  .floatingPencilIcon {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .pencilMenu {
+    bottom: 70px;
+    right: 16px;
+    min-width: 160px;
+  }
+  
+  .highlightModeStatus {
+    bottom: 16px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    background-color: rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(139, 92, 246, 0.5);
+  }
+  
+  .highlightModeExit {
+    width: 24px;
+    height: 24px;
+    font-size: 18px;
+  }
+  
+  .highlightModal {
+    margin: 16px;
+    max-height: 85vh;
+  }
+  
+  .highlightModalHeader {
+    padding: 16px 20px;
+  }
+  
+  .highlightModalContent {
+    padding: 20px;
+  }
+  
+  .highlightModalButton {
+    padding: 14px 20px;
+    font-size: 0.95rem;
+  }
+}
+
  
