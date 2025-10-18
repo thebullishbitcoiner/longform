@@ -85,10 +85,6 @@ interface CommentData {
   depth: number; // Nesting depth for indentation
 }
 
-interface ContextMenuPosition {
-  x: number;
-  y: number;
-}
 
 interface TextSelection {
   text: string;
@@ -625,10 +621,9 @@ export default function BlogPost() {
   
   // Highlighting state
   const [showContextMenu, setShowContextMenu] = useState(false);
-  const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition>({ x: 0, y: 0 });
   const [selectedText, setSelectedText] = useState<TextSelection | null>(null);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
-  const [showFloatingPencil, setShowFloatingPencil] = useState(true); // Always visible
+  const [showFloatingPencil] = useState(true); // Always visible
   const [showHighlightModal, setShowHighlightModal] = useState(false);
   const [isHighlightMode, setIsHighlightMode] = useState(false);
   const [showPencilMenu, setShowPencilMenu] = useState(false);
@@ -2030,10 +2025,6 @@ export default function BlogPost() {
 
 
 
-  // Mobile detection utility
-  const isMobile = useCallback(() => {
-    return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  }, []);
 
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
@@ -2079,7 +2070,7 @@ export default function BlogPost() {
     // If NOT in highlight mode, don't interfere with normal text selection
     // Both mobile and desktop should work the same way - no context menu interference
     setShowContextMenu(false);
-  }, [isMobile, isHighlightMode]);
+  }, [isHighlightMode]);
 
   const handleMouseUp = useCallback(() => {
     // Always handle text selection, but only show highlight modal if in highlight mode
@@ -2190,7 +2181,7 @@ export default function BlogPost() {
     }
     
     // Handle emoji modal - removed click-outside to close
-  }, [showContextMenu, openReactionMenuId, openZapMenuId, showEmojiModal]);
+  }, [showContextMenu, openReactionMenuId, openZapMenuId, showEmojiModal, showPencilMenu, showHighlightModal]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -3414,31 +3405,6 @@ export default function BlogPost() {
         data={jsonModal.data}
       />
 
-                                   {/* Highlight Context Menu */}
-        {showContextMenu && selectedText && (
-          <div 
-            className={styles.contextMenu}
-            style={{
-              left: `${contextMenuPosition.x}px`,
-              top: `${contextMenuPosition.y}px`
-            }}
-          >
-            {isAuthenticated ? (
-              <button 
-                className={styles.contextMenuButton}
-                onClick={createHighlight}
-                disabled={isCreatingHighlight}
-              >
-                <PencilIcon className={styles.contextMenuIcon} />
-                {isCreatingHighlight ? 'Creating...' : 'Highlight'}
-              </button>
-            ) : (
-              <div className={styles.contextMenuMessage}>
-                Please log in to create highlights
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Floating Pencil Icon - Hidden in Highlight Mode */}
         {showFloatingPencil && !isHighlightMode && (
@@ -3495,7 +3461,7 @@ export default function BlogPost() {
               </div>
               <div className={styles.highlightModalContent}>
                 <p className={styles.selectedTextPreview}>
-                  "{selectedText.text.substring(0, 100)}{selectedText.text.length > 100 ? '...' : ''}"
+                  &ldquo;{selectedText.text.substring(0, 100)}{selectedText.text.length > 100 ? '...' : ''}&rdquo;
                 </p>
                 {isAuthenticated ? (
                   <button 
