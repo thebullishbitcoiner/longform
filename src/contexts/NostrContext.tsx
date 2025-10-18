@@ -138,8 +138,22 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const checkAuthentication = async (): Promise<boolean> => {
     // Prevent multiple simultaneous authentication checks
     if (authCheckInProgressRef.current) {
-      console.log('🔐 Authentication check already in progress, skipping');
-      return isAuthenticated;
+      console.log('🔐 Authentication check already in progress, waiting for result...');
+      // Wait for the current check to complete instead of returning immediately
+      return new Promise((resolve) => {
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max wait
+        const checkResult = () => {
+          attempts++;
+          if (!authCheckInProgressRef.current || attempts >= maxAttempts) {
+            console.log('🔐 Authentication check wait completed, result:', isAuthenticated);
+            resolve(isAuthenticated);
+          } else {
+            setTimeout(checkResult, 100);
+          }
+        };
+        checkResult();
+      });
     }
 
     // Debounce rapid calls (minimum 1 second between checks)
@@ -159,6 +173,8 @@ export function NostrProvider({ children }: NostrProviderProps) {
       let attempts = 0;
       const maxAttempts = 10; // Reduced from 15 to prevent excessive waiting
       
+      console.log('🔐 Starting authentication check, initial window.nostr:', !!nostr);
+      
       while (!nostr && attempts < maxAttempts) {
         console.log(`NDK Provider: Waiting for window.nostr (attempt ${attempts + 1}/${maxAttempts})`);
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -172,9 +188,13 @@ export function NostrProvider({ children }: NostrProviderProps) {
         setCurrentUser(null);
         return false;
       }
+      
+      console.log('✅ window.nostr is available, proceeding with authentication');
 
       // Get the user's public key from nostr-login
+      console.log('🔐 Getting public key from nostr-login...');
       const pubkey = await nostr.getPublicKey();
+      console.log('🔐 Retrieved pubkey:', pubkey ? `${pubkey.slice(0, 8)}...` : 'null');
       
       if (!pubkey) {
         console.log('❌ No user found - Authentication failed');
@@ -285,7 +305,18 @@ export function NostrProvider({ children }: NostrProviderProps) {
       }
     };
 
+    const initializeAuth = async () => {
+      try {
+        console.log('NDK Provider: Checking authentication on initialization...');
+        const authResult = await checkAuthentication();
+        console.log('NDK Provider: Authentication result:', authResult);
+      } catch (error) {
+        console.error('NDK Provider: Error checking authentication on init:', error);
+      }
+    };
+
     checkConnection();
+    initializeAuth();
 
     // Set up an interval to periodically check connection status
     const interval = setInterval(checkConnection, 30000);

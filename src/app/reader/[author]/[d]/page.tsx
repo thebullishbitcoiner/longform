@@ -2515,6 +2515,8 @@ export default function BlogPost() {
       // Handle nostr links (you can add specific handling here)
       console.log('Nostr link clicked:', href);
     }
+    // For regular links, let the browser handle them normally (including new tab opening)
+    // Don't call preventDefault() for regular links
   };
 
   if (loading) {

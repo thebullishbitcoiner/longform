@@ -6,6 +6,7 @@ import { useBlog, BlogPost } from '@/contexts/BlogContext';
 import toast from 'react-hot-toast';
 import styles from './page.module.css';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
+import NDK from '@nostr-dev-kit/ndk';
 import { NDKSubscription } from '@nostr-dev-kit/ndk';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useRouter } from 'next/navigation';
@@ -21,7 +22,7 @@ function getTagValues(tags: string[][], tagName: string): string[] {
   return tags.filter(tag => tag[0] === tagName).map(tag => tag[1]);
 }
 
-const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (post: BlogPost) => void; onHover: (post: BlogPost) => void }) => {
+const PostCard = memo(({ post, onClick, onHover, ndk }: { post: BlogPost; onClick: (post: BlogPost) => void; onHover: (post: BlogPost) => void; ndk: NDK }) => {
   const { isPostRead, markPostAsRead, markPostAsUnread, getAuthorProfile } = useBlog();
   const x = useMotionValue(0);
   const controls = useAnimation();
@@ -144,7 +145,42 @@ const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (p
         style={{ x, scale }}
         className={`${styles.postCard} ${isRead ? styles.read : ''}`}
       >
-        <div onClick={(e) => { e.preventDefault(); onClick(post); }} onMouseEnter={(e) => { e.preventDefault(); onHover(post); }} className={styles.postCardLink}>
+        <a 
+          href={`/reader/${post.pubkey}/${post.dTag || post.id.slice(0, 8)}`}
+          onClick={async (e) => { 
+            e.preventDefault(); 
+            await onClick(post); 
+          }} 
+          onMouseEnter={(e) => { e.preventDefault(); onHover(post); }} 
+          className={styles.postCardLink}
+          onAuxClick={async (e) => {
+            // Handle middle-click (button 1) to open in new tab
+            if (e.button === 1) {
+              e.preventDefault();
+              try {
+                // Generate URL directly without calling onClick
+                const authorIdentifier = await getUserIdentifier(ndk, post.pubkey);
+                const dTag = post.dTag || post.id.slice(0, 8);
+                const url = generateNip05Url(authorIdentifier, dTag);
+                console.log('🔗 Opening in new tab:', url);
+                window.open(url, '_blank');
+              } catch (error) {
+                console.error('Error opening in new tab:', error);
+              }
+            }
+          }}
+          onContextMenu={async (e) => {
+            // Update href when right-clicking to get the correct URL for copying
+            try {
+              const authorIdentifier = await getUserIdentifier(ndk, post.pubkey);
+              const dTag = post.dTag || post.id.slice(0, 8);
+              const url = generateNip05Url(authorIdentifier, dTag);
+              e.currentTarget.href = url;
+            } catch (error) {
+              console.error('Error updating href for context menu:', error);
+            }
+          }}
+        >
           <div className={styles.readIndicator} />
           <div className={styles.postCardContent}>
             <div className={styles.postCardHeader}>
@@ -162,7 +198,7 @@ const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (p
               <p className={styles.postCardSummary}>{post.summary}</p>
             )}
           </div>
-        </div>
+        </a>
       </motion.div>
     </div>
   );
@@ -178,7 +214,8 @@ const PostCard = memo(({ post, onClick, onHover }: { post: BlogPost; onClick: (p
     prevProps.post.author?.displayName === nextProps.post.author?.displayName &&
     prevProps.post.author?.name === nextProps.post.author?.name &&
     prevProps.onClick === nextProps.onClick &&
-    prevProps.onHover === nextProps.onHover
+    prevProps.onHover === nextProps.onHover &&
+    prevProps.ndk === nextProps.ndk
   );
 });
 
@@ -910,6 +947,7 @@ export default function ReaderPage() {
       const dTag = post.dTag || post.id.slice(0, 8);
       
       const url = generateNip05Url(authorIdentifier, dTag);
+      console.log('🔗 Regular click - navigating to:', url);
       router.push(url);
     } catch (error) {
       console.error('Error generating URL:', error);
@@ -1441,7 +1479,7 @@ export default function ReaderPage() {
                  columns.map((column, columnIndex) => (
                    <div key={`${columnIndex}-${column.length}`} className={styles.column}>
                      {column.map((post) => (
-                       <PostCard key={post.id} post={post} onClick={handleCardClick} onHover={handleCardHover} />
+                       <PostCard key={post.id} post={post} onClick={handleCardClick} onHover={handleCardHover} ndk={ndk} />
                      ))}
                    </div>
                  ))
