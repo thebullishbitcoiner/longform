@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftIcon, PhotoIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhotoIcon, PencilIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Draft, saveLastDraft, getLastDraft, clearLastDraft, hasUnsavedDraft } from '@/utils/storage';
 import { use } from 'react';
 import Editor, { EditorRef } from '@/components/Editor';
 import { NostrBuildUploader } from '@nostrify/nostrify/uploaders';
 import type { NostrSigner } from '@nostrify/types';
 import { useNostr } from '@/contexts/NostrContext';
+import { useBlog } from '@/contexts/BlogContext';
 import toast from 'react-hot-toast';
 import ConfirmModal from '@/components/ConfirmModal';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -16,6 +17,10 @@ import './page.css';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 import Image from 'next/image';
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { nip19 } from 'nostr-tools';
+import Link from 'next/link';
 
 // Memoized cover image component to prevent re-renders
 const CoverImage = React.memo(({ src, onError }: { src: string; onError: (e: React.SyntheticEvent<HTMLImageElement>) => void }) => {
@@ -35,6 +40,249 @@ const CoverImage = React.memo(({ src, onError }: { src: string; onError: (e: Rea
 });
 CoverImage.displayName = 'CoverImage';
 
+// Preview Modal Component
+const PreviewModal = ({ draft, editorRef, onClose }: { 
+  draft: Draft; 
+  editorRef: React.RefObject<EditorRef | null>; 
+  onClose: () => void;
+}) => {
+  const { currentUser, ndk } = useNostr();
+  const { getAuthorProfile } = useBlog();
+  
+  // Get the latest content from the editor
+  const [previewContent, setPreviewContent] = useState(draft.content);
+  const [processedContent, setProcessedContent] = useState(draft.content);
+  
+  useEffect(() => {
+    // Update content when modal opens
+    if (editorRef.current) {
+      try {
+        const currentContent = editorRef.current.getContent();
+        setPreviewContent(currentContent || draft.content);
+      } catch {
+        // Fallback to draft content if editor ref fails
+        setPreviewContent(draft.content);
+      }
+    } else {
+      setPreviewContent(draft.content);
+    }
+  }, [draft.content, editorRef]);
+
+  // Process npubs in content
+  useEffect(() => {
+    const processNpubs = async (content: string) => {
+      if (!ndk || !content) return content;
+      
+      // Match npubs with or without nostr: prefix, and also nprofile, note, nevent
+      const nostrRegex = /(nostr:)?(nprofile1[a-zA-Z0-9]+|npub1[a-zA-Z0-9]+|note1[a-zA-Z0-9]+|nevent1[a-zA-Z0-9]+)/g;
+      const matches = Array.from(content.matchAll(nostrRegex));
+      
+      // Build a map of replacements
+      const replacements = new Map<string, string>();
+      
+      // Process each unique match
+      const processedMatches = new Set<string>();
+      for (const match of matches) {
+        const fullMatch = match[0];
+        if (processedMatches.has(fullMatch)) continue;
+        processedMatches.add(fullMatch);
+        
+        const cleanPart = fullMatch.replace(/^nostr:/, '');
+        try {
+          const decoded = nip19.decode(cleanPart);
+          
+          if (decoded.type === 'npub' || decoded.type === 'nprofile') {
+            const pubkey = decoded.type === 'npub' ? decoded.data : decoded.data.pubkey;
+            if (pubkey) {
+              const profileUrl = `/profile/${nip19.npubEncode(pubkey)}`;
+              const cachedProfile = getAuthorProfile(pubkey);
+              let displayName = cachedProfile?.displayName || cachedProfile?.name;
+              
+              // Try to fetch profile if not cached
+              if (!displayName && ndk) {
+                try {
+                  const user = ndk.getUser({ pubkey });
+                  const profile = await user.fetchProfile();
+                  if (profile && (profile.displayName || profile.name)) {
+                    displayName = profile.displayName || profile.name;
+                  }
+                } catch (error) {
+                  console.error('Error fetching profile for npub:', error);
+                }
+              }
+              
+              const linkText = displayName ? `@${displayName}` : `@${pubkey.slice(0, 8)}...`;
+              replacements.set(fullMatch, `[${linkText}](${profileUrl})`);
+            }
+          } else if (decoded.type === 'note' || decoded.type === 'nevent') {
+            const externalUrl = `https://njump.me/${cleanPart}`;
+            replacements.set(fullMatch, `[${cleanPart}](${externalUrl})`);
+          }
+        } catch (error) {
+          console.error('Error processing nostr link:', error);
+          // Keep original if processing fails
+        }
+      }
+      
+      // Apply all replacements
+      let processedContent = content;
+      replacements.forEach((replacement, original) => {
+        // Replace all occurrences using a global regex
+        processedContent = processedContent.replace(new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replacement);
+      });
+      
+      return processedContent;
+    };
+
+    const processContent = async () => {
+      const processed = await processNpubs(previewContent);
+      setProcessedContent(processed);
+    };
+
+    processContent();
+  }, [previewContent, ndk, getAuthorProfile]);
+
+  // Get author display name
+  const authorDisplay = currentUser?.displayName || currentUser?.name || currentUser?.pubkey?.slice(0, 8) + '...' || 'Author';
+
+  return (
+    <div className="preview-modal-overlay" onClick={onClose}>
+      <div className="preview-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="preview-modal-header">
+          <h2>Preview</h2>
+          <button className="preview-modal-close" onClick={onClose}>
+            <XMarkIcon />
+          </button>
+        </div>
+        <div className="preview-modal-body">
+          <article className="preview-post">
+            {draft.coverImage && (
+              <div className="preview-post-image">
+                <Image 
+                  src={draft.coverImage} 
+                  alt={draft.title} 
+                  width={800} 
+                  height={400} 
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
+                  style={{ width: '100%', height: 'auto' }} 
+                  unoptimized 
+                />
+              </div>
+            )}
+
+            <header className="preview-header">
+              <h1 className="preview-title">{draft.title}</h1>
+              <div className="preview-metadata">
+                <div className="preview-author">
+                  <div className="preview-author-line">
+                    <span className="preview-label">Author:</span>
+                    <span className="preview-author-value">{authorDisplay}</span>
+                  </div>
+                  <div className="preview-date">
+                    <span className="preview-label">Published:</span>
+                    <time>{new Date().toLocaleDateString()}</time>
+                  </div>
+                </div>
+              </div>
+              
+              {draft.hashtags && draft.hashtags.length > 0 && (
+                <div className="preview-tags">
+                  {draft.hashtags.map((tag: string) => (
+                    <span key={tag} className="preview-tag">#{tag}</span>
+                  ))}
+                </div>
+              )}
+            </header>
+
+            {draft.summary && (
+              <div className="preview-summary">{draft.summary}</div>
+            )}
+
+            <div className="preview-content">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ src, alt }) => {
+                    if (!src || typeof src !== 'string') return null;
+                    return (
+                      <Image
+                        src={src}
+                        alt={alt || 'Image'}
+                        width={800}
+                        height={600}
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
+                        style={{ width: '100%', height: 'auto' }}
+                        className="preview-markdown-image"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                        unoptimized
+                      />
+                    );
+                  },
+                  a: ({ children, href, ...props }) => {
+                    const isImageUrl = href?.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i);
+                    if (isImageUrl && href) {
+                      return (
+                        <Image
+                          src={href}
+                          alt={children?.toString() || 'Image'}
+                          width={800}
+                          height={600}
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
+                          style={{ width: '100%', height: 'auto' }}
+                          className="preview-markdown-image"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                          unoptimized
+                        />
+                      );
+                    }
+                    
+                    // Handle nostr profile links (njump.me or /profile/ links)
+                    const isNostrLink = href?.includes('njump.me') || href?.startsWith('/profile/');
+                    const isExternalLink = href?.startsWith('http://') || href?.startsWith('https://');
+                    
+                    if (isNostrLink && href?.startsWith('/profile/')) {
+                      // Internal profile link
+                      return (
+                        <Link 
+                          href={href} 
+                          className="preview-link preview-nostr-link"
+                          {...props}
+                        >
+                          {children}
+                        </Link>
+                      );
+                    }
+                    
+                    return (
+                      <a 
+                        href={href} 
+                        target={isExternalLink ? "_blank" : undefined}
+                        rel={isExternalLink ? "noopener noreferrer" : undefined}
+                        className={isNostrLink ? "preview-link preview-nostr-link" : "preview-link"}
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
+                }}
+              >
+                {processedContent}
+              </ReactMarkdown>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -53,6 +301,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [showCoverImageTooltip, setShowCoverImageTooltip] = useState(false);
   const [coverImageMode, setCoverImageMode] = useState<'upload' | 'url'>('upload');
   const [coverImageUrl, setCoverImageUrl] = useState('');
+  const [showEditorActionsMenu, setShowEditorActionsMenu] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   // Auto-save function
   const autoSaveDraft = (currentDraft: Draft) => {
@@ -104,6 +354,26 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showCoverImageTooltip]);
+
+  // Close editor actions menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showEditorActionsMenu && 
+          !target.closest('.editor-actions-menu') && 
+          !target.closest('.floating-pencil-icon')) {
+        setShowEditorActionsMenu(false);
+      }
+    };
+
+    if (showEditorActionsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEditorActionsMenu]);
 
   useEffect(() => {
     const loadDraft = async () => {
@@ -1407,16 +1677,26 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         ref={editorRef} 
       />
       
-      {/* Action buttons footer */}
-      <div className="editor-footer">
-        <div className="editor-actions">
+      {/* Floating Pencil Icon */}
+      <div 
+        className="floating-pencil-icon"
+        onClick={() => setShowEditorActionsMenu(!showEditorActionsMenu)}
+      >
+        <PencilIcon className="floating-pencil-icon-svg" />
+      </div>
+
+      {/* Editor Actions Menu */}
+      {showEditorActionsMenu && (
+        <div className="editor-actions-menu">
           <button 
-            onClick={handleImageUpload} 
-            className="action-button image-button"
-            title="Add Image (supports multiple selection)"
+            onClick={() => {
+              handleImageUpload();
+              setShowEditorActionsMenu(false);
+            }} 
+            className="editor-action-menu-item"
+            title="Upload Image (supports multiple selection)"
           >
-            <PhotoIcon />
-            Add Image
+            Upload Image
           </button>
           {/* Only show save button for drafts (kind 30024) */}
           {draft.kind === 30024 && (
@@ -1425,8 +1705,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 if (editorRef.current) {
                   editorRef.current.save();
                 }
+                setShowEditorActionsMenu(false);
               }}
-              className="action-button save-button"
+              className="editor-action-menu-item"
               title={hasUnsavedChanges ? "Save Draft (unsaved changes)" : "Save Draft"}
               disabled={isPublishing || !isConnected}
             >
@@ -1434,19 +1715,46 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             </button>
           )}
           <button 
+            onClick={() => {
+              // Get latest content from editor before showing preview
+              if (editorRef.current) {
+                const currentContent = editorRef.current.getContent();
+                if (currentContent && draft) {
+                  const updatedDraft = { ...draft, content: currentContent };
+                  setDraft(updatedDraft);
+                }
+              }
+              setShowPreviewModal(true);
+              setShowEditorActionsMenu(false);
+            }} 
+            className="editor-action-menu-item"
+            title="Preview Post"
+          >
+            Preview
+          </button>
+          <button 
             onClick={async () => {
               // Publish directly - handlePublish will get the latest content from the editor
               await handlePublish();
+              setShowEditorActionsMenu(false);
             }} 
-            className="action-button publish-button"
+            className="editor-action-menu-item"
             title={draft.kind === 30023 ? "Update Published Post" : "Publish to Nostr"}
             disabled={isPublishing || !isConnected}
           >
-            <ArrowUpTrayIcon />
             {isPublishing ? 'Publishing...' : !isConnected ? 'Connecting...' : draft.kind === 30023 ? 'Update' : 'Publish'}
           </button>
         </div>
-      </div>
+      )}
+      
+      {/* Preview Modal */}
+      {showPreviewModal && (
+        <PreviewModal
+          draft={draft}
+          editorRef={editorRef}
+          onClose={() => setShowPreviewModal(false)}
+        />
+      )}
       
       {/* Restore Draft Modal */}
       <ConfirmModal
