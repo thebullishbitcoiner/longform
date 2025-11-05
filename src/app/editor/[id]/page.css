@@ -331,7 +331,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
+  padding: 1rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -449,14 +449,11 @@
 }
 
 .preview-summary {
+  padding: 2rem;
+  color: var(--text-secondary);
   font-size: 1.125rem;
   line-height: 1.6;
-  color: var(--text-secondary);
-  margin-bottom: 2rem;
-  padding: 1rem;
-  background-color: var(--background-secondary);
-  border-radius: 8px;
-  border-left: 3px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .preview-content {
@@ -564,24 +561,40 @@
 /* Mobile responsive styles for preview modal */
 @media (max-width: 640px) {
   .preview-modal-overlay {
-    padding: 0;
+    align-items: flex-start;
+    padding-top: max(5vh, env(safe-area-inset-top, 5vh));
+    padding-bottom: max(5vh, env(safe-area-inset-bottom, 5vh));
+    padding-left: 5vw;
+    padding-right: 5vw;
   }
 
   .preview-modal-content {
-    max-height: 100vh;
-    border-radius: 0;
+    width: 90vw;
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 12px;
+    margin: 0;
   }
 
   .preview-modal-header {
     padding: 1rem;
+    flex-shrink: 0;
   }
 
   .preview-modal-body {
     padding: 1rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
   }
 
   .preview-title {
     font-size: 1.5rem;
+  }
+
+  .preview-summary {
+    padding: 1.5rem 0;
+    font-size: 0.875rem !important;
   }
 
   .preview-content {

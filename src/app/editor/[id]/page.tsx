@@ -304,6 +304,21 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [showEditorActionsMenu, setShowEditorActionsMenu] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    if (showPreviewModal) {
+      // Save current overflow style
+      const originalOverflow = document.body.style.overflow;
+      // Disable scrolling
+      document.body.style.overflow = 'hidden';
+      
+      return () => {
+        // Restore original overflow when modal closes
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [showPreviewModal]);
+
   // Auto-save function
   const autoSaveDraft = (currentDraft: Draft) => {
     // Only auto-save temporary drafts (not saved to Nostr yet)
