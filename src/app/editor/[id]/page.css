@@ -306,6 +306,8 @@
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -317,7 +319,7 @@
 .preview-modal-content {
   background-color: var(--background);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 0;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
   max-width: 48rem;
   width: 100%;
@@ -331,13 +333,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border);
 }
 
 .preview-modal-header h2 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.125rem;
   font-weight: 600;
   color: var(--text);
 }
@@ -347,7 +349,7 @@
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 0.5rem;
+  padding: 0;
   border-radius: 0.5rem;
   transition: all 0.2s ease;
   display: flex;
@@ -366,7 +368,7 @@
 }
 
 .preview-modal-body {
-  padding: 2rem;
+  padding: 0;
   overflow-y: auto;
   flex: 1;
 }
@@ -377,8 +379,8 @@
 
 .preview-post-image {
   width: 100%;
-  margin-bottom: 2rem;
-  border-radius: 8px;
+  margin: 0;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -389,7 +391,8 @@
 }
 
 .preview-header {
-  margin-bottom: 1.5rem;
+  padding: 2rem;
+  margin-bottom: 0;
 }
 
 .preview-title {
@@ -450,6 +453,7 @@
 
 .preview-summary {
   padding: 2rem;
+  padding-top: 0;
   color: var(--text-secondary);
   font-size: 1.125rem;
   line-height: 1.6;
@@ -457,6 +461,7 @@
 }
 
 .preview-content {
+  padding: 2rem;
   font-size: 1rem;
   line-height: 1.7;
   color: var(--text);
@@ -572,20 +577,24 @@
     width: 90vw;
     max-width: 90vw;
     max-height: 90vh;
-    border-radius: 12px;
+    border-radius: 0;
     margin: 0;
   }
 
   .preview-modal-header {
-    padding: 1rem;
+    padding: 0.5rem 0.75rem;
     flex-shrink: 0;
   }
 
   .preview-modal-body {
-    padding: 1rem;
+    padding: 0;
     overflow-y: auto;
     flex: 1;
     min-height: 0;
+  }
+
+  .preview-header {
+    padding: 1rem;
   }
 
   .preview-title {
@@ -593,16 +602,18 @@
   }
 
   .preview-summary {
-    padding: 1.5rem 0;
+    padding: 0 1rem;
+    padding-bottom: 1.5rem;
     font-size: 0.875rem !important;
   }
 
   .preview-content {
+    padding: 1rem;
     font-size: 0.875rem;
   }
 
   .preview-post-image {
-    margin-bottom: 1rem;
+    margin: 0;
     border-radius: 0;
   }
 }
