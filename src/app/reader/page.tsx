@@ -175,7 +175,9 @@ const PostCard = memo(({ post, onClick, onHover, ndk }: { post: BlogPost; onClic
               const authorIdentifier = await getUserIdentifier(ndk, post.pubkey);
               const dTag = post.dTag || post.id.slice(0, 8);
               const url = generateNip05Url(authorIdentifier, dTag);
-              e.currentTarget.href = url;
+              if (e.currentTarget) {
+                e.currentTarget.href = url;
+              }
             } catch (error) {
               console.error('Error updating href for context menu:', error);
             }
@@ -315,15 +317,6 @@ export default function ReaderPage() {
     
     // Only take the first postsToShow posts
     const limited = filteredByReadStatus.slice(0, postsToShow);
-    
-    console.log('🔍 DEBUG: Filtered posts calculation:', {
-      totalPosts: sortedPosts.length,
-      fromFollows: postsFromFollows.length,
-      afterFilter: filteredByReadStatus.length,
-      postsToShow,
-      actualRendered: limited.length,
-      firstFewIds: limited.slice(0, 3).map(p => p.id)
-    });
     
     return limited;
   }, [sortedPosts, follows, filter, isPostRead, postsToShow]);
@@ -926,16 +919,6 @@ export default function ReaderPage() {
     };
   }, []);
 
-  // Monitor filteredPosts to ensure it's properly limited
-  useEffect(() => {
-    console.log('📊 DEBUG: filteredPosts changed:', {
-      length: filteredPosts.length,
-      postsToShow,
-      isLimited: filteredPosts.length <= postsToShow,
-      firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
-    });
-  }, [filteredPosts, postsToShow]);
-
   const handleCardClick = useCallback(async (post: BlogPost) => {
     setIsNavigating(true);
     
@@ -974,13 +957,6 @@ export default function ReaderPage() {
 
   // Add error handling for the main render logic
   try {
-    console.log('🔍 DEBUG: Filtered posts:', {
-      followsCount: follows.length,
-      filterType: filter,
-      postsFromFollows: sortedPosts.filter(post => follows.includes(post.pubkey)).length,
-      finalFilteredCount: filteredPosts.length,
-      isLoadingPosts
-    });
 
     return (
       <AuthGuard requireConnection={true}>

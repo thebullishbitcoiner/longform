@@ -3463,7 +3463,7 @@ export default function BlogPost() {
               </div>
               <div className={styles.highlightModalContent}>
                 <p className={styles.selectedTextPreview}>
-                  &ldquo;{selectedText.text.substring(0, 100)}{selectedText.text.length > 100 ? '...' : ''}&rdquo;
+                  &ldquo;{selectedText.text}&rdquo;
                 </p>
                 {isAuthenticated ? (
                   <button 
@@ -3471,7 +3471,7 @@ export default function BlogPost() {
                     onClick={createHighlight}
                     disabled={isCreatingHighlight}
                   >
-                    {isCreatingHighlight ? 'Creating Highlight...' : 'Create Highlight'}
+                    {isCreatingHighlight ? 'Signing...' : 'Sign'}
                   </button>
                 ) : (
                   <div className={styles.highlightModalMessage}>
