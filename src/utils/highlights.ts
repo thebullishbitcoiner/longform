@@ -17,11 +17,12 @@ export interface Highlight {
   eventTags: string[][];
 }
 
-export function useHighlights() {
+export function useHighlights(options?: { autoFetch?: boolean }) {
   const { ndk, isAuthenticated, currentUser } = useNostr();
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastFetched, setLastFetched] = useState<number | null>(null);
+  const autoFetch = options?.autoFetch !== false; // Default to true for backward compatibility
 
   // Convert NDK event to Highlight interface
   const eventToHighlight = useCallback((event: NDKEvent): Highlight => {
@@ -197,8 +198,12 @@ export function useHighlights() {
     fetchHighlights(true);
   }, [fetchHighlights]);
 
-  // Load highlights on mount and when user changes
+  // Load highlights on mount and when user changes (only if autoFetch is enabled)
   useEffect(() => {
+    if (!autoFetch) {
+      return; // Skip auto-fetching if disabled
+    }
+    
     console.log('🔍 useHighlights useEffect triggered:', {
       isAuthenticated,
       currentUserPubkey: currentUser?.pubkey,
@@ -213,7 +218,7 @@ export function useHighlights() {
       setHighlights([]);
       setLastFetched(null);
     }
-  }, [isAuthenticated, currentUser?.pubkey, fetchHighlights]);
+  }, [isAuthenticated, currentUser?.pubkey, fetchHighlights, autoFetch]);
 
   return {
     highlights,

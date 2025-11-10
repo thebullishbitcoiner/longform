@@ -17,7 +17,14 @@ const SupportPage: React.FC = () => {
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const hasLaunchedPaymentRef = useRef(false);
   const { currentUser } = useNostr();
-  const { proStatus, isLoading, checkLegendStatus } = useSupabase();
+  const { proStatus, isLoading, checkLegendStatus, refreshProStatus } = useSupabase();
+
+  // Refresh PRO status when user changes or page loads
+  useEffect(() => {
+    if (currentUser?.npub) {
+      refreshProStatus();
+    }
+  }, [currentUser?.npub, refreshProStatus]);
 
   // Check legend status when user changes
   useEffect(() => {

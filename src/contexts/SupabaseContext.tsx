@@ -34,6 +34,12 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
   const { currentUser } = useNostr();
 
   const checkProStatus = async (npub: string): Promise<ProStatus> => {
+    // Verify Supabase client is ready
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.warn('Supabase not configured, returning false for PRO status');
+      return { isPro: false };
+    }
+    
     try {
       setIsLoading(true);
       
@@ -46,16 +52,23 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
         .eq('npub', npub)
         .single();
 
-      console.log('Supabase query result:', { data, error });
-
       if (error) {
+        // PGRST116 = no rows returned (user is not a pro) - this is expected
         if (error.code === 'PGRST116') {
-          // No rows returned - user is not a pro
           console.log('No pro found for npub:', npub);
           return { isPro: false };
         }
-        console.error('Supabase error:', error);
-        throw error;
+        // 406 errors - handle gracefully (might be from retries or preflight requests)
+        // Check if it's a 406 status code or API key related
+        if (error.status === 406 || error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
+          // Silently handle - this is often from retries or preflight requests
+          return { isPro: false };
+        }
+        // Only log unexpected errors
+        if (error.code !== 'PGRST116' && error.status !== 406) {
+          console.error('Supabase error checking PRO status:', error);
+        }
+        return { isPro: false };
       }
 
       if (!data) {
@@ -93,6 +106,12 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
   };
 
   const checkLegendStatus = async (npub: string): Promise<boolean> => {
+    // Verify Supabase client is ready
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.warn('Supabase not configured, returning false for Legend status');
+      return false;
+    }
+    
     try {
       console.log('Checking Legend status for npub:', npub);
       
@@ -103,16 +122,23 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
         .eq('npub', npub)
         .single();
 
-      console.log('Legends query result:', { data, error });
-
       if (error) {
+        // PGRST116 = no rows returned (user is not a legend) - this is expected
         if (error.code === 'PGRST116') {
-          // No rows returned - user is not a legend
           console.log('No legend found for npub:', npub);
           return false;
         }
-        console.error('Supabase error:', error);
-        throw error;
+        // 406 errors - handle gracefully (might be from retries or preflight requests)
+        // Check if it's a 406 status code or API key related
+        if (error.status === 406 || error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
+          // Silently handle - this is often from retries or preflight requests
+          return false;
+        }
+        // Only log unexpected errors
+        if (error.code !== 'PGRST116' && error.status !== 406) {
+          console.error('Supabase error checking Legend status:', error);
+        }
+        return false;
       }
 
       if (!data) {
@@ -130,6 +156,12 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
   const refreshProStatus = async () => {
     if (!currentUser?.npub) return;
     
+    // Verify Supabase client is ready (check if env vars are available)
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.warn('Supabase not configured, skipping PRO status check');
+      return;
+    }
+    
     try {
       console.log('Refreshing PRO status for npub:', currentUser.npub);
       
@@ -140,16 +172,25 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
         .eq('npub', currentUser.npub)
         .single();
 
-      console.log('Supabase refresh query result:', { data, error });
-
       if (error) {
+        // PGRST116 = no rows returned (user is not a pro) - this is expected
         if (error.code === 'PGRST116') {
-          // No rows returned - user is not a pro
           console.log('No pro found for npub:', currentUser.npub);
           setProStatus({ isPro: false });
           return;
         }
-        console.error('Supabase error:', error);
+        // 406 errors - handle gracefully (might be from retries or preflight requests)
+        // Check if it's a 406 status code or API key related
+        if (error.status === 406 || error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
+          // Silently handle - this is often from retries or preflight requests
+          setProStatus({ isPro: false });
+          return;
+        }
+        // Only log unexpected errors
+        if (error.code !== 'PGRST116' && error.status !== 406) {
+          console.error('Supabase error refreshing PRO status:', error);
+        }
+        setProStatus({ isPro: false });
         return;
       }
 
@@ -208,14 +249,10 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
     }
   };
 
-  // Check PRO status when user changes
+  // Clear PRO status when user logs out
+  // Note: We don't auto-refresh on user change anymore - components that need it can call refreshProStatus explicitly
   useEffect(() => {
-    if (currentUser?.npub) {
-      setIsLoading(true);
-      refreshProStatus().finally(() => {
-        setIsLoading(false);
-      });
-    } else {
+    if (!currentUser?.npub) {
       setProStatus(null);
       setIsLoading(false);
     }

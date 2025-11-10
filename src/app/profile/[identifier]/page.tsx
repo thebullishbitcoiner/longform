@@ -103,8 +103,8 @@ export default function ProfilePage() {
     onConfirm: null
   });
 
-  // Use highlights hook for deletion functionality
-  const { deleteHighlight } = useHighlights();
+  // Use highlights hook for deletion functionality only (disable auto-fetch since we fetch profile highlights separately)
+  const { deleteHighlight } = useHighlights({ autoFetch: false });
 
   // Initialize standalone NDK if context NDK is not available
   useEffect(() => {
@@ -585,6 +585,15 @@ export default function ProfilePage() {
         return; // Wait for NDK to be available
       }
 
+      // Reset states when loading a new profile
+      setLoading(true);
+      setError(null);
+      setIsProfilePro(false);
+      setIsProfileLegend(false);
+      setPosts([]);
+      setHighlights([]);
+      setHighlightsLoaded(false);
+
       try {
         const identifier = decodeURIComponent(params.identifier as string);
         console.log('🔍 DEBUG: Loading profile for identifier:', identifier);
@@ -623,18 +632,22 @@ export default function ProfilePage() {
 
         setProfile(profileData);
 
-        // Check PRO status for this profile
+        // Check PRO status for this profile (using the profile's npub)
         try {
+          console.log('🔍 DEBUG: Checking PRO status for npub:', npub);
           const proStatus = await checkProStatus(npub);
+          console.log('🔍 DEBUG: PRO status result:', proStatus);
           setIsProfilePro(proStatus.isPro);
         } catch (error) {
           console.error('Error checking PRO status:', error);
           setIsProfilePro(false);
         }
 
-        // Check Legend status for this profile
+        // Check Legend status for this profile (using the profile's npub)
         try {
+          console.log('🔍 DEBUG: Checking Legend status for npub:', npub);
           const isLegend = await checkLegendStatus(npub);
+          console.log('🔍 DEBUG: Legend status result:', isLegend);
           setIsProfileLegend(isLegend);
         } catch (error) {
           console.error('Error checking Legend status:', error);

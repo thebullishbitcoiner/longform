@@ -12,6 +12,13 @@ export function useProStatus() {
   const [isLegend, setIsLegend] = useState(false);
   const [isCheckingLegend, setIsCheckingLegend] = useState(false);
 
+  // Refresh PRO status when user changes or hook is used
+  useEffect(() => {
+    if (currentUser?.npub) {
+      refreshProStatus();
+    }
+  }, [currentUser?.npub, refreshProStatus]);
+
   // Check legend status when user changes
   useEffect(() => {
     if (currentUser?.npub) {
