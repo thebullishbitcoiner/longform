@@ -1,4 +1,4 @@
-import { supabase, ProStatus, Pro, CustomEmoji } from '@/config/supabase';
+import { supabase, ProStatus, Pro, CustomEmoji, LongformProfile } from '@/config/supabase';
 
 /**
  * Check if a user has PRO status based on their npub
@@ -235,6 +235,37 @@ export async function updateCustomEmoji(npub: string, oldName: string, newName: 
     return data;
   } catch (error) {
     console.error('Error in updateCustomEmoji:', error);
+    return null;
+  }
+}
+
+/**
+ * Profile Customization Functions
+ */
+
+/**
+ * Get profile customizations for a user
+ */
+export async function getLongformProfile(npub: string): Promise<LongformProfile | null> {
+  try {
+    const { data, error } = await supabase
+      .from('longform_profiles')
+      .select('*')
+      .eq('npub', npub)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No rows returned - user has no profile customizations
+        return null;
+      }
+      console.error('Error fetching longform profile:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in getLongformProfile:', error);
     return null;
   }
 }

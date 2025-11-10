@@ -81,3 +81,10 @@ export interface ActionQueue {
   created_at?: string;
   processed?: boolean;
 }
+
+export interface LongformProfile {
+  npub: string;
+  background?: string;
+  created_at?: string;
+  updated_at?: string;
+}

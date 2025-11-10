@@ -1,13 +1,18 @@
 .container {
   min-height: 100vh;
-  background-color: #000000 !important;
+  background-color: #000000;
   color: white;
+  position: relative;
 }
+
+/* No overlay - let the semi-transparent backgrounds provide contrast */
 
 .mainContent {
   max-width: 48rem;
   margin: 0 auto;
   padding: 2rem 1rem;
+  background-color: transparent !important;
+  border-radius: 0.5rem;
 }
 
 @media (max-width: 768px) {
@@ -62,7 +67,8 @@
   border-radius: 0.75rem;
   border: 1px solid rgb(39 39 42);
   overflow: hidden;
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: blur(4px);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
@@ -72,7 +78,7 @@
   display: flex;
   gap: 1.5rem;
   align-items: flex-start;
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.3) !important;
 }
 
 @media (max-width: 640px) {
@@ -283,7 +289,7 @@
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   padding: 0.5rem;
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.3) !important;
   border-radius: 0.375rem;
   border: 1px solid rgb(39 39 42);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -388,6 +394,7 @@
 
 .postsSection {
   padding: 2rem;
+  background-color: rgba(0, 0, 0, 0.3) !important;
 }
 
 @media (max-width: 640px) {
@@ -423,7 +430,7 @@
   display: flex;
   text-decoration: none;
   color: inherit;
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.35) !important;
   border-radius: 0.5rem;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -431,6 +438,8 @@
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
   min-height: 180px; /* Minimum height for cards */
 }
+
+/* Transparency is handled via inline styles in the component */
 
 @media (max-width: 640px) {
   .postCard {
@@ -564,7 +573,7 @@
 }
 
 .tag {
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.3) !important;
   color: rgb(161 161 170);
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
@@ -582,12 +591,13 @@
 /* Tabbed Interface Styles */
 .tabsContainer {
   border-top: 1px solid rgb(39 39 42);
+  background-color: rgba(0, 0, 0, 0.3) !important;
 }
 
 .tabsHeader {
   display: flex;
-  background-color: #000000;
   border-bottom: 1px solid rgb(39 39 42);
+  background-color: rgba(0, 0, 0, 0.3) !important;
 }
 
 .tabButton {
@@ -608,14 +618,18 @@
 
 .tabButton:hover {
   color: rgb(244 244 245);
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.3) !important;
 }
+
+/* Transparency is handled via inline styles in the component */
 
 .tabButton.activeTab {
   color: #8b5cf6;
   border-bottom-color: #8b5cf6;
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.3) !important;
 }
+
+/* Transparency is handled via inline styles in the component */
 
 .tabIcon {
   width: 1.125rem;
@@ -624,7 +638,7 @@
 
 .tabContent {
   padding: 2rem;
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.3) !important;
 }
 
 @media (max-width: 640px) {
@@ -663,7 +677,7 @@
 }
 
 .highlightCard {
-  background-color: #000000;
+  background-color: rgba(0, 0, 0, 0.35) !important;
   border-radius: 0.5rem;
   border: 1px solid rgb(39 39 42);
   overflow: hidden;
@@ -673,6 +687,8 @@
   display: block;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
+
+/* Transparency is handled via inline styles in the component */
 
 .highlightCard:hover {
   border-color: rgb(82 82 91);

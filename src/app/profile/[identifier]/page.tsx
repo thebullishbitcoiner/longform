@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
 import { useSupabase } from '@/contexts/SupabaseContext';
 import { supabase } from '@/config/supabase';
+import { getLongformProfile } from '@/utils/supabase';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
 import NDK, { NDKEvent } from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
@@ -91,6 +92,7 @@ export default function ProfilePage() {
   const [isProfileLegend, setIsProfileLegend] = useState(false);
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [profileBackground, setProfileBackground] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -633,25 +635,40 @@ export default function ProfilePage() {
         setProfile(profileData);
 
         // Check PRO status for this profile (using the profile's npub)
+        let isPro = false;
         try {
           console.log('🔍 DEBUG: Checking PRO status for npub:', npub);
           const proStatus = await checkProStatus(npub);
           console.log('🔍 DEBUG: PRO status result:', proStatus);
-          setIsProfilePro(proStatus.isPro);
+          isPro = proStatus.isPro;
+          setIsProfilePro(isPro);
         } catch (error) {
           console.error('Error checking PRO status:', error);
           setIsProfilePro(false);
         }
 
         // Check Legend status for this profile (using the profile's npub)
+        let isLegend = false;
         try {
           console.log('🔍 DEBUG: Checking Legend status for npub:', npub);
-          const isLegend = await checkLegendStatus(npub);
+          isLegend = await checkLegendStatus(npub);
           console.log('🔍 DEBUG: Legend status result:', isLegend);
           setIsProfileLegend(isLegend);
         } catch (error) {
           console.error('Error checking Legend status:', error);
           setIsProfileLegend(false);
+        }
+
+        // Fetch profile customizations (only for PRO/Legend users)
+        if (isPro || isLegend) {
+          try {
+            const longformProfile = await getLongformProfile(npub);
+            if (longformProfile?.background) {
+              setProfileBackground(longformProfile.background);
+            }
+          } catch (error) {
+            console.error('Error fetching profile customizations:', error);
+          }
         }
 
         // Check cache first for posts
@@ -1241,8 +1258,18 @@ export default function ProfilePage() {
     </>
   );
 
+
   return (
-    <div className={styles.container}>
+    <div 
+      className={styles.container}
+      style={profileBackground ? {
+        backgroundImage: `url(${profileBackground})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+      } as React.CSSProperties : undefined}
+    >
       <div className={styles.mainContent}>
         <div className={styles.profile}>
           <div className={styles.profileHeader}>

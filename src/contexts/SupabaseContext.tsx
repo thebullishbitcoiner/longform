@@ -58,14 +58,13 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
           console.log('No pro found for npub:', npub);
           return { isPro: false };
         }
-        // 406 errors - handle gracefully (might be from retries or preflight requests)
-        // Check if it's a 406 status code or API key related
-        if (error.status === 406 || error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
+        // API key related errors - handle gracefully (might be from retries or preflight requests)
+        if (error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
           // Silently handle - this is often from retries or preflight requests
           return { isPro: false };
         }
         // Only log unexpected errors
-        if (error.code !== 'PGRST116' && error.status !== 406) {
+        if (error.code !== 'PGRST116') {
           console.error('Supabase error checking PRO status:', error);
         }
         return { isPro: false };
@@ -128,14 +127,13 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
           console.log('No legend found for npub:', npub);
           return false;
         }
-        // 406 errors - handle gracefully (might be from retries or preflight requests)
-        // Check if it's a 406 status code or API key related
-        if (error.status === 406 || error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
+        // API key related errors - handle gracefully (might be from retries or preflight requests)
+        if (error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
           // Silently handle - this is often from retries or preflight requests
           return false;
         }
         // Only log unexpected errors
-        if (error.code !== 'PGRST116' && error.status !== 406) {
+        if (error.code !== 'PGRST116') {
           console.error('Supabase error checking Legend status:', error);
         }
         return false;
@@ -179,15 +177,14 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
           setProStatus({ isPro: false });
           return;
         }
-        // 406 errors - handle gracefully (might be from retries or preflight requests)
-        // Check if it's a 406 status code or API key related
-        if (error.status === 406 || error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
+        // API key related errors - handle gracefully (might be from retries or preflight requests)
+        if (error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
           // Silently handle - this is often from retries or preflight requests
           setProStatus({ isPro: false });
           return;
         }
         // Only log unexpected errors
-        if (error.code !== 'PGRST116' && error.status !== 406) {
+        if (error.code !== 'PGRST116') {
           console.error('Supabase error refreshing PRO status:', error);
         }
         setProStatus({ isPro: false });
