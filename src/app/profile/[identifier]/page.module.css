@@ -5,6 +5,13 @@
   position: relative;
 }
 
+/* Only show background image on desktop screens (1024px and above) */
+@media (max-width: 1023px) {
+  .container.hasBackground {
+    background-image: none !important;
+  }
+}
+
 /* No overlay - let the semi-transparent backgrounds provide contrast */
 
 .mainContent {

@@ -1261,7 +1261,7 @@ export default function ProfilePage() {
 
   return (
     <div 
-      className={styles.container}
+      className={`${styles.container} ${profileBackground ? styles.hasBackground : ''}`}
       style={profileBackground ? {
         backgroundImage: `url(${profileBackground})`,
         backgroundSize: 'cover',
