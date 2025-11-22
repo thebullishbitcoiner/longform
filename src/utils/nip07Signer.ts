@@ -1,8 +1,7 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { NDKSigner, NDKUser, NostrEvent } from '@nostr-dev-kit/ndk';
-import { bech32 } from 'bech32';
 
-export class NostrLoginSigner implements NDKSigner {
+export class Nip07Signer implements NDKSigner {
   private _pubkey: string | null = null;
   private _ndk: NDK;
 
@@ -12,27 +11,16 @@ export class NostrLoginSigner implements NDKSigner {
 
   async blockUntilReady(): Promise<NDKUser> {
     if (!window.nostr) {
-      throw new Error('window.nostr not available - nostr-login may not be initialized');
+      throw new Error('window.nostr not available - Please install a Nostr extension');
     }
 
     const pubkey = await window.nostr.getPublicKey();
     if (!pubkey) {
-      throw new Error('No public key available from nostr-login');
+      throw new Error('No public key available from Nostr extension');
     }
 
     this._pubkey = pubkey;
     return this._ndk.getUser({ pubkey });
-  }
-
-  // Convert hex pubkey to npub format
-  private hexToNpub(hex: string): string {
-    try {
-      const words = bech32.toWords(Buffer.from(hex, 'hex'));
-      return bech32.encode('npub', words);
-    } catch (error) {
-      console.error('Error converting hex to npub:', error);
-      return hex; // Fallback to hex if conversion fails
-    }
   }
 
   async sign(event: NostrEvent): Promise<string> {
@@ -70,6 +58,9 @@ export class NostrLoginSigner implements NDKSigner {
     if (!window.nostr?.nip44) {
       throw new Error('NIP-44 encryption not available');
     }
+    if (!this._pubkey) {
+      await this.blockUntilReady();
+    }
     return window.nostr.nip44.encrypt(this._pubkey!, value);
   }
 
@@ -78,13 +69,16 @@ export class NostrLoginSigner implements NDKSigner {
     if (!window.nostr?.nip44) {
       throw new Error('NIP-44 decryption not available');
     }
+    if (!this._pubkey) {
+      await this.blockUntilReady();
+    }
     return window.nostr.nip44.decrypt(this._pubkey!, value);
   }
 
   toPayload(): string {
     return JSON.stringify({
       pubkey: this._pubkey,
-      type: 'nostr-login'
+      type: 'nip07'
     });
   }
 
@@ -101,4 +95,5 @@ export class NostrLoginSigner implements NDKSigner {
     }
     return this._ndk.getUser({ pubkey: this._pubkey });
   }
-} 
+}
+

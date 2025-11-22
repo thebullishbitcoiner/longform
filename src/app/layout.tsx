@@ -5,7 +5,6 @@ import Header from "@/components/Header";
 import { NostrProvider } from "@/contexts/NostrContext";
 import { BlogProvider } from "@/contexts/BlogContext";
 import { SupabaseProvider } from "@/contexts/SupabaseContext";
-import { NostrLoginProvider } from "@/components/NostrLoginProvider";
 import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import "./globals.css";
 
@@ -42,7 +41,6 @@ export default function RootLayout({
           <SupabaseProvider>
             <BlogProvider>
               <GlobalErrorHandler />
-              <NostrLoginProvider />
               <Header />
               {children}
               <Toaster

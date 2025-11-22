@@ -1,6 +1,6 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
-import { NostrLoginSigner } from './nostrLoginSigner';
+import { Nip07Signer } from './nip07Signer';
 
 export interface PreferredRelay {
   url: string;
@@ -66,7 +66,7 @@ export async function createPreferredRelaysEvent(
   
   const privateTagsJson = JSON.stringify(privateTags);
   // Type assertion since we know our signer has NIP-44 methods
-  const encryptedContent = await (ndk.signer as NostrLoginSigner).encryptNip44(privateTagsJson);
+  const encryptedContent = await (ndk.signer as Nip07Signer).encryptNip44(privateTagsJson);
   event.content = encryptedContent;
   
   return event;
@@ -88,7 +88,7 @@ export async function parsePreferredRelaysEvent(
   
   try {
     // Decrypt the content using NIP-44
-    const decryptedContent = await (ndk.signer as NostrLoginSigner).decryptNip44(event.content);
+    const decryptedContent = await (ndk.signer as Nip07Signer).decryptNip44(event.content);
     const privateTags = JSON.parse(decryptedContent);
     
     const relays: PreferredRelay[] = [];

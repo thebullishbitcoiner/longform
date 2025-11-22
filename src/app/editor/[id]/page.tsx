@@ -532,17 +532,17 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const signer: NostrSigner = useMemo(() => ({
     getPublicKey: async () => {
       if (!isAuthenticated || !currentUser?.pubkey) {
-        throw new Error('Not authenticated. Please log in with nostr-login.');
+        throw new Error('Not authenticated. Please log in with a Nostr extension.');
       }
       return currentUser.pubkey;
     },
     signEvent: async (event) => {
       if (!isAuthenticated || !currentUser?.pubkey) {
-        throw new Error('Not authenticated. Please log in with nostr-login.');
+        throw new Error('Not authenticated. Please log in with a Nostr extension.');
       }
       const nostr = window.nostr;
       if (!nostr) {
-        throw new Error('Nostr extension not found. Please log in with nostr-login.');
+        throw new Error('Nostr extension not found. Please install a Nostr extension.');
       }
       const { sig } = await nostr.signEvent({
         ...event,
@@ -1202,7 +1202,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   const handlePublish = async () => {
     if (!draft || !ndk || !isAuthenticated) {
-      toast.error('Please log in with nostr-login to publish.');
+      toast.error('Please log in with a Nostr extension to publish.');
       return;
     }
 

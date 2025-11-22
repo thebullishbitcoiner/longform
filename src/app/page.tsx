@@ -4,11 +4,22 @@ import Longform from '@/components/Longform';
 import { useNostr } from '@/contexts/NostrContext';
 
 export default function Home() {
-  const { isAuthenticated } = useNostr();
+  const { isAuthenticated, checkAuthentication } = useNostr();
 
-  const handleLogin = () => {
-    // Launch nostr-login welcome screen
-    document.dispatchEvent(new CustomEvent('nlLaunch', { detail: 'welcome' }));
+  const handleLogin = async () => {
+    // Request access to Nostr extension
+    if (!window.nostr) {
+      alert('Please install a Nostr extension (like nos2x, Alby, or similar) to login.');
+      return;
+    }
+    // The extension will prompt the user to authorize
+    try {
+      await window.nostr.getPublicKey();
+      // Re-check authentication after user authorizes
+      await checkAuthentication();
+    } catch (error) {
+      console.error('Failed to get public key:', error);
+    }
   };
 
   if (!isAuthenticated) {

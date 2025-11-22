@@ -3,7 +3,7 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 
-import { NostrLoginSigner } from '@/utils/nostrLoginSigner';
+import { Nip07Signer } from '@/utils/nip07Signer';
 import { DEFAULT_RELAYS } from '@/config/relays';
 
 // Create a singleton NDK instance without signer initially
@@ -168,22 +168,9 @@ export function NostrProvider({ children }: NostrProviderProps) {
     lastAuthCheckRef.current = now;
 
     try {
-      // Check if window.nostr is available (nostr-login should provide this)
-      let nostr = window.nostr;
-      let attempts = 0;
-      const maxAttempts = 10; // Reduced from 15 to prevent excessive waiting
-      
-      console.log('🔐 Starting authentication check, initial window.nostr:', !!nostr);
-      
-      while (!nostr && attempts < maxAttempts) {
-        console.log(`NDK Provider: Waiting for window.nostr (attempt ${attempts + 1}/${maxAttempts})`);
-        await new Promise(resolve => setTimeout(resolve, 300));
-        nostr = window.nostr;
-        attempts++;
-      }
-      
-      if (!nostr) {
-        console.log('❌ window.nostr not available - nostr-login may not be initialized');
+      // Check if window.nostr is available (Nostr extension should provide this)
+      if (!window.nostr) {
+        console.log('❌ window.nostr not available - Please install a Nostr extension');
         setIsAuthenticated(false);
         setCurrentUser(null);
         return false;
@@ -191,9 +178,9 @@ export function NostrProvider({ children }: NostrProviderProps) {
       
       console.log('✅ window.nostr is available, proceeding with authentication');
 
-      // Get the user's public key from nostr-login
-      console.log('🔐 Getting public key from nostr-login...');
-      const pubkey = await nostr.getPublicKey();
+      // Get the user's public key from Nostr extension
+      console.log('🔐 Getting public key from Nostr extension...');
+      const pubkey = await window.nostr.getPublicKey();
       console.log('🔐 Retrieved pubkey:', pubkey ? `${pubkey.slice(0, 8)}...` : 'null');
       
       if (!pubkey) {
@@ -222,8 +209,8 @@ export function NostrProvider({ children }: NostrProviderProps) {
       
       console.log('🔐 Authentication check - User public key:', npub);
       
-      // Set up NDK signer using nostr-login
-      ndkInstance.signer = new NostrLoginSigner(ndkInstance);
+      // Set up NDK signer using NIP-07 extension
+      ndkInstance.signer = new Nip07Signer(ndkInstance);
         
       // Update NDK instance with preferred relays for private events
       try {
