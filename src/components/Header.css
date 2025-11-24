@@ -162,4 +162,15 @@
   margin-top: 0.5rem;
   text-align: right;
   width: 100%;
+}
+
+/* Desktop styles */
+@media (min-width: 768px) {
+  .menu-link {
+    font-size: 1.5rem;
+  }
+  
+  .menu-version {
+    font-size: 0.875rem;
+  }
 } 
