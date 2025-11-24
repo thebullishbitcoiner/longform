@@ -617,7 +617,6 @@ export default function BlogPost() {
   const [selectedText, setSelectedText] = useState<string>('');
   const [showHighlightButton, setShowHighlightButton] = useState(false);
   const [highlightButtonPosition, setHighlightButtonPosition] = useState({ top: 0, left: 0 });
-  const [showHighlightModal, setShowHighlightModal] = useState(false);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
 
 
@@ -2154,7 +2153,6 @@ export default function BlogPost() {
       window.getSelection()?.removeAllRanges();
       setShowHighlightButton(false);
       setSelectedText('');
-      setShowHighlightModal(false);
 
       toast.success('Highlight created!');
     } catch (error) {
@@ -3066,57 +3064,18 @@ export default function BlogPost() {
 
       {/* Highlight Button - appears when text is selected */}
       {showHighlightButton && isAuthenticated && (
-        <>
-          {/* Desktop: Floating button */}
-          <button
-            className={styles.highlightButton}
-            onClick={() => {
-              // On mobile, show modal; on desktop, create directly
-              if (window.innerWidth <= 768) {
-                setShowHighlightModal(true);
-              } else {
-                createHighlight();
-              }
-            }}
-            style={{
-              top: `${highlightButtonPosition.top}px`,
-              left: `${highlightButtonPosition.left}px`,
-            }}
-            disabled={isCreatingHighlight}
-          >
-            <PencilIcon className={styles.highlightButtonIcon} />
-            {isCreatingHighlight ? 'Creating...' : 'Highlight'}
-          </button>
-
-          {/* Mobile: Modal */}
-          {showHighlightModal && (
-            <div className={styles.highlightModalOverlay} onClick={() => setShowHighlightModal(false)}>
-              <div className={styles.highlightModal} onClick={(e) => e.stopPropagation()}>
-                <div className={styles.highlightModalHeader}>
-                  <h3>Create Highlight</h3>
-                  <button
-                    className={styles.highlightModalClose}
-                    onClick={() => setShowHighlightModal(false)}
-                  >
-                    <XMarkIcon className={styles.modalCloseIcon} />
-                  </button>
-                </div>
-                <div className={styles.highlightModalContent}>
-                  <div className={styles.selectedTextPreview}>
-                    &ldquo;{selectedText}&rdquo;
-                  </div>
-                  <button
-                    className={styles.highlightModalButton}
-                    onClick={createHighlight}
-                    disabled={isCreatingHighlight}
-                  >
-                    {isCreatingHighlight ? 'Creating Highlight...' : 'Create Highlight'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+        <button
+          className={styles.highlightButton}
+          onClick={createHighlight}
+          style={{
+            top: `${highlightButtonPosition.top}px`,
+            left: `${highlightButtonPosition.left}px`,
+          }}
+          disabled={isCreatingHighlight}
+        >
+          <PencilIcon className={styles.highlightButtonIcon} />
+          {isCreatingHighlight ? 'Creating...' : 'Highlight'}
+        </button>
       )}
     </div>
   );
