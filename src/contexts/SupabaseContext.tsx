@@ -43,30 +43,26 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
     try {
       setIsLoading(true);
       
-      console.log('Checking PRO status for npub:', npub);
-      
       // Query the pros table for the given npub
+      // Use .maybeSingle() instead of .single() to avoid 406 errors when no row exists
       const { data, error } = await supabase
         .from('pros')
         .select('npub, last_payment, created_at')
         .eq('npub', npub)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        // PGRST116 = no rows returned (user is not a pro) - this is expected
-        if (error.code === 'PGRST116') {
-          console.log('No pro found for npub:', npub);
-          return { isPro: false };
-        }
         // API key related errors - handle gracefully (might be from retries or preflight requests)
         if (error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
           // Silently handle - this is often from retries or preflight requests
           return { isPro: false };
         }
-        // Only log unexpected errors
-        if (error.code !== 'PGRST116') {
-          console.error('Supabase error checking PRO status:', error);
+        // 406 errors are often from .single() when no row exists - handle gracefully
+        if (error.code === 'PGRST116') {
+          return { isPro: false };
         }
+        // Only log unexpected errors
+        console.error('Supabase error checking PRO status:', error);
         return { isPro: false };
       }
 
@@ -112,30 +108,26 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
     }
     
     try {
-      console.log('Checking Legend status for npub:', npub);
-      
       // Query the legends table for the given npub
+      // Use .maybeSingle() instead of .single() to avoid 406 errors when no row exists
       const { data, error } = await supabase
         .from('legends')
         .select('npub, created_at')
         .eq('npub', npub)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        // PGRST116 = no rows returned (user is not a legend) - this is expected
-        if (error.code === 'PGRST116') {
-          console.log('No legend found for npub:', npub);
-          return false;
-        }
         // API key related errors - handle gracefully (might be from retries or preflight requests)
         if (error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
           // Silently handle - this is often from retries or preflight requests
           return false;
         }
-        // Only log unexpected errors
-        if (error.code !== 'PGRST116') {
-          console.error('Supabase error checking Legend status:', error);
+        // 406 errors are often from .single() when no row exists - handle gracefully
+        if (error.code === 'PGRST116') {
+          return false;
         }
+        // Only log unexpected errors
+        console.error('Supabase error checking Legend status:', error);
         return false;
       }
 
@@ -161,32 +153,28 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
     }
     
     try {
-      console.log('Refreshing PRO status for npub:', currentUser.npub);
-      
       // Query the pros table for the given npub
+      // Use .maybeSingle() instead of .single() to avoid 406 errors when no row exists
       const { data, error } = await supabase
         .from('pros')
         .select('npub, last_payment, created_at')
         .eq('npub', currentUser.npub)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        // PGRST116 = no rows returned (user is not a pro) - this is expected
-        if (error.code === 'PGRST116') {
-          console.log('No pro found for npub:', currentUser.npub);
-          setProStatus({ isPro: false });
-          return;
-        }
         // API key related errors - handle gracefully (might be from retries or preflight requests)
         if (error.message?.includes('API key') || error.message?.includes('apikey') || error.message?.includes('No API key')) {
           // Silently handle - this is often from retries or preflight requests
           setProStatus({ isPro: false });
           return;
         }
-        // Only log unexpected errors
-        if (error.code !== 'PGRST116') {
-          console.error('Supabase error refreshing PRO status:', error);
+        // 406 errors are often from .single() when no row exists - handle gracefully
+        if (error.code === 'PGRST116') {
+          setProStatus({ isPro: false });
+          return;
         }
+        // Only log unexpected errors
+        console.error('Supabase error refreshing PRO status:', error);
         setProStatus({ isPro: false });
         return;
       }

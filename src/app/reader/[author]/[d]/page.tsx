@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useBlog } from '@/contexts/BlogContext';
 import type { BlogPost } from '@/contexts/BlogContext';
 import ReactMarkdown from 'react-markdown';
@@ -20,7 +20,7 @@ import Image from 'next/image';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import toast from 'react-hot-toast';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
-import { useHighlights } from '@/utils/highlights';
+import { useHighlights, highlightTextInElement } from '@/utils/highlights';
 import JsonModal from '@/components/JsonModal';
 
 // Create a standalone NDK instance for public access
@@ -84,14 +84,6 @@ interface CommentData {
   children: CommentData[]; // Child comments (replies)
   depth: number; // Nesting depth for indentation
 }
-
-
-interface TextSelection {
-  text: string;
-  container: Node;
-}
-
-
 // Utility function to count total comments including replies
 const countTotalComments = (comments: CommentData[]): number => {
   let count = 0;
@@ -619,16 +611,14 @@ export default function BlogPost() {
   
   const endOfContentRef = useRef<HTMLDivElement>(null);
   
-  // Highlighting state
-  const [showContextMenu, setShowContextMenu] = useState(false);
-  const [selectedText, setSelectedText] = useState<TextSelection | null>(null);
-  const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
-  const [showFloatingPencil] = useState(true); // Always visible
-  const [showHighlightModal, setShowHighlightModal] = useState(false);
-  const [isHighlightMode, setIsHighlightMode] = useState(false);
-  const [showPencilMenu, setShowPencilMenu] = useState(false);
   const postContentRef = useRef<HTMLDivElement>(null);
   
+  // Highlight creation state - using native selection, not managing it ourselves
+  const [selectedText, setSelectedText] = useState<string>('');
+  const [showHighlightButton, setShowHighlightButton] = useState(false);
+  const [highlightButtonPosition, setHighlightButtonPosition] = useState({ top: 0, left: 0 });
+  const [showHighlightModal, setShowHighlightModal] = useState(false);
+  const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
 
 
   // Initialize standalone NDK if context NDK is not available
@@ -2026,170 +2016,13 @@ export default function BlogPost() {
 
 
 
-  const handleTextSelection = useCallback(() => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
-      setShowContextMenu(false);
-      setSelectedText(null);
-      return;
-    }
+  // Removed all text selection handlers - let browser handle it naturally
+  // Removed all highlight mode handlers - they were interfering with text selection
 
-    const range = selection.getRangeAt(0);
-    const selectedTextString = selection.toString().trim();
-    
-    if (selectedTextString.length === 0) {
-      setShowContextMenu(false);
-      setSelectedText(null);
-      return;
-    }
-
-    // Check if selection is within the post content
-    if (!postContentRef.current?.contains(range.commonAncestorContainer)) {
-      setShowContextMenu(false);
-      setSelectedText(null);
-      return;
-    }
-
-    // Debug: Only log if selection is substantial
-    if (selectedTextString.length > 20) {
-      console.log('🔍 Text selected:', selectedTextString.substring(0, 30) + '...');
-    }
-
-    setSelectedText({
-      text: selectedTextString,
-      container: range.commonAncestorContainer
-    });
-
-    // If in highlight mode, immediately show the highlight modal
-    if (isHighlightMode) {
-      setShowHighlightModal(true);
-      setShowContextMenu(false);
-      return;
-    }
-
-    // If NOT in highlight mode, don't interfere with normal text selection
-    // Both mobile and desktop should work the same way - no context menu interference
-    setShowContextMenu(false);
-  }, [isHighlightMode]);
-
-  const handleMouseUp = useCallback(() => {
-    // Always handle text selection, but only show highlight modal if in highlight mode
-    setTimeout(handleTextSelection, 50);
-  }, [handleTextSelection]);
-
-  // Handle touch end for mobile devices
-  const handleTouchEnd = useCallback(() => {
-    // Always handle text selection, but only show highlight modal if in highlight mode
-    setTimeout(handleTextSelection, 50);
-  }, [handleTextSelection]);
-
-
-
-  // Handle floating pencil icon click
-  const handleFloatingPencilClick = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    // Only show menu if not in highlight mode
-    if (!isHighlightMode) {
-      setShowPencilMenu(!showPencilMenu);
-    }
-  }, [showPencilMenu, isHighlightMode]);
-
-  // Handle entering highlight mode
-  const handleEnterHighlightMode = useCallback(() => {
-    setIsHighlightMode(true);
-    setShowPencilMenu(false);
-  }, []);
-
-  // Handle exiting highlight mode
-  const handleExitHighlightMode = useCallback(() => {
-    setIsHighlightMode(false);
-    setShowHighlightModal(false);
-    setSelectedText(null);
-    window.getSelection()?.removeAllRanges();
-    // Pencil icon will automatically reappear since showFloatingPencil is still true
-  }, []);
-
-  // Handle highlight modal close
-  const handleHighlightModalClose = useCallback(() => {
-    setShowHighlightModal(false);
-    setSelectedText(null);
-    window.getSelection()?.removeAllRanges();
-    // Don't exit highlight mode automatically - let user decide
-  }, []);
-
-  const handleClickOutside = useCallback((event: MouseEvent) => {
-    const target = event.target as Element;
-    
-    // Handle text selection context menu
-    if (showContextMenu) {
-      const contextMenu = document.querySelector(`.${styles.contextMenu}`);
-      
-      if (!contextMenu || !contextMenu.contains(target)) {
-        setShowContextMenu(false);
-        setSelectedText(null);
-        window.getSelection()?.removeAllRanges();
-      }
-    }
-
-    // Handle pencil menu
-    if (showPencilMenu) {
-      const pencilMenu = document.querySelector(`.${styles.pencilMenu}`);
-      const floatingPencil = document.querySelector(`.${styles.floatingPencil}`);
-      
-      if (!pencilMenu || !pencilMenu.contains(target)) {
-        if (!floatingPencil || !floatingPencil.contains(target)) {
-          setShowPencilMenu(false);
-        }
-      }
-    }
-
-    // Handle highlight modal
-    if (showHighlightModal) {
-      const highlightModal = document.querySelector(`.${styles.highlightModalOverlay}`);
-      
-      if (!highlightModal || !highlightModal.contains(target)) {
-        // Only close modal if clicking outside, don't clear selection
-        setShowHighlightModal(false);
-      }
-    }
-    
-    // Handle reaction context menus
-    if (openReactionMenuId) {
-      const reactionMenu = document.querySelector(`[data-reaction-menu="${openReactionMenuId}"]`);
-      
-      if (!reactionMenu || !reactionMenu.contains(target)) {
-        closeReactionMenu();
-      }
-    }
-    
-    // Handle comment menus - close all if clicking outside any menu
-    const clickedMenu = target.closest(`.${styles.commentMenu}`);
-    const clickedMenuButton = target.closest(`.${styles.commentMenuButton}`);
-    
-    if (!clickedMenu && !clickedMenuButton) {
-      closeAllCommentMenus();
-    }
-
-    // Handle zap context menus
-    if (openZapMenuId) {
-      const zapMenu = document.querySelector(`[data-zap-menu="${openZapMenuId}"]`);
-      
-      if (!zapMenu || !zapMenu.contains(target)) {
-        closeZapMenu();
-      }
-    }
-    
-    // Handle emoji modal - removed click-outside to close
-  }, [showContextMenu, openReactionMenuId, openZapMenuId, showEmojiModal, showPencilMenu, showHighlightModal]);
+  // Removed handleClickOutside - it was interfering with text selection
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
-      if (showContextMenu) {
-        setShowContextMenu(false);
-        setSelectedText(null);
-        window.getSelection()?.removeAllRanges();
-      }
       if (openReactionMenuId) {
         closeReactionMenu();
       }
@@ -2198,153 +2031,151 @@ export default function BlogPost() {
       }
       // Emoji modal ESC key handling removed - only X button closes it
     }
-  }, [showContextMenu, openReactionMenuId, openZapMenuId, showEmojiModal]);
+  }, [openReactionMenuId, openZapMenuId, showEmojiModal]);
 
-  const handleContextMenu = useCallback((event: MouseEvent) => {
-    // Prevent native context menu on all devices to avoid flashing
-    event.preventDefault();
+  // Removed handleContextMenu - let browser handle context menu naturally
+
+
+
+
+
+
+
+  // Function to update highlight button position based on current selection
+  const updateHighlightButtonPosition = useCallback(() => {
+    const selection = window.getSelection();
+    
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!postContentRef.current || !postContentRef.current.contains(range.commonAncestorContainer)) {
+      return;
+    }
+
+    // Position button near selection (getBoundingClientRect is relative to viewport)
+    const rect = range.getBoundingClientRect();
+    // Use viewport coordinates directly since button uses fixed positioning
+    setHighlightButtonPosition({
+      top: rect.bottom + 10, // Position below selection, relative to viewport
+      left: rect.left + (rect.width / 2) // Center horizontally on selection
+    });
   }, []);
 
+  // Non-intrusive selection change listener - only detects selection, doesn't manage it
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        setShowHighlightButton(false);
+        setSelectedText('');
+        return;
+      }
 
+      // Check if selection is within post content
+      const range = selection.getRangeAt(0);
+      if (!postContentRef.current || !postContentRef.current.contains(range.commonAncestorContainer)) {
+        setShowHighlightButton(false);
+        setSelectedText('');
+        return;
+      }
 
+      const text = selection.toString().trim();
+      if (text.length > 0) {
+        setSelectedText(text);
+        updateHighlightButtonPosition();
+        setShowHighlightButton(true);
+      } else {
+        setShowHighlightButton(false);
+        setSelectedText('');
+      }
+    };
 
-
-
-
-  const createHighlight = async () => {
-    console.log('createHighlight called', { selectedText, post, isAuthenticated });
+    // Listen to selection changes (non-intrusive - just reading, not modifying)
+    document.addEventListener('selectionchange', handleSelectionChange);
     
-    if (!selectedText || !post || !isAuthenticated) {
-      console.log('Missing required data:', { 
-        hasSelectedText: !!selectedText, 
-        hasPost: !!post, 
-        isAuthenticated 
-      });
+    // Update button position on scroll to keep it aligned with selection
+    const handleScroll = () => {
+      if (showHighlightButton) {
+        updateHighlightButtonPosition();
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll, true); // Use capture phase to catch all scrolls
+
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [showHighlightButton, updateHighlightButtonPosition]);
+
+  // Create highlight function - publishes kind 9802 event
+  const createHighlight = useCallback(async () => {
+    if (!selectedText.trim() || !post || !isAuthenticated || !currentUser || !contextNdk) {
       return;
     }
-
-    // Clean the selected text to remove any HTML tags, normalize whitespace, and handle quotes
-    const cleanText = selectedText.text
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .replace(/[""]/g, '"') // Normalize smart quotes to regular quotes
-      .replace(/['']/g, "'") // Normalize smart apostrophes to regular apostrophes
-      .trim();
-    if (cleanText.length === 0) {
-      console.log('Selected text is empty after cleaning');
-      return;
-    }
-
-    const ndkToUse = contextNdk || standaloneNdk;
-    if (!ndkToUse) {
-      console.error('No NDK available for creating highlight');
-      toast.error('No connection available. Please try again.');
-      return;
-    }
-
-    console.log('Creating highlight with:', {
-      cleanText,
-      postId: post.id,
-      postPubkey: post.pubkey,
-      ndkType: contextNdk ? 'context' : 'standalone'
-    });
 
     setIsCreatingHighlight(true);
 
     try {
-      // Create kind 9802 event according to NIP-84
-      const ndkEvent = new NDKEvent(ndkToUse);
-      ndkEvent.kind = 9802;
-      ndkEvent.content = cleanText;
-      // Get the d tag from the post or URL parameters
-      const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
+      // Create kind 9802 highlight event
+      const highlightEvent = new NDKEvent(contextNdk);
+      highlightEvent.kind = 9802;
+      highlightEvent.content = selectedText.trim();
       
-      ndkEvent.tags = [
-        ['e', post.id], // Reference to the highlighted post
-        ['p', post.pubkey], // Reference to the post author
-        ['a', `30023:${post.pubkey}:${dTag || post.id}`], // Reference to the post as a longform article with d tag
-        ['client', 'Longform._']
-      ];
-
-      console.log('🔍 Creating highlight with content-only approach:', {
-        selectedText: selectedText.text,
-        cleanText
-      });
-
-      ndkEvent.created_at = Math.floor(Date.now() / 1000);
-
-      console.log('Publishing highlight event:', {
-        kind: ndkEvent.kind,
-        content: ndkEvent.content,
-        tags: ndkEvent.tags,
-        created_at: ndkEvent.created_at
-      });
-
-      // Publish the highlight event
-      await ndkEvent.publish();
+      // Add tags
+      highlightEvent.tags.push(['e', post.id]); // Post reference
+      highlightEvent.tags.push(['p', post.pubkey]); // Post author
       
-      console.log('Highlight created successfully:', ndkEvent.id);
-      
-      // Add the new highlight to our cache and local state
-      const newHighlight = {
-        id: ndkEvent.id,
-        content: cleanText,
+      // Add 'a' tag for longform article reference (kind:author:dTag)
+      if (post.dTag) {
+        highlightEvent.tags.push(['a', `30023:${post.pubkey}:${post.dTag}`]);
+      }
+
+      // Publish the highlight
+      await highlightEvent.publish();
+
+      // Add to local state and cache
+      const highlight = {
+        id: highlightEvent.id,
+        content: selectedText.trim(),
         created_at: Date.now(),
         postId: post.id,
         postAuthor: post.pubkey,
-        postDTag: dTag || post.id,
-        eventTags: ndkEvent.tags
+        postDTag: post.dTag,
+        eventTags: highlightEvent.tags
       };
-      
-      // Add to highlights cache
-      addHighlight(newHighlight);
-      
-      // Highlights will be automatically applied through ReactMarkdown's text component
-      console.log('🔍 Highlight created and will be applied through React rendering');
-      
-      // Show success message
-      toast.success('Highlight created successfully!');
-      
-      // Clear selection and hide highlight modal, but keep highlight mode active
+
+      addHighlight(highlight);
+
+      // Clear selection and hide button
       window.getSelection()?.removeAllRanges();
-      setShowContextMenu(false);
+      setShowHighlightButton(false);
+      setSelectedText('');
       setShowHighlightModal(false);
-      setSelectedText(null);
-      // Note: Don't exit highlight mode or hide pencil - user can create more highlights
-      
+
+      toast.success('Highlight created!');
     } catch (error) {
       console.error('Error creating highlight:', error);
-      toast.error(`Error creating highlight: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error('Failed to create highlight');
     } finally {
       setIsCreatingHighlight(false);
     }
-  };
+  }, [selectedText, post, isAuthenticated, currentUser, contextNdk, addHighlight]);
 
-  // Add event listeners for text selection
+  // Minimal event listeners
   useEffect(() => {
-    const handleScroll = () => {
-      if (showContextMenu) {
-        setShowContextMenu(false);
-        setSelectedText(null);
-        window.getSelection()?.removeAllRanges();
-      }
-    };
-
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('click', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('contextmenu', handleContextMenu);
-    document.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('contextmenu', handleContextMenu);
-      document.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('scroll', handleScroll);
     };
-  }, [handleMouseUp, handleClickOutside, handleKeyDown, handleContextMenu, showContextMenu]);
+  }, [handleKeyDown]);
+
+  // Note: We don't restore selection during re-renders as it can cause issues
+  // Instead, we ensure nothing interferes with the selection process
 
   // Mark post as read when end of content is reached (only if authenticated)
   useEffect(() => {
@@ -2368,93 +2199,34 @@ export default function BlogPost() {
     };
   }, [post, hasMarkedAsRead, markPostAsRead, isAuthenticated]);
 
-  // Get highlights for the current post
-  const postHighlights = post ? getHighlightsForPost(post.id, post.pubkey, post.dTag) : [];
+  // Get highlights for the current post - memoized to prevent unnecessary re-renders
+  const postHighlights = useMemo(() => {
+    return post ? getHighlightsForPost(post.id, post.pubkey, post.dTag) : [];
+  }, [post?.id, post?.pubkey, post?.dTag, getHighlightsForPost]);
 
+  // Track if highlights have been applied to prevent re-applying
+  const highlightsAppliedRef = useRef(false);
 
-  // Function to apply highlights to text content
-  const applyHighlightsToText = (text: string): React.ReactNode => {
-    if (!postHighlights.length || !text) {
-      return text;
-    }
-
-    // Simple approach: search for highlight content in this text segment
-    const result: React.ReactNode[] = [];
-    let remainingText = text;
-    let hasHighlights = false;
-
-    postHighlights.forEach((highlight, index) => {
-      const highlightText = highlight.content || '';
-      
-      // Normalize the highlight text to match the same normalization used when creating highlights
-      const normalizedHighlightText = highlightText
-        .replace(/\s+/g, ' ') // Normalize whitespace
-        .replace(/[""]/g, '"') // Normalize smart quotes to regular quotes
-        .replace(/['']/g, "'") // Normalize smart apostrophes to regular apostrophes
-        .trim();
-      
-      if (normalizedHighlightText && remainingText.includes(normalizedHighlightText)) {
-        const parts = remainingText.split(normalizedHighlightText);
-        
-        if (parts.length > 1) {
-          // Add text before highlight
-          if (parts[0]) {
-            result.push(parts[0]);
-          }
-          
-          // Add highlighted text
-          result.push(
-            <span key={`highlight-${highlight.id}-${index}`} className={styles.userHighlight}>
-              {normalizedHighlightText}
-            </span>
-          );
-          
-          // Update remaining text to everything after the highlight
-          remainingText = parts.slice(1).join(normalizedHighlightText);
-          hasHighlights = true;
-          
-          // Debug: Only log if highlight is substantial
-          if (highlightText.length > 10) {
-            console.log('🔍 Highlight applied:', highlightText.substring(0, 30) + '...');
-          }
+  // Apply highlights to the rendered content after ReactMarkdown finishes
+  // This uses DOM manipulation but only after initial render, so it shouldn't interfere with text selection
+  useEffect(() => {
+    if (postContentRef.current && postHighlights.length > 0 && processedContent && !highlightsAppliedRef.current) {
+      // Use a small delay to ensure ReactMarkdown has finished rendering
+      const timeoutId = setTimeout(() => {
+        if (postContentRef.current && !highlightsAppliedRef.current) {
+          highlightTextInElement(postContentRef.current, postHighlights, styles.userHighlight);
+          highlightsAppliedRef.current = true;
         }
-      }
-    });
+      }, 100);
 
-    // Add any remaining text
-    if (remainingText) {
-      result.push(remainingText);
+      return () => clearTimeout(timeoutId);
     }
+  }, [postHighlights, processedContent, styles.userHighlight]);
 
-    return hasHighlights ? result : text;
-  };
-
-
-  // Function to render custom emojis and reactions as JSX
-  const renderReactionContentJSX = (content: string, event?: NDKEvent) => {
-    try {
-      if (!event || !content) {
-        return <span>{content || ''}</span>;
-      }
-      
-      // Extract custom emojis from the event's tags
-      const emojiMap = extractCustomEmojis(event);
-      
-      if (emojiMap.size === 0) {
-        return <span>{content}</span>;
-      }
-      
-      // Render custom emojis as JSX elements
-      const renderedParts = renderCustomEmojis(content, emojiMap);
-      
-      return <span>{renderedParts}</span>;
-    } catch (error) {
-      console.error('Error rendering reaction content:', error);
-      return <span>{content || ''}</span>;
-    }
-  };
-
-
+  // Reset highlights applied flag when post changes
+  useEffect(() => {
+    highlightsAppliedRef.current = false;
+  }, [post?.id]);
 
   // Function to check if a URL is a video link
   const isVideoUrl = (url: string): boolean => {
@@ -2517,6 +2289,127 @@ export default function BlogPost() {
     }
     // For regular links, let the browser handle them normally (including new tab opening)
     // Don't call preventDefault() for regular links
+  };
+
+  // Stable img component function to prevent re-renders
+  const renderImg = useCallback(({ src, alt }: React.ComponentPropsWithoutRef<'img'>) => {
+    if (!src || typeof src !== 'string') return null;
+    return (
+      <img
+        src={src}
+        alt={alt || 'Image'}
+        className={styles.markdownImage}
+        style={{ 
+          width: '100%', 
+          height: 'auto', 
+          maxWidth: '100%',
+          display: 'block',
+          opacity: 1,
+          transition: 'none'
+        }}
+        loading="lazy"
+        decoding="async"
+        onError={(e) => {
+          const target = e.target as HTMLImageElement;
+          target.style.display = 'none';
+        }}
+      />
+    );
+  }, [styles.markdownImage]);
+
+  // Memoize ReactMarkdown components to prevent re-renders that clear text selection
+  // MUST be before any conditional returns to follow Rules of Hooks
+  // MINIMAL components - only what's absolutely necessary to avoid interfering with text selection
+  const markdownComponents = useMemo(() => ({
+    // Only customize what we absolutely need - let ReactMarkdown handle text elements naturally
+    // Use stable img renderer to prevent flashing
+    img: renderImg,
+    a: ({ children, ...props }: React.ComponentPropsWithoutRef<'a'>) => {
+      const isNostrLink = props.href?.includes('njump.me');
+      const isVideoLink = props.href ? isVideoUrl(props.href) : false;
+      const isImageUrl = props.href?.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i);
+      
+      if (isImageUrl && props.href) {
+        return renderImg({ src: props.href, alt: typeof children === 'string' ? children : 'Image' });
+      }
+      
+      if (isVideoLink && props.href) {
+        const embedUrl = getVideoEmbedUrl(props.href);
+        if (embedUrl) {
+          return (
+            <span className={styles.videoContainer}>
+              {embedUrl.includes('youtube.com/embed') || embedUrl.includes('vimeo.com') || embedUrl.includes('dailymotion.com') ? (
+                <iframe
+                  src={embedUrl}
+                  title="Video player"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className={styles.videoEmbed}
+                />
+              ) : (
+                <video
+                  controls
+                  className={styles.videoPlayer}
+                  preload="metadata"
+                >
+                  <source src={embedUrl} type="video/mp4" />
+                  <source src={embedUrl} type="video/webm" />
+                  <source src={embedUrl} type="video/ogg" />
+                  Your browser does not support the video tag.
+                </video>
+              )}
+              <span className={styles.videoCaption}>
+                <a href={props.href} target="_blank" rel="noopener noreferrer" className={styles.videoLink}>
+                  {children}
+                </a>
+              </span>
+            </span>
+          );
+        }
+      }
+      
+      const isRegularLink = props.href?.startsWith('http://') || props.href?.startsWith('https://');
+      const linkClass = isNostrLink ? styles.nostrLink : isRegularLink ? styles.regularLink : styles.link;
+      return (
+        <a 
+          {...props} 
+          onClick={handleLinkClick} 
+          className={linkClass}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {children}
+        </a>
+      );
+    },
+  }), [styles, handleLinkClick, isVideoUrl, getVideoEmbedUrl, renderImg]);
+
+  // Memoize remarkPlugins to prevent ReactMarkdown re-renders
+  const remarkPluginsMemo = useMemo(() => [remarkGfm], []);
+
+  // Function to render custom emojis and reactions as JSX
+  const renderReactionContentJSX = (content: string, event?: NDKEvent) => {
+    try {
+      if (!event || !content) {
+        return <span>{content || ''}</span>;
+      }
+      
+      // Extract custom emojis from the event's tags
+      const emojiMap = extractCustomEmojis(event);
+      
+      if (emojiMap.size === 0) {
+        return <span>{content}</span>;
+      }
+      
+      // Render custom emojis as JSX elements
+      const renderedParts = renderCustomEmojis(content, emojiMap);
+      
+      return <span>{renderedParts}</span>;
+    } catch (error) {
+      console.error('Error rendering reaction content:', error);
+      return <span>{content || ''}</span>;
+    }
   };
 
   if (loading) {
@@ -2657,8 +2550,12 @@ export default function BlogPost() {
           <div 
             className={styles.postContent} 
             ref={postContentRef}
-            onMouseUp={handleMouseUp}
-            onTouchEnd={handleTouchEnd}
+            style={{ 
+              userSelect: 'text',
+              WebkitUserSelect: 'text',
+              MozUserSelect: 'text',
+              msUserSelect: 'text'
+            }}
           >
             {isLoadingAdditionalData && processedContent === post.content && (
               <div className={styles.processingIndicator}>
@@ -2666,370 +2563,9 @@ export default function BlogPost() {
               </div>
             )}
             
-
-            
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                // Custom text component to handle HTML entities
-                text: ({ children }) => {
-                  if (typeof children === 'string') {
-                    // Debug: Only log if there are HTML entities
-                    if (typeof children === 'string' && (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;'))) {
-                      console.log('🔍 Text component with entities:', children.substring(0, 50) + '...');
-                    }
-                    
-                    // Decode HTML entities in text content
-                    const decodedContent = children
-                      .replace(/&lt;/g, '<')
-                      .replace(/&gt;/g, '>')
-                      .replace(/&amp;/g, '&')
-                      .replace(/&quot;/g, '"')
-                      .replace(/&#x27;/g, "'")
-                      .replace(/&#x20;/g, ' ')
-                      .replace(/\\&lt;/g, '<')
-                      .replace(/\\&gt;/g, '>');
-                    
-                    // Debug: Only log if content changed after decoding
-                    if (decodedContent !== children) {
-                      console.log('🔍 Content decoded:', decodedContent.substring(0, 50) + '...');
-                    }
-                    return <>{decodedContent}</>;
-                  }
-                  return <>{children}</>;
-                },
-                // Custom code component to handle HTML entities
-                code: ({ children, className, ...props }) => {
-                  // Decode HTML entities in code content
-                  const decodedContent = typeof children === 'string' 
-                    ? children.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'")
-                    : children;
-                  
-                  return (
-                    <code className={className} {...props}>
-                      {decodedContent}
-                    </code>
-                  );
-                },
-                // Custom pre component to handle HTML entities in code blocks
-                pre: ({ children, ...props }) => {
-                  return (
-                    <pre {...props}>
-                      {children}
-                    </pre>
-                  );
-                },
-                // Custom paragraph component to handle highlights
-                p: ({ children, ...props }) => {
-                  // Process children to apply highlights
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      // Decode HTML entities first
-                      const decodedText = children
-                        .replace(/&lt;/g, '<')
-                        .replace(/&gt;/g, '>')
-                        .replace(/&amp;/g, '&')
-                        .replace(/&quot;/g, '"')
-                        .replace(/&#x27;/g, "'")
-                        .replace(/&#x20;/g, ' ')
-                        .replace(/\\&lt;/g, '<')
-                        .replace(/\\&gt;/g, '>');
-                      
-                      // Debug: Only log if there are HTML entities to decode
-                      if (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;')) {
-                        console.log('🔍 Paragraph processing text with entities:', {
-                          original: children.substring(0, 50) + '...',
-                          decoded: decodedText.substring(0, 50) + '...',
-                          hasEntities: true
-                        });
-                      }
-                      
-                      return applyHighlightsToText(decodedText);
-                    }
-                    
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    
-                    return children;
-                  };
-                  
-                  return (
-                    <p className={styles.paragraph} {...props}>
-                      {processChildren(children)}
-                    </p>
-                  );
-                },
-                // Custom heading components to handle highlights
-                h1: ({ children, ...props }) => {
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      // Decode HTML entities first
-                      const decodedText = children
-                        .replace(/&lt;/g, '<')
-                        .replace(/&gt;/g, '>')
-                        .replace(/&amp;/g, '&')
-                        .replace(/&quot;/g, '"')
-                        .replace(/&#x27;/g, "'")
-                        .replace(/&#x20;/g, ' ')
-                        .replace(/\\&lt;/g, '<')
-                        .replace(/\\&gt;/g, '>');
-                      
-                      return applyHighlightsToText(decodedText);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-                  return <h1 className={styles.heading1} {...props}>{processChildren(children)}</h1>;
-                },
-                h2: ({ children, ...props }) => {
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      return applyHighlightsToText(children);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-                  return <h2 className={styles.heading2} {...props}>{processChildren(children)}</h2>;
-                },
-                h3: ({ children, ...props }) => {
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      return applyHighlightsToText(children);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-                  return <h3 className={styles.heading3} {...props}>{processChildren(children)}</h3>;
-                },
-                h4: ({ children, ...props }) => {
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      return applyHighlightsToText(children);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-                  return <h4 className={styles.heading4} {...props}>{processChildren(children)}</h4>;
-                },
-                h5: ({ children, ...props }) => {
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      return applyHighlightsToText(children);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-                  return <h5 className={styles.heading5} {...props}>{processChildren(children)}</h5>;
-                },
-                h6: ({ children, ...props }) => {
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      return applyHighlightsToText(children);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-                  return <h6 className={styles.heading6} {...props}>{processChildren(children)}</h6>;
-                },
-                // Custom blockquote component to handle highlights
-                blockquote: ({ children, ...props }) => {
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      return applyHighlightsToText(children);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-                  return <blockquote className={styles.blockquote} {...props}>{processChildren(children)}</blockquote>;
-                },
-                img: ({ src, alt }: React.ComponentPropsWithoutRef<'img'>) => {
-                  if (!src || typeof src !== 'string') return null;
-                  
-                  return (
-                    <Image
-                      src={src}
-                      alt={alt || 'Image'}
-                      width={800}
-                      height={600}
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
-                      style={{ width: '100%', height: 'auto' }}
-                      className={styles.markdownImage}
-                      onError={(e) => {
-                        console.error('Image failed to load:', src);
-                        // Just hide the failed image, don't manipulate DOM directly
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                      }}
-                      unoptimized
-                    />
-                  );
-                },
-                a: ({ children, ...props }) => {
-                  const isNostrLink = props.href?.includes('njump.me');
-                  const isVideoLink = props.href ? isVideoUrl(props.href) : false;
-                  const isImageUrl = props.href?.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico)$/i);
-                  
-                  // Decode HTML entities in link text
-                  const decodedChildren = typeof children === 'string' 
-                    ? children
-                        .replace(/&lt;/g, '<')
-                        .replace(/&gt;/g, '>')
-                        .replace(/&amp;/g, '&')
-                        .replace(/&quot;/g, '"')
-                        .replace(/&#x27;/g, "'")
-                        .replace(/&#x20;/g, ' ')
-                        .replace(/\\&lt;/g, '<')
-                        .replace(/\\&gt;/g, '>')
-                    : children;
-                  
-                  // Debug: Only log if there are HTML entities
-                  if (typeof children === 'string' && (children.includes('&lt;') || children.includes('&gt;') || children.includes('&amp;'))) {
-                    console.log('🔍 Link processing with entities:', children.substring(0, 50) + '...');
-                  }
-                  
-                                     // If this is an image URL, render it as an image instead of a link
-                   if (isImageUrl && props.href) {
-                     return (
-                       <Image
-                         src={props.href}
-                         alt={decodedChildren?.toString() || 'Image'}
-                         width={800}
-                         height={600}
-                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
-                         style={{ width: '100%', height: 'auto' }}
-                         className={styles.markdownImage}
-                         onError={(e) => {
-                           console.error('Image failed to load:', props.href);
-                           // Just hide the failed image, don't manipulate DOM directly
-                           const target = e.target as HTMLImageElement;
-                           target.style.display = 'none';
-                         }}
-                         unoptimized
-                       />
-                     );
-                   }
-                  
-                  if (isVideoLink && props.href) {
-                    const embedUrl = getVideoEmbedUrl(props.href);
-                    if (embedUrl) {
-                      return (
-                        <span className={styles.videoContainer}>
-                          {embedUrl.includes('youtube.com/embed') || embedUrl.includes('vimeo.com') || embedUrl.includes('dailymotion.com') ? (
-                            <iframe
-                              src={embedUrl}
-                              title="Video player"
-                              frameBorder="0"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                              className={styles.videoEmbed}
-                            />
-                          ) : (
-                            <video
-                              controls
-                              className={styles.videoPlayer}
-                              preload="metadata"
-                            >
-                              <source src={embedUrl} type="video/mp4" />
-                              <source src={embedUrl} type="video/webm" />
-                              <source src={embedUrl} type="video/ogg" />
-                              Your browser does not support the video tag.
-                            </video>
-                          )}
-                          <span className={styles.videoCaption}>
-                            <a href={props.href} target="_blank" rel="noopener noreferrer" className={styles.videoLink}>
-                              {decodedChildren}
-                            </a>
-                          </span>
-                        </span>
-                      );
-                    }
-                  }
-                  
-                  const isRegularLink = props.href?.startsWith('http://') || props.href?.startsWith('https://');
-                  const linkClass = isNostrLink ? styles.nostrLink : isRegularLink ? styles.regularLink : styles.link;
-                  return (
-                    <a 
-                      {...props} 
-                      onClick={handleLinkClick} 
-                      className={linkClass}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {decodedChildren}
-                    </a>
-                  );
-                },
-                li: ({ children, ...props }: React.ComponentPropsWithoutRef<'li'>) => {
-                  // Process children to apply highlights
-                  const processChildren = (children: React.ReactNode): React.ReactNode => {
-                    if (typeof children === 'string') {
-                      return applyHighlightsToText(children);
-                    }
-                    if (Array.isArray(children)) {
-                      return children.map((child, index) => (
-                        <span key={index}>{processChildren(child)}</span>
-                      ));
-                    }
-                    return children;
-                  };
-
-                  // Check if this is a task list item (checkbox)
-                  const child = children as React.ReactElement;
-                  if (child && typeof child === 'object' && child.props && typeof child.props === 'object' && 'checked' in child.props) {
-                    return (
-                      <li {...props} className={styles.taskListItem}>
-                        {processChildren(children)}
-                      </li>
-                    );
-                  }
-                  return <li className={styles.listItem} {...props}>{processChildren(children)}</li>;
-                },
-                                 input: ({ checked, type, ...props }: React.ComponentPropsWithoutRef<'input'>) => {
-                   if (type === 'checkbox') {
-                     return (
-                       <input
-                         {...props}
-                         type="checkbox"
-                         checked={checked}
-                         className={styles.taskCheckbox}
-                         readOnly
-                       />
-                     );
-                   }
-                   return <input type={type} {...props} />;
-                 },
-              }}
+              remarkPlugins={remarkPluginsMemo}
+              components={markdownComponents}
             >
               {processedContent}
             </ReactMarkdown>
@@ -3408,80 +2944,7 @@ export default function BlogPost() {
       />
 
 
-        {/* Floating Pencil Icon - Hidden in Highlight Mode */}
-        {showFloatingPencil && !isHighlightMode && (
-          <div 
-            className={styles.floatingPencil}
-            onClick={handleFloatingPencilClick}
-          >
-            <PencilIcon className={styles.floatingPencilIcon} />
-          </div>
-        )}
-
-        {/* Pencil Menu */}
-        {showPencilMenu && !isHighlightMode && (
-          <div className={styles.pencilMenu}>
-            <button 
-              className={styles.pencilMenuItem}
-              onClick={handleEnterHighlightMode}
-            >
-              <PencilIcon className={styles.pencilMenuIcon} />
-              Highlight Mode
-            </button>
-          </div>
-        )}
-        
-        {/* Highlight Mode Status Bar */}
-        {isHighlightMode && (
-          <div className={styles.highlightModeStatus}>
-            <div className={styles.highlightModeLabel}>
-              Highlight Mode
-            </div>
-            <button 
-              className={styles.highlightModeExit}
-              onClick={handleExitHighlightMode}
-              title="Exit Highlight Mode"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-
-        {/* Highlight Modal for Mobile */}
-        {showHighlightModal && selectedText && (
-          <div className={styles.highlightModalOverlay} onClick={handleHighlightModalClose}>
-            <div className={styles.highlightModal} onClick={(e) => e.stopPropagation()}>
-              <div className={styles.highlightModalHeader}>
-                <h3>Create Highlight</h3>
-                <button 
-                  className={styles.highlightModalClose}
-                  onClick={handleHighlightModalClose}
-                >
-                  ×
-                </button>
-              </div>
-              <div className={styles.highlightModalContent}>
-                <p className={styles.selectedTextPreview}>
-                  &ldquo;{selectedText.text}&rdquo;
-                </p>
-                {isAuthenticated ? (
-                  <button 
-                    className={styles.highlightModalButton}
-                    onClick={createHighlight}
-                    disabled={isCreatingHighlight}
-                  >
-                    {isCreatingHighlight ? 'Signing...' : 'Sign'}
-                  </button>
-                ) : (
-                  <div className={styles.highlightModalMessage}>
-                    Please log in to create highlights
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Removed all highlight UI components - they were interfering with text selection */}
 
         {/* Emoji Modal */}
         {showEmojiModal && (
@@ -3600,6 +3063,61 @@ export default function BlogPost() {
             </div>
           </div>
         )}
+
+      {/* Highlight Button - appears when text is selected */}
+      {showHighlightButton && isAuthenticated && (
+        <>
+          {/* Desktop: Floating button */}
+          <button
+            className={styles.highlightButton}
+            onClick={() => {
+              // On mobile, show modal; on desktop, create directly
+              if (window.innerWidth <= 768) {
+                setShowHighlightModal(true);
+              } else {
+                createHighlight();
+              }
+            }}
+            style={{
+              top: `${highlightButtonPosition.top}px`,
+              left: `${highlightButtonPosition.left}px`,
+            }}
+            disabled={isCreatingHighlight}
+          >
+            <PencilIcon className={styles.highlightButtonIcon} />
+            {isCreatingHighlight ? 'Creating...' : 'Highlight'}
+          </button>
+
+          {/* Mobile: Modal */}
+          {showHighlightModal && (
+            <div className={styles.highlightModalOverlay} onClick={() => setShowHighlightModal(false)}>
+              <div className={styles.highlightModal} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.highlightModalHeader}>
+                  <h3>Create Highlight</h3>
+                  <button
+                    className={styles.highlightModalClose}
+                    onClick={() => setShowHighlightModal(false)}
+                  >
+                    <XMarkIcon className={styles.modalCloseIcon} />
+                  </button>
+                </div>
+                <div className={styles.highlightModalContent}>
+                  <div className={styles.selectedTextPreview}>
+                    &ldquo;{selectedText}&rdquo;
+                  </div>
+                  <button
+                    className={styles.highlightModalButton}
+                    onClick={createHighlight}
+                    disabled={isCreatingHighlight}
+                  >
+                    {isCreatingHighlight ? 'Creating Highlight...' : 'Create Highlight'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 } 

@@ -1264,18 +1264,23 @@
   color: inherit;
 }
 
-/* Prevent native context menu */
+/* Ensure text selection works properly */
 .postContent {
-  -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
-  user-select: text;
-  -webkit-touch-callout: none;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default;
   -webkit-tap-highlight-color: transparent;
+  pointer-events: auto !important;
 }
 
 .postContent * {
-  -webkit-touch-callout: none;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  pointer-events: auto !important;
 }
 
 /* Comment Section Styles */
@@ -2552,6 +2557,42 @@
     padding: 14px 20px;
     font-size: 0.95rem;
   }
+}
+
+/* Highlight Button */
+.highlightButton {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+  z-index: 1000;
+  transition: all 0.2s ease;
+  transform: translateX(-50%); /* Center horizontally on the left position */
+}
+
+.highlightButton:hover:not(:disabled) {
+  background-color: #7c3aed;
+  transform: translateX(-50%) translateY(-2px); /* Keep centered, move up slightly */
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.5);
+}
+
+.highlightButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.highlightButtonIcon {
+  width: 16px;
+  height: 16px;
 }
 
  

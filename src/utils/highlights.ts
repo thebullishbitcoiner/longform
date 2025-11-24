@@ -75,8 +75,6 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
     setIsLoading(true);
 
     try {
-      console.log('🔍 Fetching highlights for user:', currentUser.pubkey);
-      
       // Fetch user's highlights (kind 9802)
       const highlightsQuery = await ndk.fetchEvents({
         kinds: [9802],
@@ -85,7 +83,6 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
       });
 
       const highlightsArray = Array.from(highlightsQuery);
-      console.log(`🔍 Found ${highlightsArray.length} highlights`);
 
       // Convert events to highlights
       const userHighlights: Highlight[] = highlightsArray
@@ -97,8 +94,6 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
       
       setHighlights(userHighlights);
       setLastFetched(Date.now());
-      
-      console.log('🔍 Highlights cached and updated');
     } catch (error) {
       console.error('Error fetching highlights:', error);
     } finally {
@@ -119,15 +114,9 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
 
   // Get highlights for a specific post
   const getHighlightsForPost = useCallback((postId: string, postAuthor?: string, postDTag?: string): Highlight[] => {
-    // Debug: Only log if there are highlights to search through
-    if (highlights.length > 0) {
-      console.log('🔍 Searching highlights for post:', postId, '(', highlights.length, 'total highlights)');
-    }
-    
     const matches = highlights.filter(h => {
       // First try to match by postId (e tag) for backward compatibility
       if (h.postId === postId) {
-        console.log('🔍 Matched by e tag:', h.id);
         return true;
       }
       
@@ -141,7 +130,6 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
             const highlightAuthor = aTagParts[1];
             const highlightDTag = aTagParts[2];
             if (highlightAuthor === postAuthor && highlightDTag === postDTag) {
-              console.log('🔍 Matched by a tag:', h.id);
               return true;
             }
           }
@@ -151,7 +139,6 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
       return false;
     });
     
-    console.log('🔍 getHighlightsForPost result:', matches.length, 'matches');
     return matches;
   }, [highlights]);
 
@@ -204,17 +191,9 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
       return; // Skip auto-fetching if disabled
     }
     
-    console.log('🔍 useHighlights useEffect triggered:', {
-      isAuthenticated,
-      currentUserPubkey: currentUser?.pubkey,
-      highlightsCount: highlights.length
-    });
-    
     if (isAuthenticated && currentUser?.pubkey) {
-      console.log('🔍 Fetching highlights for user:', currentUser.pubkey);
       fetchHighlights();
     } else {
-      console.log('🔍 Clearing highlights - not authenticated or no user');
       setHighlights([]);
       setLastFetched(null);
     }
@@ -238,25 +217,17 @@ export function highlightTextInElement(
   highlights: Highlight[], 
   highlightClass = 'userHighlight'
 ) {
-  // Debug: Only log if there are highlights to apply
-  if (highlights.length > 0) {
-    console.log('🔍 Applying highlights:', highlights.length, 'highlights to', element?.tagName);
-  }
-
   if (!element || highlights.length === 0) {
-    console.log('🔍 No element or highlights, returning early');
     return;
   }
 
   // Check if element is still in the DOM
   if (!element.parentNode && element !== document.body) {
-    console.log('🔍 Element is no longer in the DOM, skipping highlights');
     return;
   }
 
   // Check if element has content
   if (!element.textContent || element.textContent.trim().length === 0) {
-    console.log('🔍 Element has no text content, skipping highlights');
     return;
   }
 
@@ -274,10 +245,6 @@ export function highlightTextInElement(
   highlights.forEach((highlight) => {
     const highlightText = highlight.content.trim();
     if (highlightText) {
-      // Debug: Only log if highlight is substantial
-      if (highlight.content.length > 10) {
-        console.log('🔍 Applying highlight:', highlight.content.substring(0, 30) + '...');
-      }
       applySimpleHighlight(element, highlightText, highlightClass);
     }
   });
