@@ -34,6 +34,7 @@ export type BlogContextType = {
   addPost: (post: BlogPost) => void;
   updateAuthorProfile: (pubkey: string, profile: AuthorProfile) => void;
   getPost: (id: string) => BlogPost | undefined;
+  getPostByAuthorAndD: (pubkey: string, dTag: string) => BlogPost | undefined;
   getSortedPosts: () => BlogPost[];
   isPostRead: (id: string) => boolean;
   markPostAsRead: (id: string) => void;
@@ -51,6 +52,7 @@ const BlogContext = createContext<BlogContextType>({
   addPost: () => {},
   updateAuthorProfile: () => {},
   getPost: () => undefined,
+  getPostByAuthorAndD: () => undefined,
   getSortedPosts: () => [],
   isPostRead: () => false,
   markPostAsRead: () => {},
@@ -172,6 +174,12 @@ export function BlogProvider({ children }: BlogProviderProps) {
     return posts.find(post => post.id === id);
   };
 
+  const getPostByAuthorAndD = (pubkey: string, dTag: string) => {
+    return posts.find(
+      p => p.pubkey === pubkey && (p.dTag === dTag || p.id.slice(0, 8) === dTag)
+    );
+  };
+
   const getSortedPosts = () => {
     return [...posts].sort((a, b) => b.created_at - a.created_at);
   };
@@ -258,6 +266,7 @@ export function BlogProvider({ children }: BlogProviderProps) {
       addPost,
       updateAuthorProfile,
       getPost,
+      getPostByAuthorAndD,
       getSortedPosts,
       isPostRead,
       markPostAsRead,

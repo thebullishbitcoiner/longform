@@ -23,8 +23,37 @@ const STORAGE_KEYS = {
   USER_POSTS: 'longform_userPosts',
   USER_DRAFTS: 'longform_userDrafts',
   HIGHLIGHT_CACHE_TIMESTAMP: 'longform_highlightCacheTimestamp',
-  RELAY_LIST_PREFIX: 'longform_relay_list_'
+  RELAY_LIST_PREFIX: 'longform_relay_list_',
+  READER_FOLLOWS: 'longform_readerFollows'
 };
+
+const READER_FOLLOWS_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/** Cache current user's follow list (pubkeys) for instant reader list load. */
+export function getCachedFollows(currentUserPubkey: string): string[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.READER_FOLLOWS);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as { pubkey: string; follows: string[]; timestamp: number };
+    if (data.pubkey !== currentUserPubkey) return null;
+    if (Date.now() - data.timestamp > READER_FOLLOWS_TTL_MS) return null;
+    return Array.isArray(data.follows) ? data.follows : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist follow list for the given user (for reader list cache). */
+export function cacheFollows(currentUserPubkey: string, follows: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const data = { pubkey: currentUserPubkey, follows, timestamp: Date.now() };
+    safeSetItem(STORAGE_KEYS.READER_FOLLOWS, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to cache follows', e);
+  }
+}
 
 // Simple storage operations without testing
 function safeSetItem(key: string, value: string): boolean {

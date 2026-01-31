@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { generateNip05Url, getUserIdentifier } from '@/utils/nostr';
 import { AuthGuard } from '@/components/AuthGuard';
 import { CONTACT_LIST_RELAYS } from '@/config/relays';
+import { getCachedFollows, cacheFollows } from '@/utils/storage';
 
 function getTagValue(tags: string[][], tagName: string): string | undefined {
   return tags.find(tag => tag[0] === tagName)?.[1];
@@ -26,14 +27,6 @@ const PostCard = memo(({ post, onClick, onHover, ndk }: { post: BlogPost; onClic
   const { isPostRead, markPostAsRead, markPostAsUnread, getAuthorProfile } = useBlog();
   const x = useMotionValue(0);
   const controls = useAnimation();
-
-  // Debug log to track rendering - only log once per render cycle
-  const renderCountRef = useRef(0);
-  renderCountRef.current++;
-  
-  if (renderCountRef.current === 1) {
-    console.log('🎯 DEBUG: PostCard rendering:', { id: post.id, title: post.title, renderCount: renderCountRef.current });
-  }
 
   // Transform x position to opacity for the action indicators
   const leftOpacity = useTransform(x, [-30, -15], [1, 0]);
@@ -162,7 +155,6 @@ const PostCard = memo(({ post, onClick, onHover, ndk }: { post: BlogPost; onClic
                 const authorIdentifier = await getUserIdentifier(ndk, post.pubkey);
                 const dTag = post.dTag || post.id.slice(0, 8);
                 const url = generateNip05Url(authorIdentifier, dTag);
-                console.log('🔗 Opening in new tab:', url);
                 window.open(url, '_blank');
               } catch (error) {
                 console.error('Error opening in new tab:', error);
@@ -285,12 +277,9 @@ export default function ReaderPage() {
   const [filter, setFilter] = useState<'all' | 'read' | 'unread'>('all');
   const [isLoadingFollows, setIsLoadingFollows] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>('');
-  const [showDebugConsole, setShowDebugConsole] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [postsToShow, setPostsToShow] = useState(21); // Track how many posts to display
   const [isNavigating, setIsNavigating] = useState(false); // Track navigation state
-  const [debouncedFilteredPosts, setDebouncedFilteredPosts] = useState<BlogPost[]>([]);
   
   // Now we can use the state variables in useMemo
   const sortedPosts = getSortedPosts();
@@ -365,26 +354,9 @@ export default function ReaderPage() {
   const lastSetupTimeRef = useRef(0);
   const subscriptionStateRef = useRef<'idle' | 'setting_up' | 'active' | 'stopping'>('idle');
 
-  // Fetch current user's follows (contact list)
   const fetchFollows = useCallback(async () => {
-    console.log('🔍 DEBUG: fetchFollows called', { 
-      ndk: !!ndk, 
-      isAuthenticated, 
-      isConnected,
-      isLoading,
-      isNavigating
-    });
-    
-    // Stop if we're navigating away
-    if (isNavigating) {
-      console.log('⏹️ DEBUG: Stopping fetchFollows - navigating away');
-      return;
-    }
-    
-    setDebugInfo('Fetching follows...');
-    
+    if (isNavigating) return;
     if (!ndk || !isAuthenticated || !isConnected || isLoading) {
-      console.log('❌ DEBUG: Cannot fetch follows - missing requirements');
       setFollows([]);
       return;
     }
@@ -395,32 +367,22 @@ export default function ReaderPage() {
       // Get current user
       const user = await ndk.signer?.user();
       
-      // Check navigation state again after async operation
-      if (isNavigating) {
-        console.log('⏹️ DEBUG: Stopping fetchFollows - navigating away after user fetch');
-        return;
-      }
-      
-      console.log('👤 DEBUG: Current user:', user ? { pubkey: user.pubkey, npub: user.npub } : 'null');
-      
+      if (isNavigating) return;
+
       if (!user?.pubkey) {
-        console.log('❌ DEBUG: No authenticated user found');
         setFollows([]);
         return;
       }
 
-      console.log('🔍 DEBUG: Fetching follows for user:', user.pubkey);
+      // Restore cached follows immediately so we can show cached posts while fetching
+      const cached = getCachedFollows(user.pubkey);
+      if (cached?.length) {
+        setFollows(cached);
+      }
 
-      // Function to fetch contact list from a specific relay
       const fetchFromRelay = async (relayUrl: string) => {
-        // Check navigation state before each relay query
-        if (isNavigating) {
-          console.log('⏹️ DEBUG: Stopping relay query - navigating away');
-          return null;
-        }
-        
+        if (isNavigating) return null;
         try {
-          console.log(`📡 DEBUG: Querying relay: ${relayUrl}`);
           const events = await ndk.fetchEvents({
             kinds: [3],
             authors: [user.pubkey],
@@ -429,37 +391,19 @@ export default function ReaderPage() {
             relayUrls: [relayUrl]
           });
           
-          // Check navigation state after async operation
-          if (isNavigating) {
-            console.log('⏹️ DEBUG: Stopping relay query - navigating away after fetch');
-            return null;
-          }
-          
+          if (isNavigating) return null;
+
           if (events.size > 0) {
             const event = Array.from(events)[0];
-            console.log(`✅ DEBUG: Found contact list on ${relayUrl}:`, {
-              id: event.id,
-              created_at: event.created_at,
-              timestamp: new Date(event.created_at * 1000).toISOString(),
-              tagsCount: event.tags.length
-            });
             return event;
-          } else {
-            console.log(`❌ DEBUG: No contact list found on ${relayUrl}`);
-            return null;
           }
-        } catch (error) {
-          console.log(`⚠️ DEBUG: Error querying ${relayUrl}:`, error);
+          return null;
+        } catch {
           return null;
         }
       };
 
-      // Query from specific trusted relays
       const trustedRelays = CONTACT_LIST_RELAYS;
-
-      console.log('📡 DEBUG: Querying trusted relays for contact list...');
-      
-      // Query each relay individually to see which has the most recent contact list
       const relayResults = await Promise.all(
         trustedRelays.map(async (relay) => {
           const event = await fetchFromRelay(relay);
@@ -467,63 +411,28 @@ export default function ReaderPage() {
         })
       );
 
-      // Check navigation state before processing results
-      if (isNavigating) {
-        console.log('⏹️ DEBUG: Stopping fetchFollows - navigating away before processing results');
-        return;
-      }
+      if (isNavigating) return;
 
       // Find the most recent contact list from all relays
       const validResults = relayResults.filter(result => result.event !== null);
       
       if (validResults.length > 0) {
-        // Sort by created_at to find the most recent
         validResults.sort((a, b) => b.event!.created_at - a.event!.created_at);
         const mostRecent = validResults[0];
-        
-        console.log('🏆 DEBUG: Most recent contact list found on:', mostRecent.relay);
-        console.log('📋 DEBUG: Contact list details:', {
-          relay: mostRecent.relay,
-          id: mostRecent.event!.id,
-          created_at: mostRecent.event!.created_at,
-          timestamp: new Date(mostRecent.event!.created_at * 1000).toISOString(),
-          tagsCount: mostRecent.event!.tags.length
-        });
-
-        // Extract pubkeys from contact list tags
         const followPubkeys = mostRecent.event!.tags
           .filter(tag => tag[0] === 'p')
           .map(tag => tag[1])
           .filter(Boolean);
 
-        console.log('👥 DEBUG: Found follows:', {
-          count: followPubkeys.length,
-          firstFew: followPubkeys.slice(0, 5),
-          sourceRelay: mostRecent.relay,
-          mostRecentEventAge: Math.floor((Date.now() / 1000) - mostRecent.event!.created_at) + ' seconds ago'
-        });
-        
-        // Clean the follows list to remove invalid pubkeys
         const cleanedFollows = followPubkeys.filter(pubkey => /^[0-9a-f]{64}$/i.test(pubkey));
-        const invalidFollows = followPubkeys.filter(pubkey => !/^[0-9a-f]{64}$/i.test(pubkey));
-        
-        if (invalidFollows.length > 0) {
-          console.log('⚠️ DEBUG: Found invalid follows:', invalidFollows);
-          setDebugInfo(`Cleaned follows: ${cleanedFollows.length} valid, ${invalidFollows.length} invalid removed`);
-        } else {
-          setDebugInfo(`Found ${cleanedFollows.length} follows from ${mostRecent.relay}`);
-        }
-        
         setFollows(cleanedFollows);
+        cacheFollows(user.pubkey, cleanedFollows);
       } else {
-        console.log('❌ DEBUG: No contact list found on any relay');
         setFollows([]);
-        setDebugInfo('No contact list found on any relay');
+        cacheFollows(user.pubkey, []);
       }
-    } catch (error) {
-      console.error('❌ DEBUG: Error fetching follows:', error);
+    } catch {
       setFollows([]);
-      setDebugInfo(`Error fetching follows: ${error}`);
     } finally {
       setIsLoadingFollows(false);
     }
@@ -532,12 +441,7 @@ export default function ReaderPage() {
   // Fetch follows when authentication status changes
   useEffect(() => {
     if (isAuthenticated && isConnected && !isLoading) {
-      // Defer follows fetching to prevent blocking navigation
-      const timeoutId = setTimeout(() => {
-        fetchFollows();
-      }, 50); // Small delay to prioritize navigation
-      
-      return () => clearTimeout(timeoutId);
+      fetchFollows();
     } else if (!isAuthenticated || !isConnected) {
       // Only clear follows when we're actually not authenticated or connected
       setFollows([]);
@@ -553,9 +457,7 @@ export default function ReaderPage() {
       hasClearedPosts.current = false;
     }
     
-    // Clear processed events when follows change to avoid processing old events
     processedEvents.current.clear();
-    console.log('🧹 DEBUG: Cleared processed events due to follows change');
   }, [follows, clearPosts]);
 
   // Reset postsToShow when filter changes
@@ -563,97 +465,29 @@ export default function ReaderPage() {
     setPostsToShow(21);
   }, [filter]);
 
-  // Debounce filteredPosts to prevent rapid re-renders
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setDebouncedFilteredPosts(filteredPosts);
-    }, 100); // 100ms debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [filteredPosts]);
-
-  // Setup subscription for posts
   const setupSubscription = useCallback(async () => {
-    console.log('🔍 DEBUG: setupSubscription called', { 
-      ndk: !!ndk, 
-      followsCount: follows.length,
-      isAuthenticated,
-      isConnected,
-      isLoading,
-      subscriptionState: subscriptionStateRef.current,
-      isNavigating
-    });
-    
-    // Stop if we're navigating away
-    if (isNavigating) {
-      console.log('⏹️ DEBUG: Stopping setupSubscription - navigating away');
-      return;
-    }
-    
-    // Prevent multiple simultaneous subscription setups
-    if (subscriptionStateRef.current === 'setting_up' || subscriptionStateRef.current === 'active') {
-      console.log('⏸️ DEBUG: Skipping subscription setup - already in progress or active');
-      return;
-    }
-    
-    // Debounce rapid subscription setups
+    if (isNavigating) return;
+    if (subscriptionStateRef.current === 'setting_up' || subscriptionStateRef.current === 'active') return;
     const now = Date.now();
     const timeSinceLastSetup = now - lastSetupTimeRef.current;
-    if (timeSinceLastSetup < 1000) { // Minimum 1 second between setups
-      console.log('⏰ DEBUG: Skipping subscription setup - too soon since last setup:', timeSinceLastSetup + 'ms');
-      return;
-    }
+    if (timeSinceLastSetup < 1000) return;
     lastSetupTimeRef.current = now;
-    
     subscriptionStateRef.current = 'setting_up';
-    setDebugInfo('Setting up subscription...');
-    
-    // Clean up any existing subscription
     if (subscriptionRef.current) {
-      console.log('🔄 DEBUG: Cleaning up existing subscription:', subscriptionRef.current.internalId);
       subscriptionStateRef.current = 'stopping';
       subscriptionRef.current.stop();
       subscriptionRef.current = null;
       subscriptionStateRef.current = 'idle';
     }
-    
-    // Don't clear processed events here - only clear when follows change
-    console.log('🧹 DEBUG: Setup subscription - processed events count:', processedEvents.current.size);
-    
-    // Reset event counter
     eventCountRef.current = 0;
 
-    // Only proceed if we have all requirements
     if (!ndk || follows.length === 0 || !isAuthenticated || !isConnected) {
-      console.log('❌ DEBUG: Cannot setup subscription', { 
-        hasNDK: !!ndk, 
-        followsCount: follows.length,
-        isAuthenticated,
-        isConnected
-      });
-      setDebugInfo(`Cannot setup subscription: hasNDK=${!!ndk}, follows=${follows.length}, auth=${isAuthenticated}, connected=${isConnected}`);
       subscriptionStateRef.current = 'idle';
       return;
     }
-
-    // Check if we already have posts from follows
-    const existingPosts = getSortedPosts().filter(post => follows.includes(post.pubkey));
-    console.log('🔍 DEBUG: Existing posts from follows:', {
-      existingCount: existingPosts.length,
-      followsCount: follows.length,
-      allPostsCount: getSortedPosts().length
-    });
-    
-    // Don't skip loading if we have existing posts - we want to keep the subscription open for new posts
-    // Note: Removed the isLoadingPosts check as it was preventing subscription creation
-
     setIsLoadingPosts(true);
-
-    // Set a fallback timeout to stop loading after 10 seconds
     loadingTimeoutRef.current = setTimeout(() => {
-      console.log('⏰ DEBUG: Loading timeout reached, stopping loading state');
       setIsLoadingPosts(false);
-      setDebugInfo('Loading timeout reached - no events received');
     }, 10000);
 
     try {
@@ -663,19 +497,6 @@ export default function ReaderPage() {
         authors: follows
       };
 
-      console.log('📡 DEBUG: Creating subscription with filter:', {
-        kinds: filter.kinds,
-        authorsCount: filter.authors.length,
-        firstFewAuthors: filter.authors.slice(0, 3),
-        allFollows: follows,
-        filterObject: filter
-      });
-      
-      // Log the exact filter being sent to NDK
-      console.log('🔍 DEBUG: NDK subscription filter:', JSON.stringify(filter, null, 2));
-
-      // Create new subscription with better configuration
-      console.log('📡 DEBUG: About to create subscription with NDK...');
       subscriptionRef.current = ndk.subscribe(
         filter,
         { 
@@ -684,33 +505,8 @@ export default function ReaderPage() {
         },
         {
           onEvent: async (event) => {
-            // Check navigation state before processing each event
-            if (isNavigating) {
-              console.log('⏹️ DEBUG: Skipping event processing - navigating away');
-              return;
-            }
-            
-            console.log('📨 DEBUG: Received event:', {
-              id: event.id,
-              pubkey: event.pubkey,
-              kind: event.kind,
-              created_at: event.created_at,
-              title: getTagValue(event.tags, 'title') || 'Untitled',
-              isFromFollow: follows.includes(event.pubkey),
-              followIndex: follows.indexOf(event.pubkey)
-            });
-            
-            // Skip if we've already processed this event
-            if (processedEvents.current.has(event.id)) {
-              const lastProcessed = processedEvents.current.get(event.id);
-              const timeSinceLastProcessed = Date.now() - (lastProcessed || 0);
-              console.log('⏭️ DEBUG: Skipping already processed event:', {
-                id: event.id,
-                timeSinceLastProcessed: timeSinceLastProcessed + 'ms',
-                processedEventsCount: processedEvents.current.size
-              });
-              return;
-            }
+            if (isNavigating) return;
+            if (processedEvents.current.has(event.id)) return;
             processedEvents.current.set(event.id, Date.now());
 
             // Increment event counter
@@ -722,11 +518,8 @@ export default function ReaderPage() {
               loadingTimeoutRef.current = null;
             }
             
-            // If we've received some events, stop loading after a shorter timeout
             if (eventCountRef.current >= 5) {
-              console.log('✅ DEBUG: Received sufficient events, stopping loading state');
               setIsLoadingPosts(false);
-              setDebugInfo(`Received ${eventCountRef.current} events, stopped loading`);
             }
 
             try {
@@ -751,28 +544,12 @@ export default function ReaderPage() {
                 dTag,
                 client
               };
-
-              console.log('✅ DEBUG: Adding post:', {
-                id: post.id,
-                title: post.title,
-                author: post.pubkey,
-                created_at: post.created_at
-              });
-
               addPost(post);
-
-              // Fetch profile if we haven't already - but check navigation state first
               if (!isNavigating) {
-                // Use the centralized profile fetching to prevent duplicates
                 fetchProfileOnce(event.pubkey, async () => {
                   const user = ndk.getUser({ pubkey: event.pubkey });
                   const profile = await user.fetchProfile();
                   if (profile) {
-                    console.log('👤 DEBUG: Fetched profile for:', {
-                      pubkey: event.pubkey,
-                      name: profile.name,
-                      displayName: profile.displayName
-                    });
                     return {
                       name: profile.name,
                       displayName: profile.displayName,
@@ -784,13 +561,11 @@ export default function ReaderPage() {
                   return null;
                 });
               }
-            } catch (error) {
-              console.error('❌ DEBUG: Error processing blog post:', error);
+            } catch {
+              // Skip malformed event
             }
           },
-          onEose: (subscription) => {
-            console.log('🏁 DEBUG: Subscription reached EOSE:', subscription.internalId);
-            // Clear the loading timeout
+          onEose: () => {
             if (loadingTimeoutRef.current) {
               clearTimeout(loadingTimeoutRef.current);
               loadingTimeoutRef.current = null;
@@ -799,64 +574,8 @@ export default function ReaderPage() {
           }
         }
       );
-      
-      console.log('✅ DEBUG: Subscription created successfully:', {
-        subscriptionId: subscriptionRef.current?.internalId,
-        hasSubscription: !!subscriptionRef.current
-      });
-      
-      // Log subscription creation for debugging
-      console.log('🔄 DEBUG: Subscription created:', subscriptionRef.current?.internalId);
       subscriptionStateRef.current = 'active';
-      
-      // Also try to fetch some recent events from follows to debug
-      console.log('🔍 DEBUG: Testing fetchEvents for debugging...');
-      
-      // Test 1: Fetch any recent longform posts (not just from follows)
-      ndk.fetchEvents({
-        kinds: [30023],
-        limit: 5
-      }).then(events => {
-        if (!isNavigating) {
-          console.log('🔍 DEBUG: Any longform posts test:', {
-            eventsCount: events.size,
-            events: Array.from(events).map(e => ({
-              id: e.id,
-              kind: e.kind,
-              pubkey: e.pubkey,
-              created_at: e.created_at,
-              title: getTagValue(e.tags, 'title') || 'No title'
-            }))
-          });
-        }
-      }).catch(error => {
-        console.error('❌ DEBUG: Any longform posts test failed:', error);
-      });
-      
-      // Test 2: Fetch events from follows (including regular notes)
-      ndk.fetchEvents({
-        kinds: [30023, 1], // Include regular notes too for debugging
-        authors: follows.slice(0, 5), // Test with first 5 follows
-        limit: 10
-      }).then(events => {
-        if (!isNavigating) {
-          console.log('🔍 DEBUG: Follows events test result:', {
-            eventsCount: events.size,
-            events: Array.from(events).map(e => ({
-              id: e.id,
-              kind: e.kind,
-              pubkey: e.pubkey,
-              created_at: e.created_at,
-              title: getTagValue(e.tags, 'title') || 'No title'
-            }))
-          });
-        }
-      }).catch(error => {
-        console.error('❌ DEBUG: Follows events test failed:', error);
-      });
-      
-    } catch (error) {
-      console.error('❌ DEBUG: Error setting up subscription:', error);
+    } catch {
       subscriptionStateRef.current = 'idle';
       // Clear the loading timeout
       if (loadingTimeoutRef.current) {
@@ -879,11 +598,9 @@ export default function ReaderPage() {
     return () => clearTimeout(timeoutId);
   }, [follows, isAuthenticated, isConnected, isLoading, setupSubscription]);
 
-  // Cleanup subscription on unmount
   useEffect(() => {
     return () => {
       if (subscriptionRef.current) {
-        console.log('🧹 DEBUG: Cleaning up subscription on unmount:', subscriptionRef.current.internalId);
         subscriptionStateRef.current = 'stopping';
         subscriptionRef.current.stop();
         subscriptionRef.current = null;
@@ -902,10 +619,7 @@ export default function ReaderPage() {
   // Reset navigation state when returning to reader page
   useEffect(() => {
     const handleRouteChange = () => {
-      if (window.location.pathname === '/reader') {
-        console.log('🔄 DEBUG: Returning to reader page, resetting navigation state');
-        setIsNavigating(false);
-      }
+      if (window.location.pathname === '/reader') setIsNavigating(false);
     };
 
     // Check current route on mount
@@ -930,7 +644,6 @@ export default function ReaderPage() {
       const dTag = post.dTag || post.id.slice(0, 8);
       
       const url = generateNip05Url(authorIdentifier, dTag);
-      console.log('🔗 Regular click - navigating to:', url);
       router.push(url);
     } catch (error) {
       console.error('Error generating URL:', error);
@@ -961,7 +674,7 @@ export default function ReaderPage() {
     return (
       <AuthGuard requireConnection={true}>
         <ErrorBoundary>
-          {isLoading || isLoadingFollows || isLoadingPosts || (subscriptionStateRef.current as string) === 'setting_up' || follows.length === 0 || debouncedFilteredPosts.length === 0 ? (
+          {follows.length === 0 && (isLoadingFollows || isLoading || !isConnected || !isAuthenticated) ? (
             <div className={styles.container}>
               <div className={styles.content}>
                 <div className="loading-content">
@@ -973,95 +686,14 @@ export default function ReaderPage() {
           ) : (
             <div className={styles.container}>
             <div className={styles.content}>
+              {(isLoadingFollows || isLoadingPosts) && (
+                <div className={styles.updatingBanner} role="status" aria-live="polite">
+                  Updating…
+                </div>
+              )}
               <div className={styles.header}>
                 <h1 className={styles.title}>Reads</h1>
                 <div className={styles.filterButtons}>
-                {process.env.NODE_ENV !== 'production' && (
-                  <>
-                    <button
-                      onClick={() => setShowDebugConsole(!showDebugConsole)}
-                      style={{
-                        padding: '4px 8px',
-                        background: 'rgba(0, 0, 0, 0.1)',
-                        color: '#666',
-                        border: '1px solid #ddd',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '10px',
-                        marginRight: '10px'
-                      }}
-                      title="Toggle Debug Console"
-                    >
-                      🔧
-                    </button>
-                    {/* Quick Debug Buttons */}
-                    <button
-                      onClick={() => {
-                        const allPosts = getSortedPosts();
-                        const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
-                        setDebugInfo(`Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`);
-                        console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        background: '#007bff',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '10px',
-                        marginRight: '10px'
-                      }}
-                      title="Count Posts"
-                    >
-                      📊
-                    </button>
-                    <button
-                      onClick={() => {
-                        console.log('🔍 DEBUG: Current state:', {
-                          filteredPostsLength: filteredPosts.length,
-                          postsToShow,
-                          firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
-                        });
-                        setDebugInfo(`Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`);
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        background: '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '10px',
-                        marginRight: '10px'
-                      }}
-                      title="Check Rendering"
-                    >
-                      🎨
-                    </button>
-                    <button
-                      onClick={() => {
-                        const allPosts = getSortedPosts();
-                        const uniqueIds = new Set(allPosts.map(p => p.id));
-                        setDebugInfo(`Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`);
-                        console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        background: '#fd7e14',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '10px',
-                        marginRight: '10px'
-                      }}
-                      title="Check Duplicates"
-                    >
-                      🔍
-                    </button>
-                  </>
-                )}
                 <button
                   onClick={() => setFilter('all')}
                   className={`${styles.filterButton} ${filter === 'all' ? styles.filterButtonActive : ''}`}
@@ -1082,366 +714,12 @@ export default function ReaderPage() {
                 </button>
               </div>
             </div>
-            {/* Debug Buttons - Only Visible in Development */}
-            {process.env.NODE_ENV !== 'production' && (
-              <div style={{ 
-                background: '#f8f9fa',
-                padding: '15px', 
-                margin: '15px 0', 
-                borderRadius: '8px', 
-                border: '2px solid #dee2e6',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  marginBottom: '10px',
-                  fontSize: '16px',
-                  fontWeight: 'bold',
-                  color: '#495057'
-                }}>
-                  <span style={{ marginRight: '10px' }}>🔍</span>
-                  Debug Tools
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  flexWrap: 'wrap', 
-                  gap: '10px'
-                }}>
-                  <button 
-                    onClick={() => {
-                      const allPosts = getSortedPosts();
-                      const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
-                      const info = `Posts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length}, Limit=${postsToShow}`;
-                      setDebugInfo(info);
-                      console.log('Quick debug:', { allPosts: allPosts.length, fromFollows: postsFromFollows.length, filtered: totalAvailablePosts.length, displayed: filteredPosts.length, limit: postsToShow });
-                      toast(info); // Force display
-                    }}
-                    style={{
-                      padding: '10px 15px',
-                      background: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}
-                  >
-                    📊 Count Posts
-                  </button>
-                  <button 
-                    onClick={() => {
-                      const info = `Rendering: ${filteredPosts.length} posts (limit: ${postsToShow})`;
-                      console.log('🔍 DEBUG: Current state:', {
-                        filteredPostsLength: filteredPosts.length,
-                        postsToShow,
-                        firstFew: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
-                      });
-                      setDebugInfo(info);
-                      toast(info); // Force display
-                    }}
-                    style={{
-                      padding: '10px 15px',
-                      background: '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}
-                  >
-                    🎨 Check Rendering
-                  </button>
-                  <button 
-                    onClick={() => {
-                      const allPosts = getSortedPosts();
-                      const uniqueIds = new Set(allPosts.map(p => p.id));
-                      const info = `Raw: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${allPosts.length - uniqueIds.size}`;
-                      setDebugInfo(info);
-                      console.log('Raw posts analysis:', { total: allPosts.length, unique: uniqueIds.size, duplicates: allPosts.length - uniqueIds.size });
-                      toast(info); // Force display
-                    }}
-                    style={{
-                      padding: '10px 15px',
-                      background: '#fd7e14',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}
-                  >
-                    🔍 Check Duplicates
-                  </button>
-                </div>
-                {debugInfo && (
-                  <div style={{ 
-                    background: '#e9ecef', 
-                    padding: '10px', 
-                    borderRadius: '6px',
-                    marginTop: '10px',
-                    fontFamily: 'monospace',
-                    fontSize: '13px',
-                    color: '#495057',
-                    border: '1px solid #ced4da'
-                  }}>
-                    <strong>Debug Info:</strong> {debugInfo}
-                  </div>
-                )}
-              </div>
-            )}
-            {showDebugConsole && (
-              <div style={{ 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                padding: '20px', 
-                margin: '20px 0', 
-                borderRadius: '12px', 
-                fontSize: '14px',
-                fontFamily: 'system-ui, -apple-system, sans-serif',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                border: '1px solid rgba(255, 255, 255, 0.2)'
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  marginBottom: '15px',
-                  fontSize: '16px',
-                  fontWeight: '600'
-                }}>
-                  <span style={{ 
-                    background: 'rgba(255, 255, 255, 0.2)', 
-                    padding: '4px 8px', 
-                    borderRadius: '6px',
-                    marginRight: '10px',
-                    fontSize: '12px'
-                  }}>
-                    🔍
-                  </span>
-                  Debug Console
-                </div>
-                <div style={{ 
-                  background: 'rgba(0, 0, 0, 0.2)', 
-                  padding: '12px', 
-                  borderRadius: '8px',
-                  marginBottom: '15px',
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}>
-                  {debugInfo}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  flexWrap: 'wrap', 
-                  gap: '10px'
-                }}>
-                  <button 
-                    onClick={() => {
-                      setDebugInfo('Checking subscription status...');
-                      const status = {
-                        hasSubscription: !!subscriptionRef.current,
-                        subscriptionId: subscriptionRef.current?.internalId,
-                        subscriptionState: subscriptionStateRef.current,
-                        isLoadingPosts,
-                        eventCount: eventCountRef.current,
-                        processedEventsCount: processedEvents.current.size,
-                        followsCount: follows.length,
-                        isAuthenticated,
-                        isConnected
-                      };
-                      setDebugInfo(`Subscription status: ${JSON.stringify(status, null, 2)}`);
-                      console.log('Subscription status:', status);
-                    }}
-                    style={{
-                      padding: '10px 16px',
-                      background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                      transition: 'all 0.2s ease',
-                      minWidth: '120px'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    📊 Check Status
-                  </button>
-                  <button 
-                                          onClick={() => {
-                        const allPosts = getSortedPosts();
-                        const postsFromFollows = allPosts.filter(post => follows.includes(post.pubkey));
-                        
-                        setDebugInfo(`Post counts: Total=${allPosts.length}, From follows=${postsFromFollows.length}, Filtered=${totalAvailablePosts.length}, Displayed=${filteredPosts.length} (limited to ${postsToShow})`);
-                        console.log('Post count info:', {
-                          total: allPosts.length,
-                          fromFollows: postsFromFollows.length,
-                          filtered: totalAvailablePosts.length,
-                          displayed: filteredPosts.length,
-                          limit: postsToShow
-                        });
-                      }}
-                    style={{
-                      padding: '10px 16px',
-                      background: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                      transition: 'all 0.2s ease',
-                      minWidth: '120px'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    📊 Post Counts
-                  </button>
-                  <button 
-                    onClick={() => {
-                      const hasMorePosts = totalAvailablePosts.length > postsToShow;
-                      
-                      setDebugInfo(`Load More Status: Showing ${postsToShow}/${totalAvailablePosts.length} posts. Has more: ${hasMorePosts}. Filter: ${filter}`);
-                      console.log('Load more status:', {
-                        showing: postsToShow,
-                        total: totalAvailablePosts.length,
-                        hasMore: hasMorePosts,
-                        filter
-                      });
-                    }}
-                    style={{
-                      padding: '10px 16px',
-                      background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                      transition: 'all 0.2s ease',
-                      minWidth: '120px'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    📄 Load More Status
-                  </button>
-                  <button 
-                    onClick={() => {
-                      console.log('🔍 DEBUG: Current posts state:', {
-                        allPosts: getSortedPosts().length,
-                        totalAvailable: totalAvailablePosts.length,
-                        filteredPosts: filteredPosts.length,
-                        postsToShow,
-                        firstFewFiltered: filteredPosts.slice(0, 3).map(p => ({ id: p.id, title: p.title }))
-                      });
-                      setDebugInfo(`Current state: All=${getSortedPosts().length}, Available=${totalAvailablePosts.length}, Filtered=${filteredPosts.length}, Showing=${postsToShow}`);
-                    }}
-                    style={{
-                      padding: '10px 16px',
-                      background: 'linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                      transition: 'all 0.2s ease',
-                      minWidth: '120px'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    🔍 Debug Posts
-                  </button>
-                  <button 
-                    onClick={() => {
-                      const allPosts = getSortedPosts();
-                      const uniqueIds = new Set(allPosts.map(p => p.id));
-                      const duplicateIds = allPosts.filter(p => {
-                        const count = allPosts.filter(pp => pp.id === p.id).length;
-                        return count > 1;
-                      });
-                      
-                      console.log('🔍 DEBUG: Raw posts analysis:', {
-                        totalPosts: allPosts.length,
-                        uniqueIds: uniqueIds.size,
-                        duplicateIds: duplicateIds.length,
-                        firstFewPosts: allPosts.slice(0, 5).map(p => ({ id: p.id, title: p.title, pubkey: p.pubkey }))
-                      });
-                      setDebugInfo(`Raw posts: Total=${allPosts.length}, Unique=${uniqueIds.size}, Duplicates=${duplicateIds.length}`);
-                    }}
-                    style={{
-                      padding: '10px 16px',
-                      background: 'linear-gradient(135deg, #fd7e14 0%, #e55a00 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                      transition: 'all 0.2s ease',
-                      minWidth: '120px'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                    }}
-                  >
-                    🔍 Raw Posts
-                  </button>
-                </div>
-              </div>
-            )}
-                         <div className={styles.postsGrid}>
-               {debouncedFilteredPosts.length === 0 && follows.length === 0 ? (
+            <div className={styles.postsGrid}>
+               {filteredPosts.length === 0 && follows.length === 0 ? (
                  <div className={styles.emptyState}>
                    You don&apos;t follow anyone yet. Follow some people on Nostr to see their longform posts here!
                  </div>
-               ) : debouncedFilteredPosts.length === 0 && follows.length > 0 ? (
+               ) : filteredPosts.length === 0 && follows.length > 0 ? (
                  <div className={styles.emptyState}>
                    {filter === 'all' ? (
                      "No blog posts found from people you follow."
@@ -1463,7 +741,7 @@ export default function ReaderPage() {
              </div>
             
             {/* Bottom controls row */}
-            {debouncedFilteredPosts.length > 0 && (
+            {filteredPosts.length > 0 && (
               <div style={{
                 padding: '20px',
                 textAlign: 'center',
@@ -1471,7 +749,7 @@ export default function ReaderPage() {
                 background: 'rgba(0, 0, 0, 0.3)',
                 marginTop: '0'
               }}>
-                {debouncedFilteredPosts.length === postsToShow && (
+                {filteredPosts.length === postsToShow && (
                   <div style={{
                     padding: '10px',
                     background: 'rgba(161, 161, 170, 0.1)',

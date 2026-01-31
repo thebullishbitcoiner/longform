@@ -20,7 +20,6 @@ export const DEFAULT_RELAYS = [
  * These relays are known to have good contact list data
  */
 export const CONTACT_LIST_RELAYS = [
-  'wss://relay.nostr.band',
   'wss://purplepag.es'
 ];
 

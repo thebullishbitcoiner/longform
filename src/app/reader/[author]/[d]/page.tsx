@@ -28,7 +28,6 @@ const createStandaloneNDK = () => {
   return new NDK({
     explicitRelayUrls: [
       'wss://relay.damus.io',
-      'wss://relay.nostr.band',
       'wss://relay.primal.net'
     ]
   });
@@ -370,15 +369,16 @@ CommentThread.displayName = 'CommentThread';
 
 export default function BlogPost() {
   const params = useParams();
-  const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce, updateAuthorProfile } = useBlog();
+  const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce, updateAuthorProfile, getPostByAuthorAndD } = useBlog();
   const { ndk: contextNdk, isAuthenticated, currentUser } = useNostr();
   const { getHighlightsForPost, addHighlight } = useHighlights();
   const { isPro } = useProStatus();
   
-  // Helper function for timestamped debug logs
-  const debugLog = (message: string, ...args: unknown[]) => {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`[${timestamp}] DEBUG: ${message}`, ...args);
+  const debugLog = (_message: string, ..._args: unknown[]) => {
+    if (process.env.NODE_ENV === 'development') {
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`[${timestamp}] DEBUG: ${_message}`, ..._args);
+    }
   };
   
   const [post, setPost] = useState<BlogPost | null>(null);
@@ -991,29 +991,47 @@ export default function BlogPost() {
       }
 
       const ndkToUse = contextNdk || standaloneNdk;
+      const author = decodeURIComponent(params.author as string);
+      const dTag = decodeURIComponent(params.d as string);
+      debugLog('Resolving author:', { author, dTag });
+
+      // If author is already a 64-char hex pubkey, skip NIP-05 resolution
+      const isPubkey = /^[0-9a-fA-F]{64}$/.test(author);
+      let pubkeyForLookup: string | null = isPubkey ? author : null;
+
+      if (!pubkeyForLookup && ndkToUse) {
+        pubkeyForLookup = await resolveNip05(ndkToUse, author);
+      }
+      if (!pubkeyForLookup) {
+        debugLog('No NDK available or could not resolve author');
+        setLoading(false);
+        return;
+      }
+
+      // Instant display from BlogContext when we have pubkey (e.g. from reader list)
+      if (pubkeyForLookup) {
+        const cachedPost = getPostByAuthorAndD(pubkeyForLookup, dTag);
+        if (cachedPost) {
+          setPost(cachedPost);
+          setProcessedContent(cachedPost.content);
+          setLoading(false);
+          setIsLoadingAdditionalData(true);
+          loadAdditionalData(cachedPost).finally(() => setIsLoadingAdditionalData(false));
+          if (ndkToUse) {
+            fetchPostByAuthorAndDTag(pubkeyForLookup, dTag).catch(() => {});
+          }
+          return;
+        }
+      }
+
       if (!ndkToUse) {
-        debugLog('No NDK available');
+        setLoading(false);
         return;
       }
 
       try {
-        const author = decodeURIComponent(params.author as string);
-        const dTag = decodeURIComponent(params.d as string);
-        
-        debugLog('Resolving author:', { author, dTag });
-
-        // Resolve the author identifier to a pubkey
-        const pubkey = await resolveNip05(ndkToUse, author);
-        
-        debugLog('Resolved pubkey:', { author, pubkey });
-
-        if (pubkey) {
-          debugLog('Fetching post with pubkey and dTag:', { pubkey, dTag });
-          await fetchPostByAuthorAndDTag(pubkey, dTag);
-        } else {
-          debugLog('Could not resolve author identifier:', author);
-          setLoading(false);
-        }
+        debugLog('Fetching post with pubkey and dTag:', { pubkey: pubkeyForLookup, dTag });
+        await fetchPostByAuthorAndDTag(pubkeyForLookup, dTag);
       } catch (error) {
         console.error('Error resolving author:', error);
         setLoading(false);
@@ -1021,7 +1039,7 @@ export default function BlogPost() {
     };
 
     resolveAuthor();
-  }, [params.author, params.d, contextNdk, standaloneNdk, fetchPostByAuthorAndDTag]);
+  }, [params.author, params.d, contextNdk, standaloneNdk, fetchPostByAuthorAndDTag, getPostByAuthorAndD, loadAdditionalData]);
 
   // Fetch reaction stats when post is loaded
   useEffect(() => {
@@ -1084,19 +1102,13 @@ export default function BlogPost() {
           if (bolt11Tag && bolt11Tag[1]) {
             try {
               const bolt11String = bolt11Tag[1].trim();
-              console.log('Attempting to decode bolt11:', bolt11String.substring(0, 50) + '...');
               const decoded = decode(bolt11String);
               amount = decoded.satoshis || 0;
               description = decoded.tagsObject?.description || '';
-              console.log('Successfully decoded bolt11 - amount:', amount, 'description:', description);
-            } catch (error) {
-              console.error('Error decoding bolt11 invoice:', error);
-              console.log('Bolt11 string:', bolt11Tag[1]);
-              // Fallback to amount tag if bolt11 decoding fails
+            } catch {
               const amountTag = zap.tags.find(tag => tag[0] === 'amount');
               if (amountTag && amountTag[1]) {
                 amount = parseInt(amountTag[1]) / 1000; // Convert from millisats to sats
-                console.log('Using fallback amount from amount tag:', amount);
               }
             }
           } else {
@@ -1113,15 +1125,11 @@ export default function BlogPost() {
             const cachedProfile = getAuthorProfile(zapperPubkey);
             if (cachedProfile) {
               authorName = cachedProfile.displayName || cachedProfile.name;
-              console.log('Using cached profile for zap author:', zapperPubkey, '->', authorName);
             } else {
-              console.log('Fetching profile for zap author:', zapperPubkey);
               const user = ndkToUse.getUser({ pubkey: zapperPubkey });
               const profile = await user.fetchProfile();
               if (profile) {
                 authorName = profile.displayName || profile.name;
-                console.log('Fetched profile for zap author:', zapperPubkey, '->', authorName, profile);
-                // Cache the profile for future use with image data
                 updateAuthorProfile(zapperPubkey, {
                   name: profile.name,
                   displayName: profile.displayName,
@@ -1129,24 +1137,14 @@ export default function BlogPost() {
                   image: profile.image,
                   picture: profile.picture
                 });
-              } else {
-                console.log('No profile found for zap author:', zapperPubkey);
               }
             }
-          } catch (error) {
-            console.error('Error fetching zap author profile:', error);
+          } catch {
+            // Skip profile fetch failure
           }
 
           // Use description from bolt11 invoice if available, otherwise fall back to description tag or content
           const finalDescription = description || descriptionTag?.[1] || zap.content || '';
-
-          console.log('Zap data being added:', {
-            id: zap.id,
-            zapperPubkey,
-            authorName,
-            amount,
-            content: finalDescription
-          });
 
           zapDetails.push({
             id: zap.id,
@@ -1157,8 +1155,8 @@ export default function BlogPost() {
             authorName,
             event: zap // Store the full NDK event
           });
-        } catch (error) {
-          console.error('Error parsing zap event:', error);
+        } catch {
+          // Skip malformed zap event
         }
       }
 
@@ -1425,26 +1423,14 @@ export default function BlogPost() {
 
       // Add client tag
       ndkEvent.tags.push(['client', 'Longform._']);
-
-      console.log('Publishing reaction event:', {
-        kind: ndkEvent.kind,
-        content: ndkEvent.content,
-        tags: ndkEvent.tags,
-        created_at: ndkEvent.created_at
-      });
-
-      // Publish the reaction event
       await ndkEvent.publish();
-      
-      console.log('Reaction created successfully:', ndkEvent.id);
-      
+
       // Refresh reaction stats
       if (fetchReactionStatsRef.current) {
         fetchReactionStatsRef.current(post.id);
       }
 
-    } catch (error) {
-      console.error('Error creating reaction:', error);
+    } catch {
       toast.error('Failed to create reaction. Please try again.');
     } finally {
       setIsSubmittingHeartReaction(false);
@@ -1680,20 +1666,8 @@ export default function BlogPost() {
       ];
 
       ndkEvent.created_at = Math.floor(Date.now() / 1000);
-
-      console.log('Publishing comment event:', {
-        kind: ndkEvent.kind,
-        content: ndkEvent.content,
-        tags: ndkEvent.tags,
-        created_at: ndkEvent.created_at
-      });
-
-      // Publish the comment event
       await ndkEvent.publish();
-      
-      console.log('Comment created successfully:', ndkEvent.id);
-      
-      // Clear the form and hide it
+
       setCommentText('');
       setShowCommentForm(false);
       
@@ -1706,7 +1680,6 @@ export default function BlogPost() {
       toast.success('Comment posted successfully!');
       
     } catch (error) {
-      console.error('Error creating comment:', error);
       toast.error(`Error posting comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmittingComment(false);
@@ -1783,25 +1756,8 @@ export default function BlogPost() {
       ];
 
       ndkEvent.created_at = Math.floor(Date.now() / 1000);
-
-      console.log('Publishing reply event:', {
-        kind: ndkEvent.kind,
-        content: ndkEvent.content,
-        tags: ndkEvent.tags,
-        created_at: ndkEvent.created_at,
-        parentComment: {
-          id: parentComment.id,
-          kind: parentComment.kind,
-          pubkey: parentComment.pubkey
-        }
-      });
-
-      // Publish the reply event
       await ndkEvent.publish();
-      
-      console.log('Reply created successfully:', ndkEvent.id);
-      
-      // Clear the form and hide it
+
       setReplyText('');
       setShowReplyForm(null);
       
@@ -1814,7 +1770,6 @@ export default function BlogPost() {
       toast.success('Reply posted successfully!');
       
     } catch (error) {
-      console.error('Error creating reply:', error);
       toast.error(`Error posting reply: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmittingReply(false);
@@ -2282,11 +2237,7 @@ export default function BlogPost() {
     const href = e.currentTarget.href;
     if (href.startsWith('nostr:')) {
       e.preventDefault();
-      // Handle nostr links (you can add specific handling here)
-      console.log('Nostr link clicked:', href);
     }
-    // For regular links, let the browser handle them normally (including new tab opening)
-    // Don't call preventDefault() for regular links
   };
 
   // Stable img component function to prevent re-renders
