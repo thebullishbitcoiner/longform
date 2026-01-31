@@ -747,6 +747,14 @@
   background-color: var(--background-secondary);
 }
 
+.tooltip-option-remove {
+  color: var(--error, #dc2626);
+}
+
+.tooltip-option-remove:hover {
+  background-color: color-mix(in srgb, var(--error, #dc2626) 15%, transparent);
+}
+
 .tooltip-url-input {
   display: flex;
   flex-direction: column;

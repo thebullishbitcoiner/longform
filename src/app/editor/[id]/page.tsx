@@ -832,7 +832,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ndkEvent.dTag = updatedDraft.dTag.trim();
         }
         
-        console.log('Editor: Setting content for publish:', {
+        console.log('Editor: Setting content for save:', {
           draftContent: updatedDraft.content.substring(0, 100) + '...',
           contentLength: updatedDraft.content.length,
           isUpdatingPublishedPost
@@ -900,7 +900,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             }
           }
           
-          // Add or update cover image tag
+          // Add or update cover image tag (or remove if cleared)
           const hasImageTag = filteredTags.some(tag => tag[0] === 'image');
           if (updatedDraft.coverImage) {
             if (hasImageTag) {
@@ -911,6 +911,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               // Add new image tag
               filteredTags.push(['image', updatedDraft.coverImage]);
             }
+          } else if (hasImageTag) {
+            const imageTagIndex = filteredTags.findIndex(tag => tag[0] === 'image');
+            filteredTags.splice(imageTagIndex, 1);
           }
           
           // Add client tag
@@ -994,7 +997,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         // Update the URL to reflect the new Nostr event ID
         router.replace(`/editor/${ndkEvent.id}`);
         
-        toast.success('Published successfully!');
+        toast.success('Draft saved.');
       } catch (error: unknown) {
         console.error('Editor: Error updating Nostr draft:', error);
         if (error instanceof Error) {
@@ -1190,6 +1193,22 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     handleCoverImageUpload();
   };
 
+  const handleRemoveCoverImage = () => {
+    if (!draft) return;
+    const updatedDraft = {
+      ...draft,
+      coverImage: undefined,
+      lastModified: new Date().toISOString(),
+    };
+    setDraft(updatedDraft);
+    setHasUnsavedChanges(true);
+    debouncedAutoSave(updatedDraft);
+    setCoverImageUrl('');
+    setCoverImageMode('upload');
+    setShowCoverImageTooltip(false);
+    toast.success('Cover image removed.');
+  };
+
   const handleShowUrlInput = () => {
     setCoverImageMode('url');
     // Keep tooltip open to show URL input
@@ -1298,7 +1317,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           }
         }
         
-        // Add or update cover image tag
+        // Add or update cover image tag (or remove if cleared)
         const hasImageTag = filteredTags.some(tag => tag[0] === 'image');
         if (draft.coverImage) {
           if (hasImageTag) {
@@ -1309,6 +1328,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             // Add new image tag
             filteredTags.push(['image', draft.coverImage]);
           }
+        } else if (hasImageTag) {
+          const imageTagIndex = filteredTags.findIndex(tag => tag[0] === 'image');
+          filteredTags.splice(imageTagIndex, 1);
         }
         
         // Add client tag
@@ -1523,6 +1545,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           className="tooltip-option"
                         >
                           Choose from library
+                        </button>
+                        <button 
+                          onClick={handleRemoveCoverImage}
+                          className="tooltip-option tooltip-option-remove"
+                        >
+                          Remove cover image
                         </button>
                       </div>
                     )}
