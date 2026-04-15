@@ -2,30 +2,9 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { safeSetItem, STORAGE_KEYS } from '@/utils/storage';
+import type { AuthorProfile, BlogPost } from '@/types/content';
 
-interface AuthorProfile {
-  name?: string;
-  displayName?: string;
-  nip05?: string;
-  image?: string;
-  picture?: string;
-}
-
-export interface BlogPost {
-  id: string;
-  pubkey: string;
-  created_at: number;
-  content: string;
-  title: string;
-  summary: string;
-  published_at: number;
-  image?: string;
-  tags: string[];
-  author?: AuthorProfile;
-  dTag?: string; // Add d tag for replaceable events
-  emojiTags?: Array<{ shortcode: string; url: string }>; // Store emoji tags for processing
-  client?: string; // Client identifier from tags
-}
+export type { AuthorProfile, BlogPost };
 
 export type BlogContextType = {
   posts: BlogPost[];

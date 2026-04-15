@@ -1,6 +1,3 @@
-export interface BlogDraft {
-  id: string;
-  title: string;
-  content: string;
-  lastModified: string;
-} 
+import type { LongformDraft } from './content';
+
+export type BlogDraft = LongformDraft;

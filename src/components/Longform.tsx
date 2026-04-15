@@ -7,9 +7,12 @@ import { useNostr } from '@/contexts/NostrContext';
 import { KIND_DELETION, KIND_LONGFORM_ARTICLE, KIND_LONGFORM_DRAFT } from '@/nostr/kinds';
 import { nostrDebug } from '@/nostr/debug';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
+import type { PublishedNote } from '@/types/content';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
+import { getTagValue } from '@/utils/nostrTags';
 import { copyToClipboard } from '@/utils/clipboard';
 import { 
+  Draft,
   getCachedDrafts, 
   getCachedPosts, 
   cacheUserDrafts, 
@@ -22,27 +25,6 @@ import './Longform.css';
 import { toast } from 'react-hot-toast';
 import JsonModal from './JsonModal';
 import ConfirmModal from './ConfirmModal';
-
-
-
-interface Draft {
-  id: string;
-  title: string;
-  content: string;
-  lastModified: string;
-  dTag?: string; // Store the 'd' tag value for tracking relationships
-}
-
-interface PublishedNote {
-  id: string;
-  pubkey: string; // Add pubkey for generating NIP-05 URLs
-  title: string;
-  content: string;
-  publishedAt: string;
-  summary?: string;
-  dTag?: string; // Store the 'd' tag value for tracking relationships
-  createdAt: string; // Add created_at for versioning
-}
 
 
 
@@ -258,7 +240,7 @@ export default function Longform() {
           const nonDeletedDraftEvents = uniqueDraftEvents.filter(event => {
             const isDeleted = deletedEventIds.has(event.id);
             if (isDeleted) {
-              const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
+              const title = getTagValue(event.tags as string[][], 'title') || 'Untitled';
               nostrDebug(`Longform: Removing deleted draft: ${event.id} with title: ${title}`);
             }
             return !isDeleted;
@@ -267,8 +249,8 @@ export default function Longform() {
           nostrDebug(`Longform: Draft events after filtering deletions: ${nonDeletedDraftEvents.length}`);
           
           const allDrafts: Draft[] = nonDeletedDraftEvents.map(event => {
-            const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
-            const dTag = event.tags.find((tag: string[]) => tag[0] === 'd')?.[1];
+            const title = getTagValue(event.tags as string[][], 'title') || 'Untitled';
+            const dTag = getTagValue(event.tags as string[][], 'd');
             return {
               id: event.id,
               title,
@@ -328,7 +310,7 @@ export default function Longform() {
           const nonDeletedPublishedEvents = uniquePublishedEvents.filter(event => {
             const isDeleted = deletedEventIds.has(event.id);
             if (isDeleted) {
-              const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
+              const title = getTagValue(event.tags as string[][], 'title') || 'Untitled';
               nostrDebug(`Longform: Removing deleted published note: ${event.id} with title: ${title}`);
             }
             return !isDeleted;
@@ -337,7 +319,7 @@ export default function Longform() {
           nostrDebug(`Longform: Published events after filtering deletions: ${nonDeletedPublishedEvents.length}`);
           
           const allPublishedNotes: PublishedNote[] = nonDeletedPublishedEvents.map(event => {
-            const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
+            const title = getTagValue(event.tags as string[][], 'title') || 'Untitled';
             const publishedAtRaw = event.tags.find((tag: string[]) => tag[0] === 'published_at')?.[1] || event.created_at.toString();
             const summary = event.content.length > 200 ? event.content.substring(0, 200) + '...' : event.content;
             
@@ -353,7 +335,7 @@ export default function Longform() {
               publishedAtTimestamp = publishedAtNum * 1000; // Convert seconds to milliseconds
             }
             
-            const dTag = event.tags.find((tag: string[]) => tag[0] === 'd')?.[1];
+            const dTag = getTagValue(event.tags as string[][], 'd');
             
             return {
               id: event.id,

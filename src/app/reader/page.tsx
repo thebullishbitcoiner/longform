@@ -15,14 +15,7 @@ import { AuthGuard } from '@/components/AuthGuard';
 import { CONTACT_LIST_RELAYS } from '@/config/relays';
 import { getCachedFollows, cacheFollows } from '@/utils/storage';
 import { KIND_CONTACT_LIST, KIND_LONGFORM_ARTICLE } from '@/nostr/kinds';
-
-function getTagValue(tags: string[][], tagName: string): string | undefined {
-  return tags.find(tag => tag[0] === tagName)?.[1];
-}
-
-function getTagValues(tags: string[][], tagName: string): string[] {
-  return tags.filter(tag => tag[0] === tagName).map(tag => tag[1]);
-}
+import { getTagValue, getTagValues } from '@/utils/nostrTags';
 
 const PostCard = memo(({ post, onClick, onHover, ndk }: { post: BlogPost; onClick: (post: BlogPost) => void; onHover: (post: BlogPost) => void; ndk: NDK }) => {
   const { isPostRead, markPostAsRead, markPostAsUnread, getAuthorProfile } = useBlog();

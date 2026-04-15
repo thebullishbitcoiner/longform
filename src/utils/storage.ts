@@ -1,18 +1,7 @@
 import { nostrDebug } from '@/nostr/debug';
+import type { LongformDraft } from '@/types/content';
 
-export interface Draft {
-  id: string;
-  title: string;
-  content: string;
-  lastModified: string;
-  sources?: Array<'local' | 'nostr'>;
-  dTag?: string;
-  originalTags?: string[][];
-  coverImage?: string;
-  summary?: string;
-  hashtags?: string[];
-  kind?: number; // 30024 for drafts, 30023 for published posts
-}
+export type Draft = LongformDraft;
 
 // Storage quota management
 const STORAGE_KEYS = {

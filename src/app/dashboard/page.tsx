@@ -20,6 +20,7 @@ import {
   KINDS_REPOST,
   longformArticleCoordinate,
 } from '@/nostr/kinds';
+import { getTagValue, getTagValues } from '@/utils/nostrTags';
 import styles from './page.module.css';
 
 
@@ -105,22 +106,16 @@ const DashboardPage: React.FC = () => {
             const content = event.content;
             const tags = event.tags;
             // Extract title from tags or content
-            const titleTag = tags.find((tag: string[]) => tag[0] === 'title');
-            const title = titleTag?.[1] || 'Untitled';
+            const title = getTagValue(tags as string[][], 'title') || 'Untitled';
             // Extract summary from tags or generate from content
-            const summaryTag = tags.find((tag: string[]) => tag[0] === 'summary');
-            const summary = summaryTag?.[1] || content.substring(0, 150) + '...';
+            const summary = getTagValue(tags as string[][], 'summary') || content.substring(0, 150) + '...';
             // Extract image from tags
-            const imageTag = tags.find((tag: string[]) => tag[0] === 'image');
-            const image = imageTag?.[1];
+            const image = getTagValue(tags as string[][], 'image');
             // Extract d-tag for versioning
-            const dTag = tags.find((tag: string[]) => tag[0] === 'd')?.[1];
+            const dTag = getTagValue(tags as string[][], 'd');
 
             // Extract hashtags from 't' tags
-            const hashtags = tags
-              .filter((tag: string[]) => tag[0] === 't')
-              .map((tag: string[]) => tag[1])
-              .filter(Boolean);
+            const hashtags = getTagValues(tags as string[][], 't');
             
             // Extract other tags (excluding hashtags and metadata tags) - keeping for potential future use
             // const otherTags = tags
