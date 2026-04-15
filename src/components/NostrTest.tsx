@@ -2,6 +2,8 @@
 
 import { useNostr } from '@/contexts/NostrContext';
 import { useEffect, useState } from 'react';
+import { KIND_TEXT_NOTE } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 
 export function NostrTest() {
   const { ndk, isLoading } = useNostr();
@@ -9,20 +11,20 @@ export function NostrTest() {
 
   useEffect(() => {
     const testNDK = async () => {
-      console.log('Test component: isLoading =', isLoading);
+      nostrDebug('Test component: isLoading =', isLoading);
       if (isLoading) {
         setTestResult('Waiting for NDK to initialize...');
         return;
       }
 
       try {
-        console.log('Starting NDK tests...');
+        nostrDebug('Starting NDK tests...');
         setTestResult('Starting tests...\n');
 
         // Test 1: Check connected relays
-        console.log('Checking connected relays...');
+        nostrDebug('Checking connected relays...');
         const connectedRelays = ndk.pool.connectedRelays();
-        console.log('Connected relays:', connectedRelays);
+        nostrDebug('Connected relays:', connectedRelays);
         
         if (connectedRelays.length === 0) {
           throw new Error('No relays are connected');
@@ -31,17 +33,17 @@ export function NostrTest() {
         setTestResult(prev => prev + `\nConnected to ${connectedRelays.length} relays:\n${connectedRelays.map(r => r.url).join('\n')}`);
 
         // Test 2: Subscribe to some recent notes
-        console.log('Setting up subscription...');
+        nostrDebug('Setting up subscription...');
         const subscription = ndk.subscribe(
-          { kinds: [1], limit: 5 },
+          { kinds: [KIND_TEXT_NOTE], limit: 5 },
           { closeOnEose: true },
           {
             onEvent: (event) => {
-              console.log('Received event:', event.id);
+              nostrDebug('Received event:', event.id);
               setTestResult(prev => prev + `\nReceived event: ${event.id}`);
             },
             onEose: () => {
-              console.log('Subscription EOSE received');
+              nostrDebug('Subscription EOSE received');
               setTestResult(prev => prev + '\nSubscription completed (EOSE)');
             }
           }
@@ -49,7 +51,7 @@ export function NostrTest() {
 
         // Cleanup subscription after 10 seconds
         setTimeout(() => {
-          console.log('Stopping subscription...');
+          nostrDebug('Stopping subscription...');
           subscription.stop();
           setTestResult(prev => prev + '\nTest completed');
         }, 10000);

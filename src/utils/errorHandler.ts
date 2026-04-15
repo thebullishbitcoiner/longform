@@ -1,4 +1,5 @@
 import { cleanupStorage } from './storage';
+import { nostrDebug } from '@/nostr/debug';
 
 // Global error handler for QuotaExceededError
 export function setupGlobalErrorHandler() {
@@ -14,7 +15,7 @@ export function setupGlobalErrorHandler() {
       
       try {
         cleanupStorage();
-        console.log('Global error handler: Storage cleanup completed');
+        nostrDebug('Global error handler: Storage cleanup completed');
       } catch (cleanupError) {
         console.error('Global error handler: Failed to cleanup storage:', cleanupError);
       }
@@ -31,7 +32,7 @@ export function setupGlobalErrorHandler() {
       
       try {
         cleanupStorage();
-        console.log('Global error handler: Storage cleanup completed');
+        nostrDebug('Global error handler: Storage cleanup completed');
       } catch (cleanupError) {
         console.error('Global error handler: Failed to cleanup storage:', cleanupError);
       }

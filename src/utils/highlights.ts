@@ -6,6 +6,8 @@ import {
   addHighlightToCache
 } from './storage';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
+import { KIND_DELETION, KIND_HIGHLIGHT } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 
 export interface Highlight {
   id: string;
@@ -75,9 +77,9 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
     setIsLoading(true);
 
     try {
-      // Fetch user's highlights (kind 9802)
+      // Fetch user's highlights (NIP-84)
       const highlightsQuery = await ndk.fetchEvents({
-        kinds: [9802],
+        kinds: [KIND_HIGHLIGHT],
         authors: [currentUser.pubkey],
         limit: 500, // Increased limit to get more highlights
       });
@@ -150,11 +152,11 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
     }
 
     try {
-      console.log('🗑️ Deleting highlight:', highlightId);
+      nostrDebug('Deleting highlight:', highlightId);
       
-      // Create a deletion event (kind 5)
+      // Create a deletion event (NIP-09)
       const deleteEvent = new NDKEvent(ndk);
-      deleteEvent.kind = 5; // Deletion event
+      deleteEvent.kind = KIND_DELETION;
       deleteEvent.content = 'Deleted highlight'; // Optional reason
       deleteEvent.tags = [
         ['e', highlightId] // Reference to the highlight being deleted
@@ -172,7 +174,7 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
       const updatedCachedHighlights = cachedHighlights.filter(h => h.id !== highlightId);
       cacheUserHighlights(currentUser.pubkey, updatedCachedHighlights);
       
-      console.log('🗑️ Highlight deleted successfully:', highlightId);
+      nostrDebug('Highlight deleted successfully:', highlightId);
       return true;
     } catch (error) {
       console.error('Error deleting highlight:', error);

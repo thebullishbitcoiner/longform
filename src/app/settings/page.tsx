@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
+import { NDKKind } from '@nostr-dev-kit/ndk';
 import {
     isValidRelayUrl,
     testRelayConnection,
@@ -24,6 +25,13 @@ import { getCustomEmojis, addCustomEmoji, removeCustomEmoji } from '@/utils/supa
 import { CustomEmoji, EmojiSet } from '@/config/supabase';
 import { hardcodedEmojiSets } from '@/data/emojiSets';
 import JSZip from 'jszip';
+import {
+    KIND_DELETION,
+    KIND_LONGFORM_ARTICLE,
+    KIND_LONGFORM_DRAFT,
+    KIND_PREFERRED_RELAYS,
+    KIND_RELAY_LIST,
+} from '@/nostr/kinds';
 import './page.css';
 
 interface BackupPost {
@@ -66,7 +74,7 @@ export default function SettingsPage() {
             setIsLoading(true);
             try {
                 const events = await ndk.fetchEvents({
-                    kinds: [10013 as number], // NIP-37 preferred relays kind
+                    kinds: [KIND_PREFERRED_RELAYS as NDKKind],
                     authors: [currentUser.pubkey],
                     limit: 1
                 });
@@ -94,7 +102,7 @@ export default function SettingsPage() {
             setIsLoadingRelayList(true);
             try {
                 const events = await ndk.fetchEvents({
-                    kinds: [10002], // NIP-65 relay list kind
+                    kinds: [KIND_RELAY_LIST],
                     authors: [currentUser.pubkey],
                     limit: 1
                 });
@@ -419,14 +427,14 @@ export default function SettingsPage() {
         try {
             // Fetch user's published posts (kind 30023)
             const postsQuery = await ndk.fetchEvents({
-                kinds: [30023],
+                kinds: [KIND_LONGFORM_ARTICLE],
                 authors: [currentUser.pubkey],
                 limit: 100,
             });
 
             // Fetch deletion events (kind 5) to filter out deleted posts
             const deletionQuery = await ndk.fetchEvents({
-                kinds: [5],
+                kinds: [KIND_DELETION],
                 authors: [currentUser.pubkey],
                 limit: 100,
             });
@@ -643,10 +651,10 @@ export default function SettingsPage() {
                         <div className="loading-spinner"></div>
                         <p className="loading-text">
                             {isLoading && isLoadingRelayList 
-                                ? "Loading kinds 30078 and 10002..." 
+                                ? `Loading kinds ${KIND_PREFERRED_RELAYS} and ${KIND_RELAY_LIST}...` 
                                 : isLoading 
-                                ? "Loading kind 30078 (NIP-37 preferred relays)..." 
-                                : "Loading kind 10002 (NIP-65 relay list)..."
+                                ? `Loading kind ${KIND_PREFERRED_RELAYS} (NIP-37 preferred relays)...` 
+                                : `Loading kind ${KIND_RELAY_LIST} (NIP-65 relay list)...`
                             }
                         </p>
                     </div>
@@ -1115,7 +1123,7 @@ export default function SettingsPage() {
                                 <li><strong>Read & Write:</strong> Both send and receive private events with this relay</li>
                             </ul>
                             <p>
-                                This setting only affects your draft events (kind 30024). Public events will continue to use your relay lists configuration.
+                                This setting only affects your draft events (kind {KIND_LONGFORM_DRAFT}). Public events will continue to use your relay lists configuration.
                             </p>
                         </div>
                     </div>
@@ -1145,7 +1153,7 @@ export default function SettingsPage() {
                                     className="external-link"
                                 >
                                     NIP-65
-                                </a>, relay lists allow users to publish their preferred relays as a Nostr event (kind 10002).
+                                </a>, relay lists allow users to publish their preferred relays as a Nostr event (kind {KIND_RELAY_LIST}).
                                 This enables:
                             </p>
                             <ul>

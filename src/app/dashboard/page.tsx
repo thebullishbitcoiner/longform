@@ -8,6 +8,18 @@ import { NDKEvent, NDKSubscription } from '@nostr-dev-kit/ndk';
 import { ChatBubbleLeftIcon, BoltIcon, ArrowPathIcon, DocumentTextIcon, HandThumbUpIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
+import { nostrDebug } from '@/nostr/debug';
+import {
+  KIND_DELETION,
+  KIND_LONGFORM_ARTICLE,
+  KIND_REACTION,
+  KIND_ZAP_REQUEST,
+  KIND_ZAP,
+  KIND_TEXT_NOTE,
+  KIND_NIP22_COMMENT,
+  KINDS_REPOST,
+  longformArticleCoordinate,
+} from '@/nostr/kinds';
 import styles from './page.module.css';
 
 
@@ -52,7 +64,7 @@ const DashboardPage: React.FC = () => {
     if (!ndk || !currentUser) return [];
 
     try {
-      console.log('Dashboard: Fetching user articles for:', currentUser.pubkey);
+      nostrDebug('Dashboard: Fetching user articles for:', currentUser.pubkey);
       
       return new Promise<BlogPost[]>((resolve) => {
         const articles: BlogPost[] = [];
@@ -62,7 +74,7 @@ const DashboardPage: React.FC = () => {
         // Subscribe to deletion events (kind 5) first
         const deletionSubscription = ndk.subscribe(
           { 
-            kinds: [5], 
+            kinds: [KIND_DELETION], 
             authors: [currentUser.pubkey]
           },
           { closeOnEose: true }
@@ -75,7 +87,7 @@ const DashboardPage: React.FC = () => {
         // Subscribe to published articles (kind 30023)
         const subscription = ndk.subscribe(
           { 
-            kinds: [30023], 
+            kinds: [KIND_LONGFORM_ARTICLE], 
             authors: [currentUser.pubkey],
             limit: 100 
           },
@@ -139,7 +151,7 @@ const DashboardPage: React.FC = () => {
         });
 
         subscription.on('eose', () => {
-          console.log('Dashboard: Found', articles.length, 'articles');
+          nostrDebug('Dashboard: Found', articles.length, 'articles');
           
           // Process deletion events to filter out deleted articles
           const deletedEventIds = new Set<string>();
@@ -151,18 +163,18 @@ const DashboardPage: React.FC = () => {
             });
           });
           
-          console.log(`Dashboard: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
+          nostrDebug(`Dashboard: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
           
           // Filter out deleted articles
           const nonDeletedArticles = articles.filter(article => {
             const isDeleted = deletedEventIds.has(article.id);
             if (isDeleted) {
-              console.log(`Dashboard: Removing deleted article: ${article.id} with title: ${article.title}`);
+              nostrDebug(`Dashboard: Removing deleted article: ${article.id} with title: ${article.title}`);
             }
             return !isDeleted;
           });
           
-          console.log(`Dashboard: Articles after filtering deletions: ${nonDeletedArticles.length}`);
+          nostrDebug(`Dashboard: Articles after filtering deletions: ${nonDeletedArticles.length}`);
           
           // Handle versioning - keep only the latest version of each article
           const finalArticles = nonDeletedArticles.filter(article => {
@@ -178,7 +190,7 @@ const DashboardPage: React.FC = () => {
                 );
                 
                 if (mostRecentArticle.id !== article.id) {
-                  console.log(`Dashboard: Removing older article ${article.id} keeping newer version ${mostRecentArticle.id} with d tag ${article.dTag}`);
+                  nostrDebug(`Dashboard: Removing older article ${article.id} keeping newer version ${mostRecentArticle.id} with d tag ${article.dTag}`);
                   return false;
                 }
               }
@@ -200,7 +212,7 @@ const DashboardPage: React.FC = () => {
                 );
                 
                 if (mostRecentWithDTag.id !== article.id) {
-                  console.log(`Dashboard: Removing article with same title but different d tag ${article.id} keeping version with d tag ${mostRecentWithDTag.id}`);
+                  nostrDebug(`Dashboard: Removing article with same title but different d tag ${article.id} keeping version with d tag ${mostRecentWithDTag.id}`);
                   return false;
                 }
               } else if (articlesWithoutDTags.length > 1) {
@@ -210,7 +222,7 @@ const DashboardPage: React.FC = () => {
                 );
                 
                 if (mostRecentArticle.id !== article.id) {
-                  console.log(`Dashboard: Removing older article with same title ${article.id} keeping newer version ${mostRecentArticle.id}`);
+                  nostrDebug(`Dashboard: Removing older article with same title ${article.id} keeping newer version ${mostRecentArticle.id}`);
                   return false;
                 }
               }
@@ -219,7 +231,7 @@ const DashboardPage: React.FC = () => {
             return true;
           });
           
-          console.log(`Dashboard: Final articles after versioning cleanup: ${finalArticles.length}`);
+          nostrDebug(`Dashboard: Final articles after versioning cleanup: ${finalArticles.length}`);
           
           // Close subscriptions
           deletionSubscription.stop();
@@ -227,7 +239,7 @@ const DashboardPage: React.FC = () => {
         });
 
         subscription.on('close', () => {
-          console.log('Dashboard: Articles subscription closed');
+          nostrDebug('Dashboard: Articles subscription closed');
         });
 
       });
@@ -265,7 +277,7 @@ const DashboardPage: React.FC = () => {
           // Build article coordinates for comment fetching
           const articleCoordinates = articles.map(article => {
             if (article.dTag) {
-              return `30023:${article.pubkey}:${article.dTag}`;
+              return longformArticleCoordinate(article.pubkey, article.dTag);
             }
             return null;
           }).filter(Boolean) as string[];
@@ -276,9 +288,9 @@ const DashboardPage: React.FC = () => {
 
           const checkComplete = () => {
             completedSubscriptions++;
-            console.log(`Dashboard: Subscription ${completedSubscriptions}/${totalSubscriptions} completed`);
+            nostrDebug(`Dashboard: Subscription ${completedSubscriptions}/${totalSubscriptions} completed`);
             if (completedSubscriptions === totalSubscriptions) {
-              console.log('Dashboard: All subscriptions completed, resolving stats');
+              nostrDebug('Dashboard: All subscriptions completed, resolving stats');
               clearTimeout(timeout);
               // Close all subscriptions
               subscriptions.forEach(sub => sub.stop());
@@ -288,7 +300,7 @@ const DashboardPage: React.FC = () => {
 
           // Add timeout to prevent hanging
           const timeout = setTimeout(() => {
-            console.log('Dashboard: Interaction fetch timeout, resolving with current stats');
+            nostrDebug('Dashboard: Interaction fetch timeout, resolving with current stats');
             // Close any remaining subscriptions
             subscriptions.forEach(sub => sub.stop());
             resolve(articleStats);
@@ -297,7 +309,7 @@ const DashboardPage: React.FC = () => {
           // Fetch reactions (kind 7 - likes, hearts, etc.) by event ID
           const reactionsByESubscription = ndk.subscribe(
             { 
-              kinds: [7], 
+              kinds: [KIND_REACTION], 
               '#e': articleIds,
               limit: 1000 
             },
@@ -308,7 +320,7 @@ const DashboardPage: React.FC = () => {
           // Fetch reactions by article coordinate (#a tags)
           const reactionsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
             { 
-              kinds: [7], 
+              kinds: [KIND_REACTION], 
               '#a': articleCoordinates,
               limit: 1000 
             },
@@ -345,7 +357,7 @@ const DashboardPage: React.FC = () => {
               const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
               if (aTag) {
                 targetArticle = articles.find(article => 
-                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                  article.dTag && longformArticleCoordinate(article.pubkey, article.dTag) === aTag
                 );
                 if (targetArticle) {
                   articleId = targetArticle.id;
@@ -366,22 +378,22 @@ const DashboardPage: React.FC = () => {
           }
 
           reactionsByESubscription.on('eose', () => {
-            console.log('Dashboard: Reactions by E subscription EOSE');
+            nostrDebug('Dashboard: Reactions by E subscription EOSE');
             checkComplete();
           });
 
           reactionsByESubscription.on('close', () => {
-            console.log('Dashboard: Reactions by E subscription closed');
+            nostrDebug('Dashboard: Reactions by E subscription closed');
           });
 
           if (reactionsByASubscription) {
             reactionsByASubscription.on('eose', () => {
-              console.log('Dashboard: Reactions by A subscription EOSE');
+              nostrDebug('Dashboard: Reactions by A subscription EOSE');
               checkComplete();
             });
 
             reactionsByASubscription.on('close', () => {
-              console.log('Dashboard: Reactions by A subscription closed');
+              nostrDebug('Dashboard: Reactions by A subscription closed');
             });
           }
 
@@ -390,7 +402,7 @@ const DashboardPage: React.FC = () => {
           // Fetch zap requests (kind 9734 - contains amount) by event ID
           const zapRequestsByESubscription = ndk.subscribe(
             { 
-              kinds: [9734], 
+              kinds: [KIND_ZAP_REQUEST], 
               '#e': articleIds,
               limit: 1000 
             },
@@ -401,7 +413,7 @@ const DashboardPage: React.FC = () => {
           // Fetch zap requests by article coordinate (#a tags)
           const zapRequestsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
             { 
-              kinds: [9734], 
+              kinds: [KIND_ZAP_REQUEST], 
               '#a': articleCoordinates,
               limit: 1000 
             },
@@ -415,7 +427,7 @@ const DashboardPage: React.FC = () => {
           // Fetch zap receipts (kind 9735) by event ID
           const zapReceiptsByESubscription = ndk.subscribe(
             { 
-              kinds: [9735], 
+              kinds: [KIND_ZAP], 
               '#e': articleIds,
               limit: 1000 
             },
@@ -426,7 +438,7 @@ const DashboardPage: React.FC = () => {
           // Fetch zap receipts by article coordinate (#a tags)
           const zapReceiptsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
             { 
-              kinds: [9735], 
+              kinds: [KIND_ZAP], 
               '#a': articleCoordinates,
               limit: 1000 
             },
@@ -459,7 +471,7 @@ const DashboardPage: React.FC = () => {
               const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
               if (aTag) {
                 targetArticle = articles.find(article => 
-                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                  article.dTag && longformArticleCoordinate(article.pubkey, article.dTag) === aTag
                 );
                 if (targetArticle) {
                   articleId = targetArticle.id;
@@ -502,7 +514,7 @@ const DashboardPage: React.FC = () => {
               const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
               if (aTag) {
                 targetArticle = articles.find(article => 
-                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                  article.dTag && longformArticleCoordinate(article.pubkey, article.dTag) === aTag
                 );
                 if (targetArticle) {
                   articleId = targetArticle.id;
@@ -529,22 +541,22 @@ const DashboardPage: React.FC = () => {
           }
 
           zapRequestsByESubscription.on('eose', () => {
-            console.log('Dashboard: Zap requests by E subscription EOSE');
+            nostrDebug('Dashboard: Zap requests by E subscription EOSE');
             checkComplete();
           });
 
           zapRequestsByESubscription.on('close', () => {
-            console.log('Dashboard: Zap requests by E subscription closed');
+            nostrDebug('Dashboard: Zap requests by E subscription closed');
           });
 
           if (zapRequestsByASubscription) {
             zapRequestsByASubscription.on('eose', () => {
-              console.log('Dashboard: Zap requests by A subscription EOSE');
+              nostrDebug('Dashboard: Zap requests by A subscription EOSE');
               checkComplete();
             });
 
             zapRequestsByASubscription.on('close', () => {
-              console.log('Dashboard: Zap requests by A subscription closed');
+              nostrDebug('Dashboard: Zap requests by A subscription closed');
             });
           }
 
@@ -555,29 +567,29 @@ const DashboardPage: React.FC = () => {
           }
 
           zapReceiptsByESubscription.on('eose', () => {
-            console.log('Dashboard: Zap receipts by E subscription EOSE');
+            nostrDebug('Dashboard: Zap receipts by E subscription EOSE');
             checkComplete();
           });
 
           zapReceiptsByESubscription.on('close', () => {
-            console.log('Dashboard: Zap receipts by E subscription closed');
+            nostrDebug('Dashboard: Zap receipts by E subscription closed');
           });
 
           if (zapReceiptsByASubscription) {
             zapReceiptsByASubscription.on('eose', () => {
-              console.log('Dashboard: Zap receipts by A subscription EOSE');
+              nostrDebug('Dashboard: Zap receipts by A subscription EOSE');
               checkComplete();
             });
 
             zapReceiptsByASubscription.on('close', () => {
-              console.log('Dashboard: Zap receipts by A subscription closed');
+              nostrDebug('Dashboard: Zap receipts by A subscription closed');
             });
           }
 
           // Fetch comments (kind 1 and kind 1111 that reference articles by event ID)
           const commentsByESubscription = ndk.subscribe(
             { 
-              kinds: [1, 1111], 
+              kinds: [KIND_TEXT_NOTE, KIND_NIP22_COMMENT], 
               '#e': articleIds,
               limit: 1000 
             },
@@ -588,7 +600,7 @@ const DashboardPage: React.FC = () => {
           // Fetch comments that reference articles by coordinate (#a tags)
           const commentsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
             { 
-              kinds: [1, 1111], 
+              kinds: [KIND_TEXT_NOTE, KIND_NIP22_COMMENT], 
               '#a': articleCoordinates,
               limit: 1000 
             },
@@ -620,7 +632,7 @@ const DashboardPage: React.FC = () => {
               const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
               if (aTag) {
                 targetArticle = articles.find(article => 
-                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                  article.dTag && longformArticleCoordinate(article.pubkey, article.dTag) === aTag
                 );
                 if (targetArticle) {
                   articleId = targetArticle.id;
@@ -641,29 +653,29 @@ const DashboardPage: React.FC = () => {
           }
 
           commentsByESubscription.on('eose', () => {
-            console.log('Dashboard: Comments by E subscription EOSE');
+            nostrDebug('Dashboard: Comments by E subscription EOSE');
             checkComplete();
           });
 
           commentsByESubscription.on('close', () => {
-            console.log('Dashboard: Comments by E subscription closed');
+            nostrDebug('Dashboard: Comments by E subscription closed');
           });
 
           if (commentsByASubscription) {
             commentsByASubscription.on('eose', () => {
-              console.log('Dashboard: Comments by A subscription EOSE');
+              nostrDebug('Dashboard: Comments by A subscription EOSE');
               checkComplete();
             });
 
             commentsByASubscription.on('close', () => {
-              console.log('Dashboard: Comments by A subscription closed');
+              nostrDebug('Dashboard: Comments by A subscription closed');
             });
           }
 
           // Fetch reposts (kind 6 - standard reposts, kind 16 - generic reposts) by event ID
           const repostsByESubscription = ndk.subscribe(
             { 
-              kinds: [6, 16], 
+              kinds: [...KINDS_REPOST], 
               '#e': articleIds,
               limit: 1000 
             },
@@ -674,7 +686,7 @@ const DashboardPage: React.FC = () => {
           // Fetch reposts by article coordinate (#a tags)
           const repostsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
             { 
-              kinds: [6, 16], 
+              kinds: [...KINDS_REPOST], 
               '#a': articleCoordinates,
               limit: 1000 
             },
@@ -688,7 +700,7 @@ const DashboardPage: React.FC = () => {
           // Fetch quote reposts (kind 1 with q tags) by event ID
           const quoteRepostsByESubscription = ndk.subscribe(
             { 
-              kinds: [1], 
+              kinds: [KIND_TEXT_NOTE], 
               '#q': articleIds,
               limit: 1000 
             },
@@ -699,7 +711,7 @@ const DashboardPage: React.FC = () => {
           // Fetch quote reposts by article coordinate (#a tags)
           const quoteRepostsByASubscription = articleCoordinates.length > 0 ? ndk.subscribe(
             { 
-              kinds: [1], 
+              kinds: [KIND_TEXT_NOTE], 
               '#q': articleCoordinates,
               limit: 1000 
             },
@@ -735,7 +747,7 @@ const DashboardPage: React.FC = () => {
               const aTag = event.tags.find((tag: string[]) => tag[0] === 'a')?.[1];
               if (aTag) {
                 targetArticle = articles.find(article => 
-                  article.dTag && `30023:${article.pubkey}:${article.dTag}` === aTag
+                  article.dTag && longformArticleCoordinate(article.pubkey, article.dTag) === aTag
                 );
                 if (targetArticle) {
                   articleId = targetArticle.id;
@@ -760,42 +772,42 @@ const DashboardPage: React.FC = () => {
           }
 
           repostsByESubscription.on('eose', () => {
-            console.log('Dashboard: Reposts by E subscription EOSE');
+            nostrDebug('Dashboard: Reposts by E subscription EOSE');
             checkComplete();
           });
 
           repostsByESubscription.on('close', () => {
-            console.log('Dashboard: Reposts by E subscription closed');
+            nostrDebug('Dashboard: Reposts by E subscription closed');
           });
 
           if (repostsByASubscription) {
             repostsByASubscription.on('eose', () => {
-              console.log('Dashboard: Reposts by A subscription EOSE');
+              nostrDebug('Dashboard: Reposts by A subscription EOSE');
               checkComplete();
             });
 
             repostsByASubscription.on('close', () => {
-              console.log('Dashboard: Reposts by A subscription closed');
+              nostrDebug('Dashboard: Reposts by A subscription closed');
             });
           }
 
           quoteRepostsByESubscription.on('eose', () => {
-            console.log('Dashboard: Quote reposts by E subscription EOSE');
+            nostrDebug('Dashboard: Quote reposts by E subscription EOSE');
             checkComplete();
           });
 
           quoteRepostsByESubscription.on('close', () => {
-            console.log('Dashboard: Quote reposts by E subscription closed');
+            nostrDebug('Dashboard: Quote reposts by E subscription closed');
           });
 
           if (quoteRepostsByASubscription) {
             quoteRepostsByASubscription.on('eose', () => {
-              console.log('Dashboard: Quote reposts by A subscription EOSE');
+              nostrDebug('Dashboard: Quote reposts by A subscription EOSE');
               checkComplete();
             });
 
             quoteRepostsByASubscription.on('close', () => {
-              console.log('Dashboard: Quote reposts by A subscription closed');
+              nostrDebug('Dashboard: Quote reposts by A subscription closed');
             });
           }
         });

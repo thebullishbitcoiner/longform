@@ -14,6 +14,7 @@ import { generateNip05Url, getUserIdentifier } from '@/utils/nostr';
 import { AuthGuard } from '@/components/AuthGuard';
 import { CONTACT_LIST_RELAYS } from '@/config/relays';
 import { getCachedFollows, cacheFollows } from '@/utils/storage';
+import { KIND_CONTACT_LIST, KIND_LONGFORM_ARTICLE } from '@/nostr/kinds';
 
 function getTagValue(tags: string[][], tagName: string): string | undefined {
   return tags.find(tag => tag[0] === tagName)?.[1];
@@ -384,7 +385,7 @@ export default function ReaderPage() {
         if (isNavigating) return null;
         try {
           const events = await ndk.fetchEvents({
-            kinds: [3],
+            kinds: [KIND_CONTACT_LIST],
             authors: [user.pubkey],
             limit: 1
           }, {
@@ -493,7 +494,7 @@ export default function ReaderPage() {
     try {
       // Create filter object explicitly - support multiple longform kinds
       const filter = {
-        kinds: [30023], // 30023 is the standard longform kind
+        kinds: [KIND_LONGFORM_ARTICLE],
         authors: follows
       };
 

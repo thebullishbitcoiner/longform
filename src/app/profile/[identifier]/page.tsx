@@ -20,6 +20,8 @@ import { DEFAULT_RELAYS } from '@/config/relays';
 import JsonModal from '@/components/JsonModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useHighlights } from '@/utils/highlights';
+import { KIND_DELETION, KIND_HIGHLIGHT, KIND_LONGFORM_ARTICLE } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
@@ -161,7 +163,7 @@ export default function ProfilePage() {
       // Check cache first
       const cachedHighlights = getCachedHighlights(profile.pubkey);
       if (cachedHighlights && cachedHighlights.length > 0) {
-        console.log(`Profile: Using cached highlights (${cachedHighlights.length} items)`);
+        nostrDebug(`Profile: Using cached highlights (${cachedHighlights.length} items)`);
         
                  // Convert cached highlights to ProfileHighlight format (without author info initially)
          const profileHighlights = cachedHighlights.map(highlight => ({
@@ -249,7 +251,7 @@ export default function ProfilePage() {
                 await fetchCachedAuthorProfile(authorPubkey);
               }
              
-             console.log(`Profile: Updated cached highlights with author info for ${authorPubkeys.size} authors`);
+             nostrDebug(`Profile: Updated cached highlights with author info for ${authorPubkeys.size} authors`);
            } catch (error) {
              console.error('Error fetching author profiles for cached highlights:', error);
            }
@@ -259,15 +261,15 @@ export default function ProfilePage() {
       }
 
       // Fetch user's highlights (kind 9802) if no cache available
-      console.log(`Profile: Fetching highlights from network for ${profile.pubkey}`);
+      nostrDebug(`Profile: Fetching highlights from network for ${profile.pubkey}`);
       const highlightsQuery = await ndkToUse.fetchEvents({
-        kinds: [9802],
+        kinds: [KIND_HIGHLIGHT],
         authors: [profile.pubkey],
         limit: 100,
       });
 
       const highlightsArray = Array.from(highlightsQuery);
-      console.log(`Profile: Found ${highlightsArray.length} highlights`);
+      nostrDebug(`Profile: Found ${highlightsArray.length} highlights`);
 
       // Update count immediately when we get the raw highlights
       setHighlights(() => {
@@ -431,8 +433,8 @@ export default function ProfilePage() {
         })
         .sort((a, b) => b.created_at - a.created_at);
 
-      console.log('Profile: Updating highlights with full data:', profileHighlights.length, 'highlights');
-      console.log('Profile: Sample highlight with author data:', profileHighlights[0]);
+      nostrDebug('Profile: Updating highlights with full data:', profileHighlights.length, 'highlights');
+      nostrDebug('Profile: Sample highlight with author data:', profileHighlights[0]);
       
                     // Cache the highlights for faster future loading
         const highlightsForCache = profileHighlights.map(highlight => ({
@@ -448,14 +450,14 @@ export default function ProfilePage() {
             id: highlight.event.id,
             pubkey: highlight.event.pubkey,
             created_at: highlight.event.created_at || 0,
-            kind: highlight.event.kind || 9802,
+            kind: highlight.event.kind || KIND_HIGHLIGHT,
             tags: highlight.event.tags || [],
             content: highlight.event.content || '',
             sig: highlight.event.sig || ''
           } : undefined // Store the complete event data for JSON viewing
         }));
       cacheUserHighlights(profile.pubkey, highlightsForCache);
-      console.log(`Profile: Cached ${highlightsForCache.length} highlights for future use`);
+      nostrDebug(`Profile: Cached ${highlightsForCache.length} highlights for future use`);
       
       setHighlights(profileHighlights);
       setHighlightsLoaded(true);
@@ -487,14 +489,14 @@ export default function ProfilePage() {
   const fetchAndCachePosts = async (ndkToUse: NDK, pubkey: string) => {
     // Fetch user's blog posts (kind 30023)
     const postsQuery = await ndkToUse.fetchEvents({
-      kinds: [30023],
+      kinds: [KIND_LONGFORM_ARTICLE],
       authors: [pubkey],
       limit: 50,
     });
 
     // Fetch deletion events (kind 5) to filter out deleted posts
     const deletionQuery = await ndkToUse.fetchEvents({
-      kinds: [5],
+      kinds: [KIND_DELETION],
       authors: [pubkey],
       limit: 100,
     });
@@ -509,17 +511,17 @@ export default function ProfilePage() {
       });
     });
 
-    console.log(`Profile: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
+    nostrDebug(`Profile: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
 
     const allPosts = Array.from(postsQuery);
-    console.log(`Profile: Found ${allPosts.length} total posts`);
+    nostrDebug(`Profile: Found ${allPosts.length} total posts`);
 
     const profilePosts: ProfilePost[] = allPosts
       .filter(event => {
         // Filter out deleted posts
         const isDeleted = deletedEventIds.has(event.id);
         if (isDeleted) {
-          console.log(`Profile: Removing deleted post: ${event.id}`);
+          nostrDebug(`Profile: Removing deleted post: ${event.id}`);
         }
         return !isDeleted;
       })
@@ -546,7 +548,7 @@ export default function ProfilePage() {
       })
       .sort((a, b) => b.published_at - a.published_at);
 
-    console.log(`Profile: Posts after filtering deletions: ${profilePosts.length}`);
+    nostrDebug(`Profile: Posts after filtering deletions: ${profilePosts.length}`);
     
     // Cache the posts for faster future loading
     const postsForCache = profilePosts.map(post => ({
@@ -561,14 +563,14 @@ export default function ProfilePage() {
         id: post.event.id,
         pubkey: post.event.pubkey,
         created_at: post.event.created_at || 0,
-        kind: post.event.kind || 30023,
+        kind: post.event.kind || KIND_LONGFORM_ARTICLE,
         tags: post.event.tags || [],
         content: post.event.content || '',
         sig: post.event.sig || ''
       } : undefined // Store the complete event data for JSON viewing
     }));
     cacheUserPosts(pubkey, postsForCache);
-    console.log(`Profile: Cached ${postsForCache.length} posts for future use`);
+    nostrDebug(`Profile: Cached ${postsForCache.length} posts for future use`);
     
     setPosts(profilePosts);
   };
@@ -598,7 +600,7 @@ export default function ProfilePage() {
 
       try {
         const identifier = decodeURIComponent(params.identifier as string);
-        console.log('🔍 DEBUG: Loading profile for identifier:', identifier);
+        nostrDebug('🔍 DEBUG: Loading profile for identifier:', identifier);
 
         // Resolve the identifier to a pubkey
         const pubkey = await resolveNip05(ndkToUse, identifier);
@@ -609,7 +611,7 @@ export default function ProfilePage() {
           return;
         }
 
-        console.log('🔍 DEBUG: Resolved pubkey:', pubkey);
+        nostrDebug('🔍 DEBUG: Resolved pubkey:', pubkey);
 
         // Fetch user profile
         const user = ndkToUse.getUser({ pubkey });
@@ -637,9 +639,9 @@ export default function ProfilePage() {
         // Check PRO status for this profile (using the profile's npub)
         let isPro = false;
         try {
-          console.log('🔍 DEBUG: Checking PRO status for npub:', npub);
+          nostrDebug('🔍 DEBUG: Checking PRO status for npub:', npub);
           const proStatus = await checkProStatus(npub);
-          console.log('🔍 DEBUG: PRO status result:', proStatus);
+          nostrDebug('🔍 DEBUG: PRO status result:', proStatus);
           isPro = proStatus.isPro;
           setIsProfilePro(isPro);
         } catch (error) {
@@ -650,9 +652,9 @@ export default function ProfilePage() {
         // Check Legend status for this profile (using the profile's npub)
         let isLegend = false;
         try {
-          console.log('🔍 DEBUG: Checking Legend status for npub:', npub);
+          nostrDebug('🔍 DEBUG: Checking Legend status for npub:', npub);
           isLegend = await checkLegendStatus(npub);
-          console.log('🔍 DEBUG: Legend status result:', isLegend);
+          nostrDebug('🔍 DEBUG: Legend status result:', isLegend);
           setIsProfileLegend(isLegend);
         } catch (error) {
           console.error('Error checking Legend status:', error);
@@ -674,7 +676,7 @@ export default function ProfilePage() {
         // Check cache first for posts
         const cachedPosts = getCachedPosts(pubkey);
         if (cachedPosts && cachedPosts.length > 0) {
-          console.log(`Profile: Using cached posts (${cachedPosts.length} items)`);
+          nostrDebug(`Profile: Using cached posts (${cachedPosts.length} items)`);
           
           // Convert cached posts to ProfilePost format
           const profilePosts = cachedPosts.map(post => ({
@@ -832,18 +834,18 @@ export default function ProfilePage() {
       
       if (cachedHighlight?.eventData) {
         // Use cached event data
-        console.log('Using cached event data for highlight:', highlight.id);
+        nostrDebug('Using cached event data for highlight:', highlight.id);
         setJsonModal({ visible: true, data: cachedHighlight.eventData });
       } else {
         // For cached highlights without original event, try to fetch it from the network
         try {
-          console.log('Attempting to fetch original highlight event:', highlight.id);
+          nostrDebug('Attempting to fetch original highlight event:', highlight.id);
           const ndkToUse = contextNdk || standaloneNdk;
           if (ndkToUse) {
             // Try to fetch the original event by ID
             const originalEvent = await ndkToUse.fetchEvent(highlight.id);
             if (originalEvent) {
-              console.log('Successfully fetched original highlight event');
+              nostrDebug('Successfully fetched original highlight event');
               const fullEvent = {
                 id: originalEvent.id,
                 pubkey: originalEvent.pubkey,
@@ -916,18 +918,18 @@ export default function ProfilePage() {
       
       if (cachedPost?.eventData) {
         // Use cached event data
-        console.log('Using cached event data for post:', post.id);
+        nostrDebug('Using cached event data for post:', post.id);
         setJsonModal({ visible: true, data: cachedPost.eventData });
       } else {
         // For cached posts without original event, try to fetch it from the network
         try {
-          console.log('Attempting to fetch original post event:', post.id);
+          nostrDebug('Attempting to fetch original post event:', post.id);
           const ndkToUse = contextNdk || standaloneNdk;
           if (ndkToUse) {
             // Try to fetch the original event by ID
             const originalEvent = await ndkToUse.fetchEvent(post.id);
             if (originalEvent) {
-              console.log('Successfully fetched original post event');
+              nostrDebug('Successfully fetched original post event');
               const fullEvent = {
                 id: originalEvent.id,
                 pubkey: originalEvent.pubkey,
@@ -944,7 +946,7 @@ export default function ProfilePage() {
                 id: post.id,
                 pubkey: profile.pubkey,
                 created_at: Math.floor(post.published_at / 1000),
-                kind: 30023,
+                kind: KIND_LONGFORM_ARTICLE,
                 tags: [
                   ['d', post.dTag || post.id],
                   ['title', post.title],
@@ -965,7 +967,7 @@ export default function ProfilePage() {
               id: post.id,
               pubkey: profile.pubkey,
               created_at: Math.floor(post.published_at / 1000),
-              kind: 30023,
+              kind: KIND_LONGFORM_ARTICLE,
               tags: [
                 ['d', post.dTag || post.id],
                 ['title', post.title],
@@ -987,7 +989,7 @@ export default function ProfilePage() {
             id: post.id,
             pubkey: profile.pubkey,
             created_at: Math.floor(post.published_at / 1000),
-            kind: 30023,
+            kind: KIND_LONGFORM_ARTICLE,
             tags: [
               ['d', post.dTag || post.id],
               ['title', post.title],

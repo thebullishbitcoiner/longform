@@ -1,4 +1,5 @@
 import { NDKEvent } from '@nostr-dev-kit/ndk';
+import { KIND_RELAY_LIST } from '@/nostr/kinds';
 import { safeSetItem, STORAGE_KEYS } from './storage';
 
 export interface RelayInfo {
@@ -19,7 +20,7 @@ export interface RelayList {
  */
 export function createRelayListEvent(relays: RelayInfo[]): NDKEvent {
   const event = new NDKEvent();
-  event.kind = 10002; // NIP-65 relay list kind
+  event.kind = KIND_RELAY_LIST;
   event.created_at = Math.floor(Date.now() / 1000);
   
   // Convert relays to tags format: ["r", "relay_url", "read"|"write"]

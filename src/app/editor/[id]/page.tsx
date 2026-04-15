@@ -14,6 +14,8 @@ import toast from 'react-hot-toast';
 import ConfirmModal from '@/components/ConfirmModal';
 import { AuthGuard } from '@/components/AuthGuard';
 import './page.css';
+import { KIND_LONGFORM_ARTICLE, KIND_LONGFORM_DRAFT } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 import Image from 'next/image';
 import React from 'react';
@@ -392,12 +394,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     const loadDraft = async () => {
-      console.log('Editor: Loading draft with ID:', id);
+      nostrDebug('Editor: Loading draft with ID:', id);
       setIsLoading(true);
       try {
         // Check if this is a temporary draft (new draft)
         if (id.startsWith('temp_')) {
-          console.log('Editor: Creating new temporary draft');
+          nostrDebug('Editor: Creating new temporary draft');
           
           // Check if there's an unsaved draft in localStorage
           if (hasUnsavedDraft()) {
@@ -412,7 +414,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 content: '',
                 lastModified: new Date().toISOString(),
                 sources: ['local'],
-                kind: 30024
+                kind: KIND_LONGFORM_DRAFT
               };
               setDraft(tempDraft);
               setIsLoading(false);
@@ -426,9 +428,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             content: '',
             lastModified: new Date().toISOString(),
             sources: ['local'],
-            kind: 30024 // Temporary drafts are kind 30024
+            kind: KIND_LONGFORM_DRAFT // Temporary drafts
           };
-          console.log('Editor: Created temporary draft:', tempDraft);
+          nostrDebug('Editor: Created temporary draft:', tempDraft);
           setDraft(tempDraft);
           setIsLoading(false);
           return;
@@ -438,18 +440,18 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         if (ndk && isAuthenticated && currentUser?.pubkey) {
           try {
             const pubkey = currentUser.pubkey;
-            console.log('Editor: User pubkey from context:', pubkey);
+            nostrDebug('Editor: User pubkey from context:', pubkey);
             
             // Query the specific event from Nostr
-            console.log('Editor: Querying event from Nostr...');
+            nostrDebug('Editor: Querying event from Nostr...');
             const event = await ndk.fetchEvent({ 
               ids: [id],
-              kinds: [30024 as NDKKind, 30023 as NDKKind], // Query both drafts and published posts
+              kinds: [KIND_LONGFORM_DRAFT as NDKKind, KIND_LONGFORM_ARTICLE as NDKKind], // Query both drafts and published posts
               authors: [pubkey]
             });
 
             if (event) {
-              console.log('Editor: Found event:', event);
+              nostrDebug('Editor: Found event:', event);
               const title = event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
               const dTag = event.tags.find(tag => tag[0] === 'd')?.[1];
               const coverImage = event.tags.find(tag => tag[0] === 'image')?.[1];
@@ -470,10 +472,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 originalTags: event.tags, // Store original tags for preserving metadata
                 kind: event.kind // Store the event kind to determine if it's a draft or published post
               };
-              console.log('Editor: Created draft object:', nostrDraft);
+              nostrDebug('Editor: Created draft object:', nostrDraft);
               setDraft(nostrDraft);
             } else {
-              console.log('Editor: Event not found');
+              nostrDebug('Editor: Event not found');
               router.push('/');
             }
           } catch (error) {
@@ -481,7 +483,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             router.push('/');
           }
         } else {
-          console.log('Editor: Not authenticated or NDK not available');
+          nostrDebug('Editor: Not authenticated or NDK not available');
           router.push('/');
         }
       } catch (error) {
@@ -524,7 +526,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       content: '',
       lastModified: new Date().toISOString(),
       sources: ['local'],
-      kind: 30024
+      kind: KIND_LONGFORM_DRAFT
     };
     setDraft(tempDraft);
   };
@@ -593,12 +595,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const handleDTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!draft) return;
     
-    console.log('Raw slug input:', e.target.value);
+    nostrDebug('Raw slug input:', e.target.value);
     
     // For now, just use the input value directly
     const urlFriendlyValue = e.target.value;
     
-    console.log('Processed slug:', urlFriendlyValue);
+    nostrDebug('Processed slug:', urlFriendlyValue);
     
     const updatedDraft = {
       ...draft,
@@ -696,8 +698,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   const handleSave = async (updatedDraft: Draft) => {
     // Only allow saving drafts (kind 30024), not published posts
-    if (updatedDraft.kind !== 30024) {
-      console.log('Editor: Cannot save published post as draft');
+    if (updatedDraft.kind !== KIND_LONGFORM_DRAFT) {
+      nostrDebug('Editor: Cannot save published post as draft');
       return;
     }
 
@@ -722,7 +724,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
         // Create and publish the event using NDK's methods
         const ndkEvent = new NDKEvent(ndk);
-        ndkEvent.kind = 30024;
+        ndkEvent.kind = KIND_LONGFORM_DRAFT;
         ndkEvent.content = updatedDraft.content;
         
         // Explicitly set the dTag if provided to prevent automatic generation
@@ -824,7 +826,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         
         // Create and publish the event using NDK's methods
         const ndkEvent = new NDKEvent(ndk);
-        ndkEvent.kind = 30024;
+        ndkEvent.kind = KIND_LONGFORM_DRAFT;
         ndkEvent.content = updatedDraft.content;
         
         // Explicitly set the dTag if provided to prevent automatic generation
@@ -832,7 +834,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ndkEvent.dTag = updatedDraft.dTag.trim();
         }
         
-        console.log('Editor: Setting content for save:', {
+        nostrDebug('Editor: Setting content for save:', {
           draftContent: updatedDraft.content.substring(0, 100) + '...',
           contentLength: updatedDraft.content.length,
           isUpdatingPublishedPost
@@ -960,7 +962,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         
         ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
-        console.log('Editor: Publishing article:', {
+        nostrDebug('Editor: Publishing article:', {
           kind: ndkEvent.kind,
           content: ndkEvent.content,
           contentLength: ndkEvent.content.length,
@@ -986,7 +988,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           lastModified: new Date().toISOString(),
           sources: ['nostr'],
           originalTags: ndkEvent.tags, // Update with the new tags for future updates
-          kind: 30024 // Drafts are kind 30024
+          kind: KIND_LONGFORM_DRAFT // Drafts
         };
         setDraft(savedDraft);
         setHasUnsavedChanges(false);
@@ -1051,9 +1053,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         const file = fileArray[i];
         
         try {
-          console.log(`Editor: Uploading image ${i + 1}/${fileArray.length}:`, file.name);
+          nostrDebug(`Editor: Uploading image ${i + 1}/${fileArray.length}:`, file.name);
           const [[, url]] = await uploader.upload(file);
-          console.log(`Editor: Image uploaded to:`, url);
+          nostrDebug(`Editor: Image uploaded to:`, url);
           
           // Store the image markdown for batch insertion
           const imageMarkdown = `![${file.name}](${url})`;
@@ -1131,9 +1133,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       if (!file) return;
 
       try {
-        console.log('Editor: Uploading cover image:', file.name);
+        nostrDebug('Editor: Uploading cover image:', file.name);
         const [[, url]] = await uploader.upload(file);
-        console.log('Editor: Cover image uploaded to:', url);
+        nostrDebug('Editor: Cover image uploaded to:', url);
         
         const updatedDraft = {
           ...draft,
@@ -1241,7 +1243,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       
       // Create and publish the event using NDK's methods
       const ndkEvent = new NDKEvent(ndk);
-      ndkEvent.kind = 30023;
+      ndkEvent.kind = KIND_LONGFORM_ARTICLE;
       ndkEvent.content = currentContent;
       
       // Explicitly set the dTag if provided to prevent automatic generation
@@ -1249,7 +1251,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         ndkEvent.dTag = draft.dTag.trim();
       }
       
-      console.log('Editor: Setting content for publish:', {
+      nostrDebug('Editor: Setting content for publish:', {
         draftContent: currentContent.substring(0, 100) + '...',
         contentLength: currentContent.length,
         isUpdatingPublishedPost
@@ -1408,7 +1410,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       
       ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
-      console.log('Editor: Publishing article:', {
+      nostrDebug('Editor: Publishing article:', {
         kind: ndkEvent.kind,
         content: ndkEvent.content,
         contentLength: ndkEvent.content.length,
@@ -1434,7 +1436,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         lastModified: new Date().toISOString(),
         sources: ['nostr'],
         originalTags: ndkEvent.tags, // Update with the new tags for future updates
-        kind: 30023 // Published posts are kind 30023
+        kind: KIND_LONGFORM_ARTICLE // Published posts
       };
       setDraft(savedDraft);
       setHasUnsavedChanges(false);
@@ -1471,7 +1473,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           Back to Posts
         </button>
         <h1 className="editor-title">
-          {draft.kind === 30023 ? 'Edit Post' : 'Edit Draft'}
+          {draft.kind === KIND_LONGFORM_ARTICLE ? 'Edit Post' : 'Edit Draft'}
         </h1>
         
         {/* Cover Image Section - First */}
@@ -1742,7 +1744,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             Upload Image
           </button>
           {/* Only show save button for drafts (kind 30024) */}
-          {draft.kind === 30024 && (
+          {draft.kind === KIND_LONGFORM_DRAFT && (
             <button
               onClick={() => {
                 if (editorRef.current) {
@@ -1782,10 +1784,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               setShowEditorActionsMenu(false);
             }} 
             className="editor-action-menu-item"
-            title={draft.kind === 30023 ? "Update Published Post" : "Publish to Nostr"}
+            title={draft.kind === KIND_LONGFORM_ARTICLE ? "Update Published Post" : "Publish to Nostr"}
             disabled={isPublishing || !isConnected}
           >
-            {isPublishing ? 'Publishing...' : !isConnected ? 'Connecting...' : draft.kind === 30023 ? 'Update' : 'Publish'}
+            {isPublishing ? 'Publishing...' : !isConnected ? 'Connecting...' : draft.kind === KIND_LONGFORM_ARTICLE ? 'Update' : 'Publish'}
           </button>
         </div>
       )}

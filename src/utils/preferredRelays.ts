@@ -1,5 +1,6 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
+import { KIND_PREFERRED_RELAYS } from '@/nostr/kinds';
 import { Nip07Signer } from './nip07Signer';
 
 export interface PreferredRelay {
@@ -50,7 +51,7 @@ export async function createPreferredRelaysEvent(
   relays: PreferredRelay[]
 ): Promise<NDKEvent> {
   const event = new (await import('@nostr-dev-kit/ndk')).NDKEvent(ndk);
-  event.kind = 10013; // NIP-37 preferred relays kind
+  event.kind = KIND_PREFERRED_RELAYS;
   event.created_at = Math.floor(Date.now() / 1000);
   
   // Create private tags with relay information

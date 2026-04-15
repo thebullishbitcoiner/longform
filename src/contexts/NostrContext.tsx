@@ -1,10 +1,12 @@
 'use client';
 
-import NDK from '@nostr-dev-kit/ndk';
+import NDK, { NDKKind } from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 
 import { Nip07Signer } from '@/utils/nip07Signer';
 import { DEFAULT_RELAYS } from '@/config/relays';
+import { KIND_PREFERRED_RELAYS } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 
 // Create a singleton NDK instance without signer initially
 const ndkInstance = new NDK({
@@ -17,20 +19,20 @@ let connectionPromise: Promise<void> | null = null;
 
 const initializeNDK = async () => {
   if (isConnecting) {
-    console.log('NDK: Already connecting, returning existing promise');
+    nostrDebug('NDK: Already connecting, returning existing promise');
     return connectionPromise;
   }
 
   if (connectionPromise) {
-    console.log('NDK: Using existing connection promise');
+    nostrDebug('NDK: Using existing connection promise');
     return connectionPromise;
   }
 
   isConnecting = true;
   connectionPromise = (async () => {
-    console.log('NDK: Starting initialization...');
+    nostrDebug('NDK: Starting initialization...');
     try {
-      console.log('NDK: Attempting to connect to relays...');
+      nostrDebug('NDK: Attempting to connect to relays...');
       
       // Create a promise that rejects after timeout
       const timeoutPromise = new Promise((_, reject) => {
@@ -43,18 +45,18 @@ const initializeNDK = async () => {
         timeoutPromise
       ]);
       
-      console.log('NDK: Connected to relays');
+      nostrDebug('NDK: Connected to relays');
 
       // Verify we have at least one connected relay
       const connectedRelays = ndkInstance.pool.connectedRelays();
-      console.log('NDK: Connected relays:', connectedRelays.map(r => r.url).join(', '));
+      nostrDebug('NDK: Connected relays:', connectedRelays.map(r => r.url).join(', '));
       
       if (connectedRelays.length === 0) {
         console.warn('NDK: No relays connected after initialization, but continuing...');
         // Don't throw an error, just log a warning and continue
         // The app can still work with a disconnected NDK for some features
       } else {
-        console.log(`NDK: Successfully connected to ${connectedRelays.length} relays`);
+        nostrDebug(`NDK: Successfully connected to ${connectedRelays.length} relays`);
       }
     } catch (error) {
       console.error('NDK: Failed to initialize:', error);
@@ -129,7 +131,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const authCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const logout = () => {
-    console.log('🚪 Logging out user');
+    nostrDebug('🚪 Logging out user');
     setIsAuthenticated(false);
     setCurrentUser(null);
     ndkInstance.signer = undefined;
@@ -138,7 +140,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   const checkAuthentication = async (): Promise<boolean> => {
     // Prevent multiple simultaneous authentication checks
     if (authCheckInProgressRef.current) {
-      console.log('🔐 Authentication check already in progress, waiting for result...');
+      nostrDebug('🔐 Authentication check already in progress, waiting for result...');
       // Wait for the current check to complete instead of returning immediately
       return new Promise((resolve) => {
         let attempts = 0;
@@ -146,7 +148,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
         const checkResult = () => {
           attempts++;
           if (!authCheckInProgressRef.current || attempts >= maxAttempts) {
-            console.log('🔐 Authentication check wait completed, result:', isAuthenticated);
+            nostrDebug('🔐 Authentication check wait completed, result:', isAuthenticated);
             resolve(isAuthenticated);
           } else {
             setTimeout(checkResult, 100);
@@ -160,7 +162,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
     const now = Date.now();
     const timeSinceLastCheck = now - lastAuthCheckRef.current;
     if (timeSinceLastCheck < 1000) {
-      console.log(`🔐 Authentication check debounced (${timeSinceLastCheck}ms since last check)`);
+      nostrDebug(`🔐 Authentication check debounced (${timeSinceLastCheck}ms since last check)`);
       return isAuthenticated;
     }
 
@@ -170,21 +172,21 @@ export function NostrProvider({ children }: NostrProviderProps) {
     try {
       // Check if window.nostr is available (Nostr extension should provide this)
       if (!window.nostr) {
-        console.log('❌ window.nostr not available - Please install a Nostr extension');
+        nostrDebug('❌ window.nostr not available - Please install a Nostr extension');
         setIsAuthenticated(false);
         setCurrentUser(null);
         return false;
       }
       
-      console.log('✅ window.nostr is available, proceeding with authentication');
+      nostrDebug('✅ window.nostr is available, proceeding with authentication');
 
       // Get the user's public key from Nostr extension
-      console.log('🔐 Getting public key from Nostr extension...');
+      nostrDebug('🔐 Getting public key from Nostr extension...');
       const pubkey = await window.nostr.getPublicKey();
-      console.log('🔐 Retrieved pubkey:', pubkey ? `${pubkey.slice(0, 8)}...` : 'null');
+      nostrDebug('🔐 Retrieved pubkey:', pubkey ? `${pubkey.slice(0, 8)}...` : 'null');
       
       if (!pubkey) {
-        console.log('❌ No user found - Authentication failed');
+        nostrDebug('❌ No user found - Authentication failed');
         setIsAuthenticated(false);
         setCurrentUser(null);
         return false;
@@ -203,11 +205,11 @@ export function NostrProvider({ children }: NostrProviderProps) {
 
       // Check if we already have this user authenticated
       if (isAuthenticated && currentUser && currentUser.pubkey === pubkey) {
-        console.log('🔐 User already authenticated, skipping duplicate check');
+        nostrDebug('🔐 User already authenticated, skipping duplicate check');
         return true;
       }
       
-      console.log('🔐 Authentication check - User public key:', npub);
+      nostrDebug('🔐 Authentication check - User public key:', npub);
       
       // Set up NDK signer using NIP-07 extension
       ndkInstance.signer = new Nip07Signer(ndkInstance);
@@ -215,13 +217,13 @@ export function NostrProvider({ children }: NostrProviderProps) {
       // Update NDK instance with preferred relays for private events
       try {
         const preferredRelays = await ndkInstance.fetchEvents({
-          kinds: [10013 as number],
+          kinds: [KIND_PREFERRED_RELAYS as NDKKind],
           authors: [pubkey],
           limit: 1
         });
         
         if (preferredRelays.size > 0) {
-          console.log('Found preferred relays, updating NDK configuration');
+          nostrDebug('Found preferred relays, updating NDK configuration');
           // Note: In a real implementation, you might want to recreate the NDK instance
           // with preferred relays, but for now we'll keep the current approach
         }
@@ -243,7 +245,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
           picture: profile?.image
         };
         
-        console.log('👤 Cached user profile:', userProfile);
+        nostrDebug('👤 Cached user profile:', userProfile);
         setCurrentUser(userProfile);
       } catch (profileError) {
         console.warn('⚠️ Failed to fetch user profile, using basic info:', profileError);
@@ -260,7 +262,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
       // Trigger highlight cache refresh in background
       setTimeout(() => {
         // This will be handled by the useHighlights hook when components mount
-        console.log('🔍 User authenticated, highlights will be fetched by components');
+        nostrDebug('🔍 User authenticated, highlights will be fetched by components');
       }, 100);
       
       return true;
@@ -277,12 +279,12 @@ export function NostrProvider({ children }: NostrProviderProps) {
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        console.log('NDK Provider: Checking connection...');
+        nostrDebug('NDK Provider: Checking connection...');
         await initializeNDK();
         const connectedRelays = ndkInstance.pool.connectedRelays();
-        console.log('NDK Provider: Connected relays:', connectedRelays.map(r => r.url).join(', '));
+        nostrDebug('NDK Provider: Connected relays:', connectedRelays.map(r => r.url).join(', '));
         const hasConnectedRelays = connectedRelays.length > 0;
-        console.log('NDK Provider: Setting isConnected to:', hasConnectedRelays);
+        nostrDebug('NDK Provider: Setting isConnected to:', hasConnectedRelays);
         setIsConnected(hasConnectedRelays);
       } catch (error) {
         console.error('NDK Provider: Error checking connection:', error);
@@ -294,9 +296,9 @@ export function NostrProvider({ children }: NostrProviderProps) {
 
     const initializeAuth = async () => {
       try {
-        console.log('NDK Provider: Checking authentication on initialization...');
+        nostrDebug('NDK Provider: Checking authentication on initialization...');
         const authResult = await checkAuthentication();
-        console.log('NDK Provider: Authentication result:', authResult);
+        nostrDebug('NDK Provider: Authentication result:', authResult);
       } catch (error) {
         console.error('NDK Provider: Error checking authentication on init:', error);
       }

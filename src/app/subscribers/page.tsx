@@ -9,6 +9,8 @@ import { AuthGuard } from '@/components/AuthGuard';
 import Image from 'next/image';
 import { supabase } from '@/config/supabase';
 import styles from './page.module.css';
+import { KIND_SUBSCRIBERS_LIST } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 
 interface Subscriber {
   pubkey: string;
@@ -41,12 +43,12 @@ const SubscribersPage: React.FC = () => {
 
     // Check if NDK is connected to relays
     if (!isConnected) {
-      console.log('Subscribers: NDK not connected to relays, skipping fetch');
+      nostrDebug('Subscribers: NDK not connected to relays, skipping fetch');
       return [];
     }
 
     try {
-      console.log('Subscribers: Fetching subscribers for:', currentUser.pubkey);
+      nostrDebug('Subscribers: Fetching subscribers for:', currentUser.pubkey);
       
       return new Promise<Subscriber[]>((resolve) => {
         const subscribersList: Subscriber[] = [];
@@ -56,7 +58,7 @@ const SubscribersPage: React.FC = () => {
         // Subscribe to kind 30000 events with "longform-subscribers" d tag
         const subscription = ndk.subscribe(
           { 
-            kinds: [30000], 
+            kinds: [KIND_SUBSCRIBERS_LIST], 
             authors: [currentUser.pubkey],
             '#d': ['longform-subscribers'],
             limit: 100 
@@ -66,7 +68,7 @@ const SubscribersPage: React.FC = () => {
 
         subscription.on('event', (event: NDKEvent) => {
           try {
-            console.log('Subscribers: Found subscriber event:', event.id);
+            nostrDebug('Subscribers: Found subscriber event:', event.id);
             foundSubscriptionList = true; // We found the subscription list event
             
             // Extract p tags which contain the subscriber pubkeys
@@ -101,7 +103,7 @@ const SubscribersPage: React.FC = () => {
 
         subscription.on('eose', async () => {
           clearTimeout(timeout);
-          console.log('Subscribers: Found', subscribersList.length, 'subscriber pubkeys');
+          nostrDebug('Subscribers: Found', subscribersList.length, 'subscriber pubkeys');
           
           // Check if we found any subscription list
           setHasSubscriptionList(foundSubscriptionList);
@@ -141,17 +143,17 @@ const SubscribersPage: React.FC = () => {
             }
           }
           
-          console.log('Subscribers: Final subscribers with profiles:', subscribersWithProfiles.length);
+          nostrDebug('Subscribers: Final subscribers with profiles:', subscribersWithProfiles.length);
           resolve(subscribersWithProfiles);
         });
 
         subscription.on('close', () => {
-          console.log('Subscribers: Subscription closed');
+          nostrDebug('Subscribers: Subscription closed');
         });
 
         // Add timeout to prevent hanging
         const timeout = setTimeout(() => {
-          console.log('Subscribers: Subscription timeout, resolving with current results');
+          nostrDebug('Subscribers: Subscription timeout, resolving with current results');
           subscription.stop();
           setHasSubscriptionList(foundSubscriptionList);
           resolve(subscribersList);
@@ -174,7 +176,7 @@ const SubscribersPage: React.FC = () => {
     if (!currentUser?.npub || !ndk) return;
 
     try {
-      console.log('Subscribers: Checking for pending actions for author:', currentUser.npub);
+      nostrDebug('Subscribers: Checking for pending actions for author:', currentUser.npub);
       
       const { data, error } = await supabase
         .from('action_queue')
@@ -189,7 +191,7 @@ const SubscribersPage: React.FC = () => {
       }
 
       if (data && data.length > 0) {
-        console.log('Subscribers: Found', data.length, 'pending actions');
+        nostrDebug('Subscribers: Found', data.length, 'pending actions');
         
         // Fetch display names for each reader
         const actionsWithDisplayNames = await Promise.all(
@@ -220,7 +222,7 @@ const SubscribersPage: React.FC = () => {
         setPendingActions(actionsWithDisplayNames);
         setIsActionQueueModalOpen(true);
       } else {
-        console.log('Subscribers: No pending actions found');
+        nostrDebug('Subscribers: No pending actions found');
         setPendingActions([]);
       }
     } catch (error) {
@@ -356,10 +358,10 @@ const SubscribersPage: React.FC = () => {
 
     setIsCreatingList(true);
     try {
-      console.log('Subscribers: Creating subscription list...');
+      nostrDebug('Subscribers: Creating subscription list...');
       
       const event = new NDKEvent(ndk);
-      event.kind = 30000;
+      event.kind = KIND_SUBSCRIBERS_LIST;
       event.content = '';
       event.tags = [
         ['d', 'longform-subscribers'],
@@ -369,7 +371,7 @@ const SubscribersPage: React.FC = () => {
       await event.sign();
       await event.publish();
       
-      console.log('Subscribers: Subscription list created successfully');
+      nostrDebug('Subscribers: Subscription list created successfully');
       setHasSubscriptionList(true);
       toast.success('Subscription list created successfully!');
       
@@ -456,10 +458,10 @@ const SubscribersPage: React.FC = () => {
 
     setIsSaving(true);
     try {
-      console.log('Subscribers: Saving subscribers list...');
+      nostrDebug('Subscribers: Saving subscribers list...');
       
       const event = new NDKEvent(ndk);
-      event.kind = 30000;
+      event.kind = KIND_SUBSCRIBERS_LIST;
       event.content = '';
       event.tags = [
         ['d', 'longform-subscribers'],
@@ -476,7 +478,7 @@ const SubscribersPage: React.FC = () => {
       await event.sign();
       await event.publish();
       
-      console.log('Subscribers: Subscribers list saved successfully');
+      nostrDebug('Subscribers: Subscribers list saved successfully');
       
       // Remove pending status from all subscribers and remove those marked for removal
       setSubscribers(prev => prev
@@ -486,7 +488,7 @@ const SubscribersPage: React.FC = () => {
 
       // Mark all processed actions as processed in the database
       if (processedActionIds.length > 0) {
-        console.log('Marking', processedActionIds.length, 'actions as processed:', processedActionIds);
+        nostrDebug('Marking', processedActionIds.length, 'actions as processed:', processedActionIds);
         
         const { error: updateError } = await supabase
           .from('action_queue')
@@ -497,7 +499,7 @@ const SubscribersPage: React.FC = () => {
           console.error('Error marking actions as processed:', updateError);
           // Don't show error to user since the main operation succeeded
         } else {
-          console.log('Successfully marked', processedActionIds.length, 'actions as processed');
+          nostrDebug('Successfully marked', processedActionIds.length, 'actions as processed');
           // Clear processed action IDs since they've been processed
           setProcessedActionIds([]);
         }

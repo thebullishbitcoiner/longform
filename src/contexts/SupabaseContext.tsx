@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase, ProStatus, Pro } from '@/config/supabase';
 import { useNostr } from './NostrContext';
+import { nostrDebug } from '@/nostr/debug';
 
 interface SupabaseContextType {
   proStatus: ProStatus | null;
@@ -213,7 +214,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
 
   const addLegend = async (npub: string): Promise<void> => {
     try {
-      console.log('Adding legend for npub:', npub);
+      nostrDebug('Adding legend for npub:', npub);
       
       const { error } = await supabase
         .from('legends')
@@ -227,7 +228,7 @@ export function SupabaseProvider({ children }: SupabaseProviderProps) {
         throw error;
       }
 
-      console.log('Successfully added legend for npub:', npub);
+      nostrDebug('Successfully added legend for npub:', npub);
     } catch (error) {
       console.error('Error adding legend:', error);
       throw error;

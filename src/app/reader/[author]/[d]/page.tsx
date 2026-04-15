@@ -21,6 +21,17 @@ import { NDKEvent } from '@nostr-dev-kit/ndk';
 import toast from 'react-hot-toast';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
+import {
+  KIND_HIGHLIGHT,
+  KIND_LONGFORM_ARTICLE,
+  KIND_NIP22_COMMENT,
+  KIND_REACTION,
+  KIND_TEXT_NOTE,
+  KIND_ZAP,
+  KINDS_REPOST,
+  longformArticleCoordinate,
+} from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 import JsonModal from '@/components/JsonModal';
 
 // Create a standalone NDK instance for public access
@@ -374,13 +385,6 @@ export default function BlogPost() {
   const { getHighlightsForPost, addHighlight } = useHighlights();
   const { isPro } = useProStatus();
   
-  const debugLog = (_message: string, ..._args: unknown[]) => {
-    if (process.env.NODE_ENV === 'development') {
-      const timestamp = new Date().toLocaleTimeString();
-      console.log(`[${timestamp}] DEBUG: ${_message}`, ..._args);
-    }
-  };
-  
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [processedContent, setProcessedContent] = useState('');
@@ -512,15 +516,15 @@ export default function BlogPost() {
     try {
       // Build article coordinate (a tag)
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
-      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? longformArticleCoordinate(post.pubkey, currentDTag) : undefined;
 
       // Fetch reposts (kind 6 - standard reposts, kind 16 - generic reposts) by both '#e' and '#a'
-      const repostsByE = await ndkToUse.fetchEvents({ kinds: [6, 16], '#e': [postId] });
-      const repostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [6, 16], '#a': [aCoordinate] }) : new Set();
+      const repostsByE = await ndkToUse.fetchEvents({ kinds: [...KINDS_REPOST], '#e': [postId] });
+      const repostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [...KINDS_REPOST], '#a': [aCoordinate] }) : new Set();
       
       // Fetch quote reposts (kind 1 with q tags) by both '#e' and '#a'
-      const quoteRepostsByE = await ndkToUse.fetchEvents({ kinds: [1], '#q': [postId] });
-      const quoteRepostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1], '#q': [aCoordinate] }) : new Set();
+      const quoteRepostsByE = await ndkToUse.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#q': [postId] });
+      const quoteRepostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#q': [aCoordinate] }) : new Set();
 
       // Merge and deduplicate all reposts
       const repostsById = new Map<string, NDKEvent>();
@@ -643,7 +647,7 @@ export default function BlogPost() {
     try {
       // Build article coordinate (a tag)
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
-      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? longformArticleCoordinate(post.pubkey, currentDTag) : undefined;
 
       // Initialize stats
       let likes = 0;
@@ -663,9 +667,9 @@ export default function BlogPost() {
       };
 
       // Fetch and update reactions (kind 7) incrementally
-      debugLog('Fetching reactions...');
-      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] });
-      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : new Set();
+      nostrDebug('Fetching reactions...');
+      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [KIND_REACTION], '#e': [postId] });
+      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [KIND_REACTION], '#a': [aCoordinate] }) : new Set();
       
       // Count reactions across both sources
       const reactionsById = new Map<string, NDKEvent>();
@@ -676,18 +680,18 @@ export default function BlogPost() {
         return content !== ''; // Only filter out empty reactions
       });
       likes = allReactions.length;
-      debugLog('Reactions fetched:', likes);
+      nostrDebug('Reactions fetched:', likes);
       updateStats();
 
       // Fetch and update comments (kind 1111 - NIP-22) incrementally
-      debugLog('Fetching NIP-22 comments...');
-      const nip22ByE = await ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId] });
-      const nip22ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate] }) : new Set();
+      nostrDebug('Fetching NIP-22 comments...');
+      const nip22ByE = await ndkToUse.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#e': [postId] });
+      const nip22ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#a': [aCoordinate] }) : new Set();
       
       // Fetch kind 1 comments (legacy) incrementally
-      debugLog('Fetching legacy comments...');
-      const kind1ByE = await ndkToUse.fetchEvents({ kinds: [1], '#e': [postId] });
-      const kind1ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate] }) : new Set();
+      nostrDebug('Fetching legacy comments...');
+      const kind1ByE = await ndkToUse.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#e': [postId] });
+      const kind1ByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#a': [aCoordinate] }) : new Set();
 
       // Deduplicate comment ids across sources
       const commentIds = new Set<string>();
@@ -696,29 +700,29 @@ export default function BlogPost() {
       for (const ev of kind1ByE) commentIds.add(ev.id);
       for (const ev of kind1ByA as Set<NDKEvent>) commentIds.add(ev.id);
       comments = commentIds.size;
-      debugLog('Comments fetched:', comments);
+      nostrDebug('Comments fetched:', comments);
       updateStats();
 
       // Fetch and update zaps (kind 9735) incrementally
-      debugLog('Fetching zaps...');
-      const zapsByE = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
-      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : new Set();
+      nostrDebug('Fetching zaps...');
+      const zapsByE = await ndkToUse.fetchEvents({ kinds: [KIND_ZAP], '#e': [postId] });
+      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [KIND_ZAP], '#a': [aCoordinate] }) : new Set();
       const uniqueZapIds = new Set<string>();
       for (const ev of zapsByE) uniqueZapIds.add(ev.id);
       for (const ev of zapsByA as Set<NDKEvent>) uniqueZapIds.add(ev.id);
       zaps = uniqueZapIds.size;
-      debugLog('Zaps fetched:', zaps);
+      nostrDebug('Zaps fetched:', zaps);
       updateStats();
 
       // Fetch reposts (kind 6 and 16) incrementally
-      debugLog('Fetching reposts...');
-      const repostsByE = await ndkToUse.fetchEvents({ kinds: [6, 16], '#e': [postId] });
-      const repostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [6, 16], '#a': [aCoordinate] }) : new Set();
+      nostrDebug('Fetching reposts...');
+      const repostsByE = await ndkToUse.fetchEvents({ kinds: [...KINDS_REPOST], '#e': [postId] });
+      const repostsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [...KINDS_REPOST], '#a': [aCoordinate] }) : new Set();
       const uniqueRepostIds = new Set<string>();
       for (const ev of repostsByE) uniqueRepostIds.add(ev.id);
       for (const ev of repostsByA as Set<NDKEvent>) uniqueRepostIds.add(ev.id);
       reposts = uniqueRepostIds.size;
-      debugLog('Reposts fetched:', reposts);
+      nostrDebug('Reposts fetched:', reposts);
       updateStats();
 
       // Final update with loading complete
@@ -730,7 +734,7 @@ export default function BlogPost() {
         isLoading: false
       });
 
-      debugLog('All reaction stats fetched:', { likes, comments, zaps, reposts });
+      nostrDebug('All reaction stats fetched:', { likes, comments, zaps, reposts });
 
     } catch (error) {
       console.error('Error fetching reaction stats:', error);
@@ -746,7 +750,7 @@ export default function BlogPost() {
   const loadAdditionalData = useCallback(async (postData: BlogPost) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) {
-      debugLog('No NDK available for loading additional data');
+      nostrDebug('No NDK available for loading additional data');
       return;
     }
 
@@ -831,34 +835,34 @@ export default function BlogPost() {
       return processedContent;
     };
 
-    debugLog('Loading additional data for post:', postData.id);
+    nostrDebug('Loading additional data for post:', postData.id);
 
     try {
       // Process content to replace npubs with usernames and convert image URLs
-      debugLog('Processing content for npubs and images');
-      debugLog('Original content:', postData.content.substring(0, 500) + '...');
+      nostrDebug('Processing content for npubs and images');
+      nostrDebug('Original content:', postData.content.substring(0, 500) + '...');
       let content = await processNpubs(postData.content, ndkToUse);
       content = processImageUrls(content);
-      debugLog('Processed content:', content.substring(0, 500) + '...');
+      nostrDebug('Processed content:', content.substring(0, 500) + '...');
       setProcessedContent(content);
       
             // Fetch author profile if not already available
       if (!postData.author) {
-        debugLog('Fetching author profile for:', postData.pubkey);
+        nostrDebug('Fetching author profile for:', postData.pubkey);
         
         // Check if we already have this profile cached
         const cachedProfile = getAuthorProfile(postData.pubkey);
         if (cachedProfile) {
-          debugLog('Using cached profile for:', postData.pubkey);
+          nostrDebug('Using cached profile for:', postData.pubkey);
           const updatedPost = { ...postData, author: cachedProfile };
           setPost(updatedPost);
         } else {
-          debugLog('Fetching profile for blog post:', postData.pubkey);
+          nostrDebug('Fetching profile for blog post:', postData.pubkey);
           const profile = await fetchProfileOnce(postData.pubkey, async () => {
             const user = ndkToUse.getUser({ pubkey: postData.pubkey });
             const profile = await user.fetchProfile();
             if (profile) {
-              debugLog('Fetched profile:', {
+              nostrDebug('Fetched profile:', {
                 name: profile.name,
                 displayName: profile.displayName,
                 image: profile.image,
@@ -872,21 +876,21 @@ export default function BlogPost() {
                 picture: profile.picture
               };
             }
-            debugLog('No profile found for:', postData.pubkey);
+            nostrDebug('No profile found for:', postData.pubkey);
             return null;
           });
           
           if (profile) {
             const updatedPost = { ...postData, author: profile };
             setPost(updatedPost);
-            debugLog('Updated post with author profile');
+            nostrDebug('Updated post with author profile');
           }
         }
       } else {
-        debugLog('Post already has author profile');
+        nostrDebug('Post already has author profile');
       }
       
-      debugLog('Additional data loading completed');
+      nostrDebug('Additional data loading completed');
     } catch (error) {
       console.error('Error loading additional data:', error);
     }
@@ -895,29 +899,29 @@ export default function BlogPost() {
   const fetchPostByAuthorAndDTag = useCallback(async (pubkey: string, dTag: string) => {
     const ndkToUse = contextNdk || standaloneNdk;
     if (!ndkToUse) {
-      debugLog('No NDK available for fetching post');
+      nostrDebug('No NDK available for fetching post');
       setLoading(false);
       return;
     }
 
     try {
-      debugLog('Fetching events with:', { pubkey, dTag, kind: 30023 });
+      nostrDebug('Fetching events with:', { pubkey, dTag, kind: KIND_LONGFORM_ARTICLE });
       
       // Fetch the most recent event with the given author and d tag
       const events = await ndkToUse.fetchEvents({
-        kinds: [30023], // Longform posts
+        kinds: [KIND_LONGFORM_ARTICLE],
         authors: [pubkey],
         '#d': [dTag]
       });
 
-      debugLog('Fetched events count:', events.size);
+      nostrDebug('Fetched events count:', events.size);
 
       if (events.size > 0) {
         // Get the most recent event
         const sortedEvents = Array.from(events).sort((a, b) => b.created_at - a.created_at);
         const event = sortedEvents[0];
         
-        debugLog('Selected most recent event:', { 
+        nostrDebug('Selected most recent event:', { 
           id: event.id, 
           created_at: event.created_at,
           title: event.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled'
@@ -950,7 +954,7 @@ export default function BlogPost() {
           client // Store client identifier
         };
 
-        debugLog('Created post data:', { 
+        nostrDebug('Created post data:', { 
           id: postData.id, 
           title: postData.title, 
           contentLength: postData.content.length 
@@ -966,14 +970,14 @@ export default function BlogPost() {
         await loadAdditionalData(postData);
         setIsLoadingAdditionalData(false);
         
-        debugLog('Post loaded successfully');
+        nostrDebug('Post loaded successfully');
 
         // Only add post to context if user is authenticated (to avoid polluting local storage)
         if (isAuthenticated) {
           addPost(postData);
         }
       } else {
-        debugLog('No events found for pubkey and dTag:', { pubkey, dTag });
+        nostrDebug('No events found for pubkey and dTag:', { pubkey, dTag });
         setLoading(false);
       }
     } catch (error) {
@@ -986,14 +990,14 @@ export default function BlogPost() {
   useEffect(() => {
     const resolveAuthor = async () => {
       if (!params.author || !params.d) {
-        debugLog('Missing params:', { author: params.author, d: params.d });
+        nostrDebug('Missing params:', { author: params.author, d: params.d });
         return;
       }
 
       const ndkToUse = contextNdk || standaloneNdk;
       const author = decodeURIComponent(params.author as string);
       const dTag = decodeURIComponent(params.d as string);
-      debugLog('Resolving author:', { author, dTag });
+      nostrDebug('Resolving author:', { author, dTag });
 
       // If author is already a 64-char hex pubkey, skip NIP-05 resolution
       const isPubkey = /^[0-9a-fA-F]{64}$/.test(author);
@@ -1003,7 +1007,7 @@ export default function BlogPost() {
         pubkeyForLookup = await resolveNip05(ndkToUse, author);
       }
       if (!pubkeyForLookup) {
-        debugLog('No NDK available or could not resolve author');
+        nostrDebug('No NDK available or could not resolve author');
         setLoading(false);
         return;
       }
@@ -1030,7 +1034,7 @@ export default function BlogPost() {
       }
 
       try {
-        debugLog('Fetching post with pubkey and dTag:', { pubkey: pubkeyForLookup, dTag });
+        nostrDebug('Fetching post with pubkey and dTag:', { pubkey: pubkeyForLookup, dTag });
         await fetchPostByAuthorAndDTag(pubkeyForLookup, dTag);
       } catch (error) {
         console.error('Error resolving author:', error);
@@ -1043,12 +1047,12 @@ export default function BlogPost() {
 
   // Fetch reaction stats when post is loaded
   useEffect(() => {
-    debugLog('useEffect for reaction stats triggered, post?.id:', post?.id);
+    nostrDebug('useEffect for reaction stats triggered, post?.id:', post?.id);
     if (post?.id && fetchReactionStatsRef.current) {
-      debugLog('Calling fetchReactionStatsInBackground with postId:', post.id);
+      nostrDebug('Calling fetchReactionStatsInBackground with postId:', post.id);
       fetchReactionStatsRef.current(post.id);
     } else {
-      debugLog('No post.id available or function not ready, skipping reaction stats fetch');
+      nostrDebug('No post.id available or function not ready, skipping reaction stats fetch');
     }
   }, [post?.id]);
 
@@ -1072,11 +1076,11 @@ export default function BlogPost() {
     try {
       // Build article coordinate (a tag)
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
-      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? longformArticleCoordinate(post.pubkey, currentDTag) : undefined;
 
       // Fetch zaps (kind 9735) across all versions via '#e' and '#a'
-      const zapsByE = await ndkToUse.fetchEvents({ kinds: [9735], '#e': [postId] });
-      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [9735], '#a': [aCoordinate] }) : new Set();
+      const zapsByE = await ndkToUse.fetchEvents({ kinds: [KIND_ZAP], '#e': [postId] });
+      const zapsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [KIND_ZAP], '#a': [aCoordinate] }) : new Set();
 
       // Deduplicate
       const uniqueZaps = new Map<string, NDKEvent>();
@@ -1198,11 +1202,11 @@ export default function BlogPost() {
     try {
       // Build article coordinate (a tag)
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
-      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? longformArticleCoordinate(post.pubkey, currentDTag) : undefined;
 
       // Fetch reactions (kind 7) across all versions via '#e' and '#a'
-      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [7], '#e': [postId] });
-      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [7], '#a': [aCoordinate] }) : new Set();
+      const reactionsByE = await ndkToUse.fetchEvents({ kinds: [KIND_REACTION], '#e': [postId] });
+      const reactionsByA = aCoordinate ? await ndkToUse.fetchEvents({ kinds: [KIND_REACTION], '#a': [aCoordinate] }) : new Set();
 
       // Deduplicate
       const uniqueReactions = new Map<string, NDKEvent>();
@@ -1390,7 +1394,7 @@ export default function BlogPost() {
     try {
       // Create kind 7 reaction event
       const ndkEvent = new NDKEvent(ndkToUse);
-      ndkEvent.kind = 7;
+      ndkEvent.kind = KIND_REACTION;
       ndkEvent.content = emoji;
       ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
@@ -1398,7 +1402,7 @@ export default function BlogPost() {
       const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
       
       // Build article coordinate (a tag)
-      const aCoordinate = post.pubkey && dTag ? `30023:${post.pubkey}:${dTag}` : undefined;
+      const aCoordinate = post.pubkey && dTag ? longformArticleCoordinate(post.pubkey, dTag) : undefined;
 
       ndkEvent.tags = [
         ['e', post.id], // Reference to the post
@@ -1408,7 +1412,7 @@ export default function BlogPost() {
       // Add article coordinate tag if available
       if (aCoordinate) {
         ndkEvent.tags.push(['a', aCoordinate]);
-        ndkEvent.tags.push(['k', '30023']); // Kind tag for longform articles
+        ndkEvent.tags.push(['k', String(KIND_LONGFORM_ARTICLE)]); // Kind tag for longform articles
       }
 
       // Add emoji tag for custom emojis
@@ -1446,19 +1450,19 @@ export default function BlogPost() {
     try {
       // Build article coordinate (a tag)
       const currentDTag = params.d ? decodeURIComponent(params.d as string) : undefined;
-      const aCoordinate = post?.pubkey && currentDTag ? `30023:${post.pubkey}:${currentDTag}` : undefined;
+      const aCoordinate = post?.pubkey && currentDTag ? longformArticleCoordinate(post.pubkey, currentDTag) : undefined;
 
       // Query by multiple tag types to catch all comments:
       // 1. '#e' (event id reference) - for comments that reference the article in lowercase 'e' tag
       // 2. '#E' (event id reference) - for comments that reference the article in uppercase 'E' tag  
       // 3. '#a' (article coordinate reference) - for comments that reference the article coordinate
       const [nip22ByE, nip22ByE_upper, nip22ByA, kind1ByE, kind1ByE_upper, kind1ByA] = await Promise.all([
-        ndkToUse.fetchEvents({ kinds: [1111], '#e': [postId], limit: 200 }),
-        ndkToUse.fetchEvents({ kinds: [1111], '#E': [postId], limit: 200 }),
-        aCoordinate ? ndkToUse.fetchEvents({ kinds: [1111], '#a': [aCoordinate], limit: 200 }) : Promise.resolve(new Set()),
-        ndkToUse.fetchEvents({ kinds: [1], '#e': [postId], limit: 500 }),
-        ndkToUse.fetchEvents({ kinds: [1], '#E': [postId], limit: 500 }),
-        aCoordinate ? ndkToUse.fetchEvents({ kinds: [1], '#a': [aCoordinate], limit: 500 }) : Promise.resolve(new Set()),
+        ndkToUse.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#e': [postId], limit: 200 }),
+        ndkToUse.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#E': [postId], limit: 200 }),
+        aCoordinate ? ndkToUse.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#a': [aCoordinate], limit: 200 }) : Promise.resolve(new Set()),
+        ndkToUse.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#e': [postId], limit: 500 }),
+        ndkToUse.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#E': [postId], limit: 500 }),
+        aCoordinate ? ndkToUse.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#a': [aCoordinate], limit: 500 }) : Promise.resolve(new Set()),
       ]);
 
       // Merge and deduplicate by id
@@ -1643,22 +1647,22 @@ export default function BlogPost() {
     try {
       // Create NIP-22 comment event (kind 1111)
       const ndkEvent = new NDKEvent(ndkToUse);
-      ndkEvent.kind = 1111;
+      ndkEvent.kind = KIND_NIP22_COMMENT;
       ndkEvent.content = commentText.trim();
       
       // Get the d tag from the post or URL parameters
       const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
       
       // Build article coordinate (a tag)
-      const aCoordinate = `30023:${post.pubkey}:${dTag || post.id}`;
+      const aCoordinate = longformArticleCoordinate(post.pubkey, dTag || post.id);
       
       // Add required tags according to NIP-22
       ndkEvent.tags = [
-        ['K', '30023'], // Kind of the article being commented on
+        ['K', String(KIND_LONGFORM_ARTICLE)], // Kind of the article being commented on
         ['P', post.pubkey], // Author of the article
         ['E', post.id], // Event ID of the article
         ['A', aCoordinate], // Article coordinate
-        ['k', '30023'], // Kind of the article (lowercase)
+        ['k', String(KIND_LONGFORM_ARTICLE)], // Kind of the article (lowercase)
         ['p', post.pubkey], // Author of the article (lowercase)
         ['e', post.id], // Event ID of the article (lowercase)
         ['a', aCoordinate], // Article coordinate (lowercase)
@@ -1730,20 +1734,20 @@ export default function BlogPost() {
 
       // Create NIP-22 reply event (kind 1111)
       const ndkEvent = new NDKEvent(ndkToUse);
-      ndkEvent.kind = 1111;
+      ndkEvent.kind = KIND_NIP22_COMMENT;
       ndkEvent.content = replyText.trim();
       
       // Get the d tag from the post or URL parameters
       const dTag = post.dTag || (params.d ? decodeURIComponent(params.d as string) : undefined);
       
       // Build article coordinate (a tag)
-      const aCoordinate = `30023:${post.pubkey}:${dTag || post.id}`;
+      const aCoordinate = longformArticleCoordinate(post.pubkey, dTag || post.id);
       
       // Add required tags according to NIP-22 for replies
       ndkEvent.tags = [
         // Root event (the article)
         ['E', post.id], // Event ID of the article
-        ['K', '30023'], // Kind of the article
+        ['K', String(KIND_LONGFORM_ARTICLE)], // Kind of the article
         ['P', post.pubkey], // Author of the article
         ['A', aCoordinate], // Article coordinate
         
@@ -2076,7 +2080,7 @@ export default function BlogPost() {
     try {
       // Create kind 9802 highlight event
       const highlightEvent = new NDKEvent(contextNdk);
-      highlightEvent.kind = 9802;
+      highlightEvent.kind = KIND_HIGHLIGHT;
       highlightEvent.content = selectedText.trim();
       
       // Add tags
@@ -2085,7 +2089,7 @@ export default function BlogPost() {
       
       // Add 'a' tag for longform article reference (kind:author:dTag)
       if (post.dTag) {
-        highlightEvent.tags.push(['a', `30023:${post.pubkey}:${post.dTag}`]);
+        highlightEvent.tags.push(['a', longformArticleCoordinate(post.pubkey, post.dTag || '')]);
       }
 
       // Publish the highlight
@@ -2698,7 +2702,7 @@ export default function BlogPost() {
                                 id: zap.id,
                                 pubkey: zap.pubkey,
                                 created_at: zap.created_at,
-                                kind: 9735,
+                                kind: KIND_ZAP,
                                 tags: [],
                                 content: zap.content || '',
                                 sig: ''
@@ -2780,7 +2784,7 @@ export default function BlogPost() {
                                   id: reaction.id,
                                   pubkey: reaction.pubkey,
                                   created_at: reaction.created_at,
-                                  kind: 7,
+                                  kind: KIND_REACTION,
                                   tags: [],
                                   content: reaction.content,
                                   sig: ''

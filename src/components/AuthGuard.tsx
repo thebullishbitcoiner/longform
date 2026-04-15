@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useNostr } from '@/contexts/NostrContext';
+import { nostrDebug } from '@/nostr/debug';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -22,25 +23,25 @@ export function AuthGuard({ children, requireAuth = true, requireConnection = fa
 
     // If authentication is required and user is not authenticated, try to check authentication first
     if (requireAuth && !isAuthenticated && !authCheckAttempted) {
-      console.log('🔒 AuthGuard: User not authenticated, attempting to check authentication...');
-      console.log('🔒 AuthGuard: Current state - isLoading:', isLoading, 'isAuthenticated:', isAuthenticated, 'isConnected:', isConnected);
+      nostrDebug('🔒 AuthGuard: User not authenticated, attempting to check authentication...');
+      nostrDebug('🔒 AuthGuard: Current state - isLoading:', isLoading, 'isAuthenticated:', isAuthenticated, 'isConnected:', isConnected);
       setAuthCheckAttempted(true);
       
       // Set a timeout to prevent infinite waiting
       timeoutRef.current = setTimeout(() => {
-        console.log('🔒 AuthGuard: Authentication timeout after 10 seconds, redirecting to home');
+        nostrDebug('🔒 AuthGuard: Authentication timeout after 10 seconds, redirecting to home');
         router.push('/');
       }, 10000); // 10 second timeout
       
       // Give authentication a chance to complete by calling checkAuthentication
       checkAuthentication().then((authResult) => {
-        console.log('🔒 AuthGuard: Authentication check completed with result:', authResult);
+        nostrDebug('🔒 AuthGuard: Authentication check completed with result:', authResult);
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
         if (!authResult) {
-          console.log('🔒 AuthGuard: Authentication check failed, redirecting to home');
+          nostrDebug('🔒 AuthGuard: Authentication check failed, redirecting to home');
           router.push('/');
         }
       }).catch((error) => {

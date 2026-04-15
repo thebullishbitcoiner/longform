@@ -1,6 +1,8 @@
 import { nip19 } from 'nostr-tools';
 import NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
+import { KIND_ENCRYPTED_DM } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 import { getRelaysForPublishingEvent, getRelaysForReadingPrivateEvents } from './preferredRelays';
 import { DEFAULT_RELAYS } from '@/config/relays';
 
@@ -143,18 +145,18 @@ export const getCurrentUserIdentifier = (currentUser: { pubkey: string; npub: st
  * Resolve a NIP-05 identifier to a pubkey
  */
 export const resolveNip05 = async (ndk: NDK, identifier: string): Promise<string | null> => {
-  console.log('🔍 DEBUG: resolveNip05 called with identifier:', identifier);
+  nostrDebug('resolveNip05 called with identifier:', identifier);
   
   try {
     // Check if it's already a valid hex pubkey
     if (/^[0-9a-fA-F]{64}$/i.test(identifier)) {
-      console.log('🔍 DEBUG: Identifier is already a hex pubkey:', identifier);
+      nostrDebug('Identifier is already a hex pubkey:', identifier);
       return identifier.toLowerCase();
     }
     
     // Check if it's an npub
     if (identifier.startsWith('npub')) {
-      console.log('🔍 DEBUG: Converting npub to hex:', identifier);
+      nostrDebug('Converting npub to hex:', identifier);
       return npubToHex(identifier);
     }
     
@@ -162,7 +164,7 @@ export const resolveNip05 = async (ndk: NDK, identifier: string): Promise<string
     if (identifier.includes('@')) {
       const [username, domain] = identifier.split('@');
       
-      console.log('🔍 DEBUG: Parsed NIP-05 identifier:', { username, domain });
+      nostrDebug('Parsed NIP-05 identifier:', { username, domain });
       
       if (!username || !domain) {
         console.error('🔍 DEBUG: Invalid NIP-05 identifier format:', identifier);
@@ -171,12 +173,12 @@ export const resolveNip05 = async (ndk: NDK, identifier: string): Promise<string
       
       try {
         const url = `https://${domain}/.well-known/nostr.json?name=${username}`;
-        console.log('🔍 DEBUG: Fetching NIP-05 data from:', url);
+        nostrDebug('Fetching NIP-05 data from:', url);
         
         // Fetch the NIP-05 JSON from the domain with name parameter
         const response = await fetch(url);
         
-        console.log('🔍 DEBUG: NIP-05 response status:', response.status);
+        nostrDebug('NIP-05 response status:', response.status);
         
         if (!response.ok) {
           console.error(`🔍 DEBUG: Failed to fetch NIP-05 data from ${domain}:`, response.status);
@@ -184,15 +186,15 @@ export const resolveNip05 = async (ndk: NDK, identifier: string): Promise<string
         }
         
         const data = await response.json();
-        console.log('🔍 DEBUG: NIP-05 data received:', data);
+        nostrDebug('NIP-05 data received:', data);
         
         if (data.names && data.names[username]) {
           const pubkey = data.names[username];
-          console.log('🔍 DEBUG: Found pubkey for username:', { username, pubkey });
+          nostrDebug('Found pubkey for username:', { username, pubkey });
           return pubkey;
         } else {
           console.error(`🔍 DEBUG: NIP-05 identifier ${username} not found in domain ${domain}`);
-          console.log('🔍 DEBUG: Available names:', data.names);
+          nostrDebug('Available names:', data.names);
           return null;
         }
       } catch (fetchError) {
@@ -201,7 +203,7 @@ export const resolveNip05 = async (ndk: NDK, identifier: string): Promise<string
       }
     }
     
-    console.log('🔍 DEBUG: Could not resolve identifier:', identifier);
+    nostrDebug('Could not resolve identifier:', identifier);
     return null;
   } catch (error) {
     console.error('🔍 DEBUG: Error resolving NIP-05 identifier:', error);
@@ -247,7 +249,7 @@ export function createNDKWithPreferredRelays(
     }
   });
   
-  console.log(`Creating NDK with ${allRelays.length} relays (${preferredRelays.length} preferred for private events)`);
+  nostrDebug(`Creating NDK with ${allRelays.length} relays (${preferredRelays.length} preferred for private events)`);
   
   return new NDK({
     explicitRelayUrls: allRelays
@@ -268,7 +270,7 @@ export async function publishEncryptedEvent(
   recipientPubkey: string,
   content: string,
   userPubkey: string,
-  kind: number = 4
+  kind: number = KIND_ENCRYPTED_DM
 ): Promise<NDKEvent> {
   // Create the event
   const event = new NDKEvent(ndk);
@@ -292,12 +294,12 @@ export async function publishEncryptedEvent(
   
   // Publish to preferred relays if available, otherwise use default relays
   if (preferredRelays.length > 0) {
-    console.log(`Publishing encrypted event to ${preferredRelays.length} preferred relays:`, preferredRelays);
+    nostrDebug(`Publishing encrypted event to ${preferredRelays.length} preferred relays:`, preferredRelays);
     // Note: NDK doesn't support specifying relays in publish method directly
     // We'll need to handle this differently - for now, publish normally
     await event.publish();
   } else {
-    console.log('No preferred relays configured, publishing to default relays');
+    nostrDebug('No preferred relays configured, publishing to default relays');
     await event.publish();
   }
   
@@ -320,17 +322,17 @@ export function subscribeToEncryptedEvents(
   const preferredRelays = getRelaysForReadingPrivateEvents(userPubkey);
   
   const filter = {
-    kinds: [4],
+    kinds: [KIND_ENCRYPTED_DM],
     '#p': [userPubkey]
   };
   
   // Subscribe using preferred relays if available
   if (preferredRelays.length > 0) {
-    console.log(`Subscribing to encrypted events from ${preferredRelays.length} preferred relays:`, preferredRelays);
+    nostrDebug(`Subscribing to encrypted events from ${preferredRelays.length} preferred relays:`, preferredRelays);
     // Note: NDK doesn't support specifying relays in subscribe method directly
     return ndk.subscribe(filter, { closeOnEose: false }, { onEvent: callback });
   } else {
-    console.log('No preferred relays configured, subscribing from default relays');
+    nostrDebug('No preferred relays configured, subscribing from default relays');
     return ndk.subscribe(filter, { closeOnEose: false }, { onEvent: callback });
   }
 } 

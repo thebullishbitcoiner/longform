@@ -1,3 +1,5 @@
+import { nostrDebug } from '@/nostr/debug';
+
 export interface Draft {
   id: string;
   title: string;
@@ -122,7 +124,7 @@ function cleanupStorage(): void {
       }
     }
     
-    console.log('Storage cleanup completed');
+    nostrDebug('Storage cleanup completed');
   } catch (error) {
     console.error('Error during storage cleanup:', error);
   }
@@ -218,7 +220,7 @@ export function getCachedHighlights(pubkey: string): CachedHighlight[] | null {
     // Check if cache is fresh (less than 1 hour old)
     const cacheAge = Date.now() - data.timestamp;
     if (cacheAge > 60 * 60 * 1000) { // 1 hour
-      console.log('Highlight cache expired, will refresh');
+      nostrDebug('Highlight cache expired, will refresh');
       return null;
     }
     
@@ -319,7 +321,7 @@ export function getCachedPosts(pubkey: string): CachedPost[] | null {
     // Check if cache is fresh (less than 1 hour old)
     const cacheAge = Date.now() - data.timestamp;
     if (cacheAge > 60 * 60 * 1000) { // 1 hour
-      console.log('Post cache expired, will refresh');
+      nostrDebug('Post cache expired, will refresh');
       return null;
     }
     
@@ -391,7 +393,7 @@ export function getCachedDrafts(pubkey: string): CachedDraft[] | null {
     // Check if cache is fresh (less than 1 hour old)
     const cacheAge = Date.now() - data.timestamp;
     if (cacheAge > 60 * 60 * 1000) { // 1 hour
-      console.log('Draft cache expired, will refresh');
+      nostrDebug('Draft cache expired, will refresh');
       return null;
     }
     

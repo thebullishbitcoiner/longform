@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
+import { KIND_DELETION, KIND_LONGFORM_ARTICLE, KIND_LONGFORM_DRAFT } from '@/nostr/kinds';
+import { nostrDebug } from '@/nostr/debug';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { copyToClipboard } from '@/utils/clipboard';
@@ -122,14 +124,14 @@ export default function Longform() {
       deletionEventsRef.current = []; // Reset deletion events
       
       if (!ndk || !isAuthenticated) {
-        console.log('Longform: NDK or authentication not ready, skipping load');
+        nostrDebug('Longform: NDK or authentication not ready, skipping load');
         setIsLoading(false);
         setIsLoadingPublished(false);
         return;
       }
 
       try {
-        console.log('Longform: Attempting to load Nostr content...');
+        nostrDebug('Longform: Attempting to load Nostr content...');
 
         // Use the current user's pubkey from context instead of calling window.nostr.getPublicKey()
         if (!currentUser?.pubkey) {
@@ -140,14 +142,14 @@ export default function Longform() {
         }
         
         const pubkey = currentUser.pubkey;
-        console.log('Longform: Using pubkey from context:', pubkey);
+        nostrDebug('Longform: Using pubkey from context:', pubkey);
 
         // Try to load from cache first
         const cachedDrafts = getCachedDrafts(pubkey);
         const cachedPosts = getCachedPosts(pubkey);
         
         if (cachedDrafts && cachedPosts) {
-          console.log('Longform: Loading from cache -', cachedDrafts.length, 'drafts,', cachedPosts.length, 'published notes');
+          nostrDebug('Longform: Loading from cache -', cachedDrafts.length, 'drafts,', cachedPosts.length, 'published notes');
           
           // Convert cached data to component state format
           const draftsFromCache: Draft[] = cachedDrafts.map(cached => ({
@@ -175,17 +177,17 @@ export default function Longform() {
           setIsLoadingPublished(false);
           
           // Still fetch fresh data in background for updates
-          console.log('Longform: Cache loaded, fetching fresh data in background...');
+          nostrDebug('Longform: Cache loaded, fetching fresh data in background...');
         } else {
-          console.log('Longform: No valid cache found, fetching from Nostr...');
+          nostrDebug('Longform: No valid cache found, fetching from Nostr...');
         }
         
-        console.log('Longform: Setting up Nostr subscriptions...');
+        nostrDebug('Longform: Setting up Nostr subscriptions...');
         
-        // Subscribe to draft events (kind 30024)
+        // Subscribe to draft events (KIND_LONGFORM_DRAFT)
         const draftSubscription = ndk.subscribe(
           { 
-            kinds: [30024 as NDKKind], // Draft events only
+            kinds: [KIND_LONGFORM_DRAFT as NDKKind], // Draft events only
             authors: [pubkey] 
           },
           { closeOnEose: true },
@@ -195,12 +197,12 @@ export default function Longform() {
             }
           }
         );
-        console.log('Longform: Draft subscription active');
+        nostrDebug('Longform: Draft subscription active');
 
         // Subscribe to deletion events (kind 5)
         const deletionSubscription = ndk.subscribe(
           { 
-            kinds: [5 as NDKKind], // Deletion events
+            kinds: [KIND_DELETION as NDKKind], // Deletion events
             authors: [pubkey] 
           },
           { closeOnEose: true },
@@ -210,12 +212,12 @@ export default function Longform() {
             }
           }
         );
-        console.log('Longform: Deletion subscription active');
+        nostrDebug('Longform: Deletion subscription active');
 
-        // Subscribe to published longform events (kind 30023)
+        // Subscribe to published longform events (KIND_LONGFORM_ARTICLE)
         const publishedSubscription = ndk.subscribe(
           { 
-            kinds: [30023 as NDKKind], // Published longform events
+            kinds: [KIND_LONGFORM_ARTICLE as NDKKind], // Published longform events
             authors: [pubkey] 
           },
           { closeOnEose: true },
@@ -225,15 +227,15 @@ export default function Longform() {
             }
           }
         );
-        console.log('Longform: Published subscription active');
+        nostrDebug('Longform: Published subscription active');
 
         // Set a timeout to process all events after they're received
         const timeoutDuration = 8000; // 8 seconds for all devices
         
-        console.log(`Longform: Setting timeout for ${timeoutDuration}ms`);
+        nostrDebug(`Longform: Setting timeout for ${timeoutDuration}ms`);
         
         setTimeout(() => {
-          console.log('Longform: Processing draft events:', eventsRef.current.length);
+          nostrDebug('Longform: Processing draft events:', eventsRef.current.length);
           
           // Get all deleted event IDs from deletion events
           const deletedEventIds = new Set<string>();
@@ -245,7 +247,7 @@ export default function Longform() {
             });
           });
           
-          console.log(`Longform: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
+          nostrDebug(`Longform: Deleted event IDs processed: ${Array.from(deletedEventIds).length}`);
           
           // Process drafts - filter out deleted ones
           const uniqueDraftEvents = eventsRef.current.filter((event, index, self) => 
@@ -257,12 +259,12 @@ export default function Longform() {
             const isDeleted = deletedEventIds.has(event.id);
             if (isDeleted) {
               const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
-              console.log(`Longform: Removing deleted draft: ${event.id} with title: ${title}`);
+              nostrDebug(`Longform: Removing deleted draft: ${event.id} with title: ${title}`);
             }
             return !isDeleted;
           });
           
-          console.log(`Longform: Draft events after filtering deletions: ${nonDeletedDraftEvents.length}`);
+          nostrDebug(`Longform: Draft events after filtering deletions: ${nonDeletedDraftEvents.length}`);
           
           const allDrafts: Draft[] = nonDeletedDraftEvents.map(event => {
             const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
@@ -276,7 +278,7 @@ export default function Longform() {
             };
           });
           
-          console.log(`Longform: All drafts before cleanup: ${allDrafts.length}`);
+          nostrDebug(`Longform: All drafts before cleanup: ${allDrafts.length}`);
           
           // Clean up: keep only the latest version of each draft
           const finalDrafts = allDrafts.filter(draft => {
@@ -285,12 +287,12 @@ export default function Longform() {
               otherDraft.dTag === draft.id
             );
             if (isReferenced) {
-              console.log(`Longform: Removing older draft ${draft.id} referenced by newer draft`);
+              nostrDebug(`Longform: Removing older draft ${draft.id} referenced by newer draft`);
             }
             return !isReferenced;
           });
           
-          console.log(`Longform: Final drafts after cleanup: ${finalDrafts.length}`);
+          nostrDebug(`Longform: Final drafts after cleanup: ${finalDrafts.length}`);
           
           setDrafts(finalDrafts);
           setIsLoading(false);
@@ -327,12 +329,12 @@ export default function Longform() {
             const isDeleted = deletedEventIds.has(event.id);
             if (isDeleted) {
               const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
-              console.log(`Longform: Removing deleted published note: ${event.id} with title: ${title}`);
+              nostrDebug(`Longform: Removing deleted published note: ${event.id} with title: ${title}`);
             }
             return !isDeleted;
           });
           
-          console.log(`Longform: Published events after filtering deletions: ${nonDeletedPublishedEvents.length}`);
+          nostrDebug(`Longform: Published events after filtering deletions: ${nonDeletedPublishedEvents.length}`);
           
           const allPublishedNotes: PublishedNote[] = nonDeletedPublishedEvents.map(event => {
             const title = event.tags.find((tag: string[]) => tag[0] === 'title')?.[1] || 'Untitled';
@@ -365,7 +367,7 @@ export default function Longform() {
             };
           });
           
-          console.log(`Longform: All published notes before cleanup: ${allPublishedNotes.length}`);
+          nostrDebug(`Longform: All published notes before cleanup: ${allPublishedNotes.length}`);
           
           // Clean up: keep only the latest version of each published note
           // Use "d" tag to group related posts, with fallback strategies for edge cases
@@ -382,7 +384,7 @@ export default function Longform() {
                 );
                 
                 if (mostRecentNote.id !== note.id) {
-                  console.log(`Longform: Removing older published note ${note.id} keeping newer version ${mostRecentNote.id} with d tag ${note.dTag}`);
+                  nostrDebug(`Longform: Removing older published note ${note.id} keeping newer version ${mostRecentNote.id} with d tag ${note.dTag}`);
                   return false;
                 }
               }
@@ -405,7 +407,7 @@ export default function Longform() {
                 );
                 
                 if (mostRecentWithDTag.id !== note.id) {
-                  console.log(`Longform: Removing note with same title but different d tag ${note.id} keeping version with d tag ${mostRecentWithDTag.id}`);
+                  nostrDebug(`Longform: Removing note with same title but different d tag ${note.id} keeping version with d tag ${mostRecentWithDTag.id}`);
                   return false;
                 }
               } else if (notesWithoutDTags.length > 1) {
@@ -415,7 +417,7 @@ export default function Longform() {
                 );
                 
                 if (mostRecentNote.id !== note.id) {
-                  console.log(`Longform: Removing older published note with same title ${note.id} keeping newer version ${mostRecentNote.id}`);
+                  nostrDebug(`Longform: Removing older published note with same title ${note.id} keeping newer version ${mostRecentNote.id}`);
                   return false;
                 }
               }
@@ -424,14 +426,14 @@ export default function Longform() {
             return true;
           });
           
-          console.log(`Longform: Final published notes after cleanup: ${finalPublishedNotes.length}`);
+          nostrDebug(`Longform: Final published notes after cleanup: ${finalPublishedNotes.length}`);
           
           // Sort published notes by published date (newest first)
           const sortedPublishedNotes = finalPublishedNotes.sort((a, b) => 
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
           
-          console.log(`Longform: Published notes: ${sortedPublishedNotes.length}`);
+          nostrDebug(`Longform: Published notes: ${sortedPublishedNotes.length}`);
           
           setPublishedNotes(sortedPublishedNotes);
           setIsLoadingPublished(false);
@@ -459,7 +461,7 @@ export default function Longform() {
           });
           cacheUserPosts(pubkey, cachedPosts);
 
-          console.log(`Longform: Loading complete! Found ${finalDrafts.length} drafts and ${sortedPublishedNotes.length} published articles`);
+          nostrDebug(`Longform: Loading complete! Found ${finalDrafts.length} drafts and ${sortedPublishedNotes.length} published articles`);
         }, timeoutDuration);
 
         return () => {
@@ -524,7 +526,7 @@ export default function Longform() {
 
       // Create a deletion event (kind 5)
       const deleteEvent = new NDKEvent(ndk);
-      deleteEvent.kind = 5; // Deletion event
+      deleteEvent.kind = KIND_DELETION;
       deleteEvent.content = 'Deleted draft'; // Optional reason
       deleteEvent.tags = [
         ['e', id] // Reference to the event being deleted
@@ -841,7 +843,7 @@ export default function Longform() {
       {(isLoading || isLoadingPublished) && (
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Loading kinds 30023 and 30024...</p>
+          <p>Loading kinds {KIND_LONGFORM_ARTICLE} and {KIND_LONGFORM_DRAFT}...</p>
         </div>
       )}
 
