@@ -1,6 +1,6 @@
 import NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
-import { KIND_PREFERRED_RELAYS } from '@/nostr/kinds';
+import { KIND_ENCRYPTED_DM, KIND_PREFERRED_RELAYS } from '@/nostr/kinds';
 import { Nip07Signer } from './nip07Signer';
 
 export interface PreferredRelay {
@@ -8,35 +8,25 @@ export interface PreferredRelay {
   policy: 'read' | 'write' | 'readwrite';
 }
 
+const preferredRelayCache = new Map<string, PreferredRelay[]>();
+
 /**
- * Get preferred relays for a user from localStorage
+ * Get preferred relays for a user from in-memory runtime cache
  * @param pubkey - The user's public key
  * @returns Array of preferred relays
  */
 export function getPreferredRelays(pubkey: string): PreferredRelay[] {
-  try {
-    const stored = localStorage.getItem(`preferred_relays_${pubkey}`);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (error) {
-    console.error('Error loading preferred relays:', error);
-  }
-  return [];
+  const relays = preferredRelayCache.get(pubkey) ?? [];
+  return [...relays];
 }
 
 /**
- * Save preferred relays for a user to localStorage
+ * Save preferred relays for a user to in-memory runtime cache
  * @param pubkey - The user's public key
  * @param relays - Array of preferred relays
  */
 export function savePreferredRelays(pubkey: string, relays: PreferredRelay[]): void {
-  try {
-    localStorage.setItem(`preferred_relays_${pubkey}`, JSON.stringify(relays));
-  } catch (error) {
-    console.error('Error saving preferred relays:', error);
-    throw error;
-  }
+  preferredRelayCache.set(pubkey, [...relays]);
 }
 
 /**
@@ -120,7 +110,7 @@ export async function parsePreferredRelaysEvent(
  */
 export function getRelaysForPublishingEvent(pubkey: string, eventKind: number): string[] {
   // Only apply preferred relays for private events (kind 4)
-  if (eventKind !== 4) {
+  if (eventKind !== KIND_ENCRYPTED_DM) {
     return [];
   }
 
@@ -140,7 +130,7 @@ export function getRelaysForPublishingEvent(pubkey: string, eventKind: number): 
  */
 export function getRelaysForPrivateEvent(pubkey: string, eventKind: number): string[] {
   // Only apply preferred relays for private events (kind 4)
-  if (eventKind !== 4) {
+  if (eventKind !== KIND_ENCRYPTED_DM) {
     return [];
   }
 
