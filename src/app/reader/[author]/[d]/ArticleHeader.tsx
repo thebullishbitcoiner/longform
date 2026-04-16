@@ -1,14 +1,31 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { nip19 } from 'nostr-tools';
 import styles from './page.module.css';
 import type { BlogPost } from '@/contexts/BlogContext';
+import type { TopZapBadge } from './interactionTypes';
+
+const FallbackAvatar = ({ name, pubkey }: { name?: string; pubkey: string }) => {
+  const initials = name ? name.slice(0, 2).toUpperCase() : pubkey.slice(0, 2).toUpperCase();
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+  const colorIndex = pubkey.charCodeAt(0) % colors.length;
+
+  return (
+    <div className={styles.topZapFallbackAvatar} style={{ backgroundColor: colors[colorIndex] }}>
+      {initials}
+    </div>
+  );
+};
 
 interface ArticleHeaderProps {
   post: BlogPost;
   authorDisplayName: string;
   showAuthorLoading: boolean;
+  topZapBadges: TopZapBadge[];
+  totalZapCount: number;
+  onOpenAllZaps: () => void;
   engagement: React.ReactNode;
 }
 
@@ -16,6 +33,9 @@ export default function ArticleHeader({
   post,
   authorDisplayName,
   showAuthorLoading,
+  topZapBadges,
+  totalZapCount,
+  onOpenAllZaps,
   engagement,
 }: ArticleHeaderProps) {
   return (
@@ -67,6 +87,48 @@ export default function ArticleHeader({
                 #{tag}
               </span>
             ))}
+          </div>
+        )}
+
+        {topZapBadges.length > 0 && (
+          <div className={styles.topZapBadgesRow}>
+            {topZapBadges.map((zap, index) => (
+              <div
+                key={zap.id}
+                className={index === 0 ? `${styles.topZapBadge} ${styles.topZapBadgeLead}` : styles.topZapBadge}
+              >
+                <div className={styles.topZapBadgeMain}>
+                  {zap.authorPicture ? (
+                    <Image
+                      src={zap.authorPicture}
+                      alt=""
+                      width={26}
+                      height={26}
+                      className={styles.topZapAvatar}
+                      unoptimized
+                    />
+                  ) : (
+                    <FallbackAvatar name={zap.authorName} pubkey={zap.pubkey} />
+                  )}
+                  <span className={styles.topZapAmount}>{zap.amount.toLocaleString()}</span>
+                  {index === 0 && zap.zapMessage ? (
+                    <span className={styles.topZapMessage} title={zap.zapMessage}>
+                      {zap.zapMessage}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+            {totalZapCount > topZapBadges.length ? (
+              <button
+                type="button"
+                className={styles.topZapMoreButton}
+                onClick={onOpenAllZaps}
+                aria-label="View all zaps"
+              >
+                <EllipsisHorizontalIcon className={styles.topZapMoreIcon} />
+              </button>
+            ) : null}
           </div>
         )}
 

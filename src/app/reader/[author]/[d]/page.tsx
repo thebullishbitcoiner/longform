@@ -78,6 +78,7 @@ export default function BlogPost() {
   const ndkToUse = contextNdk || standaloneNdk;
   const {
     statsSection,
+    topZapBadges,
     showZapsModal,
     setShowZapsModal,
     zapData,
@@ -163,6 +164,37 @@ export default function BlogPost() {
     dParam: typeof params.d === 'string' ? decodeURIComponent(params.d) : undefined,
     refreshReactionStats,
   });
+
+  useEffect(() => {
+    const modalOpen =
+      showZapsModal ||
+      showReactionsModal ||
+      showRepostsModal ||
+      jsonModal.isOpen ||
+      showEmojiModal;
+
+    if (!modalOpen) {
+      return;
+    }
+
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+    };
+  }, [
+    showZapsModal,
+    showReactionsModal,
+    showRepostsModal,
+    jsonModal.isOpen,
+    showEmojiModal,
+  ]);
 
   const openCommentJson = useCallback((eventId: string) => {
     const comment = findCommentById(comments, eventId);
@@ -823,6 +855,9 @@ export default function BlogPost() {
             post={post}
             authorDisplayName={authorDisplayName}
             showAuthorLoading={showAuthorLoading}
+            topZapBadges={topZapBadges}
+            totalZapCount={statsSection.zaps}
+            onOpenAllZaps={handleZapsClick}
             engagement={(
               <ArticleEngagement
                 zaps={statsSection.zaps}

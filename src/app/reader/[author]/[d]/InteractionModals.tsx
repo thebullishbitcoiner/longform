@@ -84,23 +84,34 @@ export default function InteractionModals({
                 <div className={styles.zapList}>
                   {zapData.map((zap) => (
                     <div key={zap.id} className={styles.zapItem}>
-                      <div className={styles.zapItemAuthor}>
-                        {zap.authorPicture ? (
-                          <Image
-                            src={zap.authorPicture}
-                            alt="Author"
-                            width={28}
-                            height={28}
-                            className={styles.modalAuthorAvatar}
-                          />
-                        ) : (
-                          <FallbackAvatar name={zap.authorName} pubkey={zap.pubkey} />
-                        )}
-                        <span className={styles.zapAuthorName}>
-                          {zap.authorName || `${zap.pubkey.slice(0, 8)}...`}
-                        </span>
+                      <div className={styles.zapItemLeft}>
+                        <div className={styles.zapItemAvatarWrap}>
+                          {zap.authorPicture ? (
+                            <Image
+                              src={zap.authorPicture}
+                              alt=""
+                              width={28}
+                              height={28}
+                              className={styles.modalAuthorAvatar}
+                            />
+                          ) : (
+                            <FallbackAvatar name={zap.authorName} pubkey={zap.pubkey} />
+                          )}
+                        </div>
+                        <div className={styles.zapItemAuthorStack}>
+                          <span className={styles.zapAuthorName}>
+                            {zap.authorName || `${zap.pubkey.slice(0, 8)}...`}
+                          </span>
+                          {zap.zapMessage ? (
+                            <span className={styles.zapModalMessage} title={zap.zapMessage}>
+                              {zap.zapMessage}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
-                      <span className={styles.zapAmount}>⚡ {zap.amount} sats</span>
+                      <div className={styles.zapItemAmountCol}>
+                        <span className={styles.zapAmount}>{zap.amount.toLocaleString()} sats</span>
+                      </div>
                       <div className={styles.reactionRight}>
                         <div className={styles.reactionMenuWrapper}>
                           <button

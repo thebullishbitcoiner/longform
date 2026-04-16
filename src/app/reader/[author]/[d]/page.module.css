@@ -5,9 +5,21 @@
 }
 
 .mainContent {
-  max-width: 48rem;
+  max-width: 56rem;
   margin: 0 auto;
   padding: 2rem 1rem;
+}
+
+@media (min-width: 1024px) {
+  .mainContent {
+    max-width: 68rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .mainContent {
+    max-width: 72rem;
+  }
 }
 
 @media (max-width: 640px) {
@@ -438,6 +450,105 @@
   border-radius: 0.25rem;
   font-size: 0.875rem;
   border: 1px solid var(--border);
+}
+
+.topZapBadgesRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+/* Pill-shaped badges; avatar + amount (+ optional message on same row for #1) */
+.topZapBadge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: linear-gradient(145deg, rgba(251, 191, 36, 0.1), var(--background-secondary));
+  border-radius: 9999px;
+  padding: 0.15rem 0.65rem 0.15rem 0.15rem;
+  max-width: 11rem;
+  min-width: 0;
+}
+
+.topZapBadgeLead {
+  max-width: min(100%, 26rem);
+}
+
+.topZapBadgeMain {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.topZapAvatar {
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  flex-shrink: 0;
+}
+
+.topZapFallbackAvatar {
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: #111827;
+  flex-shrink: 0;
+}
+
+.topZapAmount {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #fbbf24;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.topZapMessage {
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: var(--text-secondary);
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topZapMoreButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  border: 1px dashed var(--border);
+  background: var(--background-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.topZapMoreButton:hover {
+  color: var(--text);
+  border-color: rgba(251, 191, 36, 0.45);
+  background-color: var(--hover);
+}
+
+.topZapMoreIcon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .actionIcons {
@@ -956,13 +1067,14 @@
   justify-content: center;
   z-index: 1000;
   padding: 1rem;
+  overscroll-behavior: none;
 }
 
 .modalContent {
   background-color: var(--background-secondary);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
-  max-width: 500px;
+  max-width: min(94vw, 560px);
   width: 100%;
   max-height: 80vh;
   overflow: hidden;
@@ -970,9 +1082,27 @@
   flex-direction: column;
 }
 
+@media (min-width: 768px) {
+  .modalContent {
+    max-width: min(90vw, 640px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .modalContent {
+    max-width: min(88vw, 720px);
+  }
+}
+
 /* Wider modal for JSON content on desktop */
 .modalContent:has(.jsonPre) {
-  max-width: 800px;
+  max-width: min(92vw, 860px);
+}
+
+@media (min-width: 1024px) {
+  .modalContent:has(.jsonPre) {
+    max-width: min(90vw, 960px);
+  }
 }
 
 .modalHeader {
@@ -1036,7 +1166,7 @@
   border-bottom: 1px solid var(--border);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
+  align-items: stretch;
   column-gap: 0.75rem;
 }
 
@@ -1044,16 +1174,43 @@
   border-bottom: none;
 }
 
-.zapItemAuthor {
+/* Avatar + name/message stack; amount & menu align to the full height (two rows when message exists) */
+.zapItemLeft {
   display: flex;
-  align-items: center;
+  flex-direction: row;
+  align-items: stretch;
   gap: 0.625rem;
   min-width: 0;
+}
+
+.zapItemAvatarWrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+}
+
+.zapItemAuthorStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .zapAuthorName {
   font-weight: 500;
   color: var(--text);
+}
+
+.zapItemAmountCol {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: stretch;
+  min-width: 4.5rem;
 }
 
 .zapAmount {
@@ -1063,6 +1220,22 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.zapModalMessage {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  text-align: left;
+  min-width: 0;
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.zapItem .reactionRight {
+  align-self: center;
 }
 
 /* Reaction List Styles */
