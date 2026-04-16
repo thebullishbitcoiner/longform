@@ -30,6 +30,9 @@ export const KIND_GENERIC_REPOST = 16;
 /** Application-specific subscriber list */
 export const KIND_SUBSCRIBERS_LIST = 30000;
 
+/** NIP-78 arbitrary app data (Longform uses `d` tag `longform` for encrypted read-state) */
+export const KIND_APP_SPECIFIC_DATA = 30078;
+
 /** NIP-23 longform article */
 export const KIND_LONGFORM_ARTICLE = 30023;
 

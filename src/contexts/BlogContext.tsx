@@ -1,10 +1,25 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useRef, useCallback } from 'react';
+import type { NDKEvent } from '@nostr-dev-kit/ndk';
+import toast from 'react-hot-toast';
 import { safeSetItem, STORAGE_KEYS } from '@/utils/storage';
+import { useNostr } from '@/contexts/NostrContext';
+import { Nip07Signer } from '@/utils/nip07Signer';
+import {
+  fetchLatestReadStateEvent,
+  decryptReadStateFromEvent,
+  publishReadState,
+  READ_STATE_D_TAG,
+} from '@/nostr/readState';
+import { KIND_APP_SPECIFIC_DATA } from '@/nostr/kinds';
 import type { AuthorProfile, BlogPost } from '@/types/content';
 
 export type { AuthorProfile, BlogPost };
+
+const READ_SYNC_DEBOUNCE_MS = 2000;
+/** Legacy key — removed at runtime so old local read lists are not reused */
+const LEGACY_READ_POSTS_KEY = 'longform_readPosts';
 
 export type BlogContextType = {
   posts: BlogPost[];
@@ -49,6 +64,8 @@ interface BlogProviderProps {
 }
 
 export function BlogProvider({ children }: BlogProviderProps) {
+  const { ndk, isAuthenticated, isConnected, currentUser } = useNostr();
+
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -62,18 +79,7 @@ export function BlogProvider({ children }: BlogProviderProps) {
     return [];
   });
 
-  const [readPosts, setReadPosts] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cachedReadPosts = localStorage.getItem(STORAGE_KEYS.READ_POSTS);
-        return new Set(cachedReadPosts ? JSON.parse(cachedReadPosts) : []);
-      } catch (error) {
-        console.error('Error loading read posts from storage:', error);
-        return new Set();
-      }
-    }
-    return new Set();
-  });
+  const [readPosts, setReadPosts] = useState<Set<string>>(() => new Set());
 
   const [authorProfiles, setAuthorProfiles] = useState<Record<string, AuthorProfile>>(() => {
     if (typeof window !== 'undefined') {
@@ -88,7 +94,10 @@ export function BlogProvider({ children }: BlogProviderProps) {
     return {};
   });
 
-  // Track which profiles are currently being fetched to prevent duplicates
+  const readPostsRef = useRef<Set<string>>(new Set());
+  const publishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nip44WarnedRef = useRef(false);
+
   const fetchingProfiles = useRef<Set<string>>(new Set());
   const profileFetchPromises = useRef<Map<string, Promise<AuthorProfile | null>>>(new Map());
 
@@ -99,7 +108,130 @@ export function BlogProvider({ children }: BlogProviderProps) {
     }
   });
 
-  // Save to localStorage when posts change
+  useEffect(() => {
+    readPostsRef.current = readPosts;
+  }, [readPosts]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(LEGACY_READ_POSTS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const clearPublishTimer = useCallback(() => {
+    if (publishTimerRef.current) {
+      clearTimeout(publishTimerRef.current);
+      publishTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (typeof window === 'undefined' || window.nostr?.nip44) return;
+    if (nip44WarnedRef.current) return;
+    nip44WarnedRef.current = true;
+    toast.error(
+      'Your Nostr extension does not support NIP-44. Read/unread state will not sync across devices.'
+    );
+  }, [isAuthenticated]);
+
+  const schedulePublishReadState = useCallback(() => {
+    if (typeof window === 'undefined' || !window.nostr?.nip44) return;
+    if (!isAuthenticated || !currentUser?.pubkey) return;
+    const signer = ndk.signer;
+    if (!(signer instanceof Nip07Signer)) return;
+
+    clearPublishTimer();
+    publishTimerRef.current = setTimeout(async () => {
+      publishTimerRef.current = null;
+      const snapshot = readPostsRef.current;
+      try {
+        await publishReadState(ndk, signer, snapshot);
+      } catch (e) {
+        console.error('[readState] publish failed', e);
+        toast.error('Could not sync read state to relays.');
+      }
+    }, READ_SYNC_DEBOUNCE_MS);
+  }, [ndk, isAuthenticated, currentUser?.pubkey, clearPublishTimer]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !isConnected || !currentUser?.pubkey) return;
+    if (typeof window !== 'undefined' && !window.nostr?.nip44) return;
+
+    const signer = ndk.signer;
+    if (!(signer instanceof Nip07Signer)) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const ev = await fetchLatestReadStateEvent(ndk, currentUser.pubkey);
+        if (cancelled || !ev) return;
+        const ids = await decryptReadStateFromEvent(signer, ev, currentUser.pubkey);
+        if (cancelled) return;
+        setReadPosts((prev) => new Set([...prev, ...ids]));
+      } catch (e) {
+        console.warn('[readState] initial fetch failed', e);
+      }
+    })();
+
+    const sub = ndk.subscribe(
+      {
+        kinds: [KIND_APP_SPECIFIC_DATA],
+        authors: [currentUser.pubkey],
+        '#d': [READ_STATE_D_TAG],
+      },
+      { closeOnEose: false }
+    );
+
+    const onIncoming = async (event: NDKEvent) => {
+      if (cancelled) return;
+      try {
+        const ids = await decryptReadStateFromEvent(signer, event, currentUser.pubkey);
+        if (ids.size === 0) return;
+        setReadPosts((prev) => {
+          let added = false;
+          const next = new Set(prev);
+          for (const id of ids) {
+            if (!next.has(id)) {
+              next.add(id);
+              added = true;
+            }
+          }
+          return added ? next : prev;
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    sub.on('event', (ev: NDKEvent) => {
+      void onIncoming(ev);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.stop();
+    };
+  }, [ndk, isAuthenticated, isConnected, currentUser?.pubkey]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      clearPublishTimer();
+      setReadPosts(new Set());
+      readPostsRef.current = new Set();
+    }
+  }, [isAuthenticated, clearPublishTimer]);
+
+  useEffect(() => {
+    return () => {
+      clearPublishTimer();
+    };
+  }, [clearPublishTimer]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const success = safeSetItem(STORAGE_KEYS.POSTS, JSON.stringify(posts));
@@ -109,17 +241,6 @@ export function BlogProvider({ children }: BlogProviderProps) {
     }
   }, [posts]);
 
-  // Save to localStorage when readPosts change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const success = safeSetItem(STORAGE_KEYS.READ_POSTS, JSON.stringify([...readPosts]));
-      if (!success) {
-        console.warn('Failed to save read posts due to storage constraints');
-      }
-    }
-  }, [readPosts]);
-
-  // Save to localStorage when authorProfiles change
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const success = safeSetItem(STORAGE_KEYS.AUTHOR_PROFILES, JSON.stringify(authorProfiles));
@@ -131,11 +252,9 @@ export function BlogProvider({ children }: BlogProviderProps) {
 
   const addPost = (post: BlogPost) => {
     setPosts(prev => {
-      // Find existing post with the same id
       const existingPostIndex = prev.findIndex(p => p.id === post.id);
-      
+
       if (existingPostIndex !== -1) {
-        // If we found a post with the same id, only update if the new post is more recent
         if (post.created_at > prev[existingPostIndex].created_at) {
           const newPosts = [...prev];
           newPosts[existingPostIndex] = post;
@@ -143,8 +262,7 @@ export function BlogProvider({ children }: BlogProviderProps) {
         }
         return prev;
       }
-      
-      // If no post with the same id exists, add the new post
+
       return [post, ...prev];
     });
   };
@@ -164,13 +282,11 @@ export function BlogProvider({ children }: BlogProviderProps) {
   };
 
   const updateAuthorProfile = (pubkey: string, profile: AuthorProfile) => {
-    // Update the centralized author profiles cache
     setAuthorProfiles(prev => ({
       ...prev,
       [pubkey]: profile
     }));
 
-    // Also update any posts that have this author
     setPosts(prev => prev.map(post => {
       if (post.pubkey === pubkey) {
         return { ...post, author: profile };
@@ -188,17 +304,14 @@ export function BlogProvider({ children }: BlogProviderProps) {
   };
 
   const fetchProfileOnce = async (pubkey: string, fetchFn: () => Promise<AuthorProfile | null>) => {
-    // If already cached, return immediately
     if (pubkey in authorProfiles) {
       return authorProfiles[pubkey];
     }
 
-    // If already being fetched, wait for the existing promise
     if (profileFetchPromises.current.has(pubkey)) {
       return await profileFetchPromises.current.get(pubkey)!;
     }
 
-    // If not being fetched, start a new fetch
     fetchingProfiles.current.add(pubkey);
     const fetchPromise = fetchFn().then(profile => {
       if (profile) {
@@ -220,9 +333,11 @@ export function BlogProvider({ children }: BlogProviderProps) {
 
   const markPostAsRead = (id: string) => {
     setReadPosts(prev => {
-      const newReadPosts = new Set(prev).add(id);
-      return newReadPosts;
+      const next = new Set(prev).add(id);
+      readPostsRef.current = next;
+      return next;
     });
+    schedulePublishReadState();
   };
 
   const isPostRead = (id: string) => {
@@ -231,10 +346,12 @@ export function BlogProvider({ children }: BlogProviderProps) {
 
   const markPostAsUnread = (id: string) => {
     setReadPosts(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(id);
-      return newSet;
+      const next = new Set(prev);
+      next.delete(id);
+      readPostsRef.current = next;
+      return next;
     });
+    schedulePublishReadState();
   };
 
   return (
@@ -258,4 +375,4 @@ export function BlogProvider({ children }: BlogProviderProps) {
       {children}
     </BlogContext.Provider>
   );
-} 
+}

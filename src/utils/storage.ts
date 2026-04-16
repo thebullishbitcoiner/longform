@@ -8,7 +8,6 @@ const STORAGE_KEYS = {
   LAST_DRAFT: 'longform_lastDraft',
   MOBILE_ERRORS: 'longform_mobile-errors',
   POSTS: 'longform_posts',
-  READ_POSTS: 'longform_readPosts',
   AUTHOR_PROFILES: 'longform_profiles',
   USER_HIGHLIGHTS: 'longform_userHighlights',
   USER_POSTS: 'longform_userPosts',

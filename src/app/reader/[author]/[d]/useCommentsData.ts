@@ -46,8 +46,8 @@ export function useCommentsData({
       const existing = commentsFetchInFlightRef.current.get(targetPostId);
       if (existing) return existing;
 
-      let promise!: Promise<CommentData[]>;
-      promise = (async () => {
+      const inFlight: { p?: Promise<CommentData[]> } = {};
+      inFlight.p = (async () => {
         try {
           const currentDTag = dParam ? decodeURIComponent(dParam) : undefined;
           const aCoordinate = postPubkey && currentDTag ? longformArticleCoordinate(postPubkey, currentDTag) : undefined;
@@ -164,14 +164,15 @@ export function useCommentsData({
           updateCommentProfiles(rootComments);
           return rootComments;
         } finally {
-          if (commentsFetchInFlightRef.current.get(targetPostId) === promise) {
+          if (commentsFetchInFlightRef.current.get(targetPostId) === inFlight.p) {
             commentsFetchInFlightRef.current.delete(targetPostId);
           }
         }
       })();
 
-      commentsFetchInFlightRef.current.set(targetPostId, promise);
-      return promise;
+      const p = inFlight.p!;
+      commentsFetchInFlightRef.current.set(targetPostId, p);
+      return p;
     },
     [dParam, getAuthorProfile, postPubkey, readNdk]
   );
