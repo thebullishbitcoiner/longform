@@ -26,7 +26,7 @@ interface UseInteractionDataParams {
   postId?: string;
   postPubkey?: string;
   dParam?: string;
-  getAuthorProfile: (pubkey: string) => { displayName?: string; name?: string } | undefined;
+  getAuthorProfile: (pubkey: string) => { displayName?: string; name?: string; image?: string; picture?: string } | undefined;
   updateAuthorProfile: (
     pubkey: string,
     profile: { name?: string; displayName?: string; nip05?: string; image?: string; picture?: string }
@@ -79,13 +79,16 @@ export function useInteractionData({
     async (pubkey: string) => {
       const cachedProfile = getAuthorProfile(pubkey);
       if (cachedProfile) {
-        return cachedProfile.displayName || cachedProfile.name;
+        return {
+          authorName: cachedProfile.displayName || cachedProfile.name,
+          authorPicture: cachedProfile.image || cachedProfile.picture,
+        };
       }
 
-      if (!ndk) return undefined;
+      if (!ndk) return { authorName: undefined, authorPicture: undefined };
       const user = ndk.getUser({ pubkey });
       const profile = await user.fetchProfile();
-      if (!profile) return undefined;
+      if (!profile) return { authorName: undefined, authorPicture: undefined };
 
       updateAuthorProfile(pubkey, {
         name: profile.name,
@@ -95,7 +98,10 @@ export function useInteractionData({
         picture: profile.picture,
       });
 
-      return profile.displayName || profile.name;
+      return {
+        authorName: profile.displayName || profile.name,
+        authorPicture: profile.image || profile.picture,
+      };
     },
     [getAuthorProfile, ndk, updateAuthorProfile]
   );
@@ -300,8 +306,11 @@ export function useInteractionData({
             }
 
             let authorName: string | undefined;
+            let authorPicture: string | undefined;
             try {
-              authorName = await enrichProfile(zapperPubkey);
+              const profile = await enrichProfile(zapperPubkey);
+              authorName = profile.authorName;
+              authorPicture = profile.authorPicture;
             } catch {
               // Ignore profile fetch failures for zaps.
             }
@@ -314,6 +323,7 @@ export function useInteractionData({
               content: finalDescription,
               created_at: zap.created_at,
               authorName,
+              authorPicture,
               event: zap,
             });
           } catch {
@@ -363,8 +373,11 @@ export function useInteractionData({
             if (!content) continue;
 
             let authorName: string | undefined;
+            let authorPicture: string | undefined;
             try {
-              authorName = await enrichProfile(reaction.pubkey);
+              const profile = await enrichProfile(reaction.pubkey);
+              authorName = profile.authorName;
+              authorPicture = profile.authorPicture;
             } catch (error) {
               console.error('Error fetching reaction author profile:', error);
             }
@@ -375,6 +388,7 @@ export function useInteractionData({
               content,
               created_at: reaction.created_at,
               authorName,
+              authorPicture,
               event: reaction,
             });
           } catch (error) {

@@ -7,6 +7,7 @@ export interface ZapData {
   content?: string;
   created_at: number;
   authorName?: string;
+  authorPicture?: string;
   event?: NDKEvent;
 }
 
@@ -16,6 +17,7 @@ export interface ReactionData {
   content: string;
   created_at: number;
   authorName?: string;
+  authorPicture?: string;
   event: NDKEvent;
 }
 

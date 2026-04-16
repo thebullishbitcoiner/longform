@@ -1,7 +1,20 @@
 import React from 'react';
 import { EllipsisVerticalIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import Image from 'next/image';
 import styles from './page.module.css';
 import type { ReactionData, RepostData, ZapData } from './interactionTypes';
+
+const FallbackAvatar = ({ name, pubkey }: { name?: string; pubkey: string }) => {
+  const initials = name ? name.slice(0, 2).toUpperCase() : pubkey.slice(0, 2).toUpperCase();
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+  const colorIndex = pubkey.charCodeAt(0) % colors.length;
+
+  return (
+    <div className={styles.modalFallbackAvatar} style={{ backgroundColor: colors[colorIndex] }}>
+      {initials}
+    </div>
+  );
+};
 
 interface InteractionModalsProps {
   showZapsModal: boolean;
@@ -71,12 +84,23 @@ export default function InteractionModals({
                 <div className={styles.zapList}>
                   {zapData.map((zap) => (
                     <div key={zap.id} className={styles.zapItem}>
-                      <div className={styles.reactionLeft}>
+                      <div className={styles.zapItemAuthor}>
+                        {zap.authorPicture ? (
+                          <Image
+                            src={zap.authorPicture}
+                            alt="Author"
+                            width={28}
+                            height={28}
+                            className={styles.modalAuthorAvatar}
+                          />
+                        ) : (
+                          <FallbackAvatar name={zap.authorName} pubkey={zap.pubkey} />
+                        )}
                         <span className={styles.zapAuthorName}>
                           {zap.authorName || `${zap.pubkey.slice(0, 8)}...`}
                         </span>
-                        <span className={styles.zapAmount}>⚡ {zap.amount} sats</span>
                       </div>
+                      <span className={styles.zapAmount}>⚡ {zap.amount} sats</span>
                       <div className={styles.reactionRight}>
                         <div className={styles.reactionMenuWrapper}>
                           <button
@@ -129,13 +153,26 @@ export default function InteractionModals({
                   {reactionData.map((reaction) => (
                     <div key={reaction.id} className={styles.reactionItem}>
                       <div className={styles.reactionLeft}>
-                        <span className={styles.reactionIcon}>
-                          {renderReactionContentJSX(reaction.content, reaction.event)}
-                        </span>
+                        {reaction.authorPicture ? (
+                          <Image
+                            src={reaction.authorPicture}
+                            alt="Author"
+                            width={28}
+                            height={28}
+                            className={styles.modalAuthorAvatar}
+                          />
+                        ) : (
+                          <FallbackAvatar name={reaction.authorName} pubkey={reaction.pubkey} />
+                        )}
                         <span className={styles.reactionAuthorName}>
                           {reaction.authorName || `${reaction.pubkey.slice(0, 8)}...`}
                         </span>
                       </div>
+                      <span className={styles.reactionItemContent}>
+                        <span className={styles.reactionIcon}>
+                          {renderReactionContentJSX(reaction.content, reaction.event)}
+                        </span>
+                      </span>
                       <div className={styles.reactionRight}>
                         <div className={styles.reactionMenuWrapper}>
                           <button
@@ -188,11 +225,24 @@ export default function InteractionModals({
                   {repostData.map((repost) => (
                     <div key={repost.id} className={styles.reactionItem}>
                       <div className={styles.reactionLeft}>
-                        <span className={styles.reactionIcon}>{repost.kind === 1 ? '💬' : '🔄'}</span>
+                        {repost.authorPicture ? (
+                          <Image
+                            src={repost.authorPicture}
+                            alt="Author"
+                            width={28}
+                            height={28}
+                            className={styles.modalAuthorAvatar}
+                          />
+                        ) : (
+                          <FallbackAvatar name={repost.authorName} pubkey={repost.pubkey} />
+                        )}
                         <span className={styles.reactionAuthorName}>
                           {repost.authorName || `${repost.pubkey.slice(0, 8)}...`}
                         </span>
                       </div>
+                      <span className={styles.reactionItemContent}>
+                        <span className={styles.reactionIcon}>{repost.kind === 1 ? '💬' : '🔄'}</span>
+                      </span>
                       <div className={styles.reactionRight}>
                         <div className={styles.reactionMenuWrapper}>
                           <button
