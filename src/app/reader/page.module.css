@@ -169,6 +169,37 @@
   border: 1px solid rgb(39 39 42);
 }
 
+.readerListFooter {
+  padding: 1.25rem 1rem;
+  text-align: center;
+  border-top: 1px solid rgb(39 39 42);
+  background: rgba(0, 0, 0, 0.3);
+  margin-top: 0;
+}
+
+.readerListStatus {
+  padding: 0.625rem;
+  background: rgba(161, 161, 170, 0.1);
+  border: 1px solid rgb(39 39 42);
+  border-radius: 0.25rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: rgb(161 161 170);
+  text-align: center;
+}
+
+.loadSentinel {
+  min-height: 8px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.loadMoreHint {
+  font-size: 0.8125rem;
+  color: rgb(113 113 122);
+  margin: 0.5rem 0 0;
+}
+
 .emptyState {
   text-align: center;
   color: rgb(161 161 170);

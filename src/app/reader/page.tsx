@@ -17,6 +17,8 @@ import { getCachedFollows, cacheFollows } from '@/utils/storage';
 import { KIND_CONTACT_LIST, KIND_LONGFORM_ARTICLE } from '@/nostr/kinds';
 import { getTagValue, getTagValues } from '@/utils/nostrTags';
 
+const PAGE_SIZE = 21;
+
 const PostCard = memo(({ post, onClick, onHover, ndk }: { post: BlogPost; onClick: (post: BlogPost) => void; onHover: (post: BlogPost) => void; ndk: NDK }) => {
   const { isPostRead, markPostAsRead, markPostAsUnread, getAuthorProfile } = useBlog();
   const x = useMotionValue(0);
@@ -272,7 +274,7 @@ export default function ReaderPage() {
   const [isLoadingFollows, setIsLoadingFollows] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
-  const [postsToShow, setPostsToShow] = useState(21); // Track how many posts to display
+  const [postsToShow, setPostsToShow] = useState(PAGE_SIZE); // Track how many posts to display (infinite scroll batches)
   const [isNavigating, setIsNavigating] = useState(false); // Track navigation state
   
   // Now we can use the state variables in useMemo
@@ -338,6 +340,31 @@ export default function ReaderPage() {
       }
     });
   }, [sortedPosts, follows, filter, isPostRead]);
+
+  const totalAvailableCount = totalAvailablePosts.length;
+  const hasMorePosts = totalAvailableCount > postsToShow;
+
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = loadMoreSentinelRef.current;
+    if (!node || !hasMorePosts) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const hit = entries.some((e) => e.isIntersecting);
+        if (!hit) return;
+        setPostsToShow((prev) => {
+          if (prev >= totalAvailableCount) return prev;
+          return Math.min(prev + PAGE_SIZE, totalAvailableCount);
+        });
+      },
+      { root: null, rootMargin: '320px 0px', threshold: 0 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMorePosts, postsToShow, totalAvailableCount, filter]);
 
   const processedEvents = useRef(new Map<string, number>()); // Map of eventId -> timestamp
   const hasClearedPosts = useRef(false);
@@ -456,7 +483,7 @@ export default function ReaderPage() {
 
   // Reset postsToShow when filter changes
   useEffect(() => {
-    setPostsToShow(21);
+    setPostsToShow(PAGE_SIZE);
   }, [filter]);
 
   const setupSubscription = useCallback(async () => {
@@ -734,56 +761,21 @@ export default function ReaderPage() {
                )}
              </div>
             
-            {/* Bottom controls row */}
+            {/* Footer: count + infinite-scroll sentinel */}
             {filteredPosts.length > 0 && (
-              <div style={{
-                padding: '20px',
-                textAlign: 'center',
-                borderTop: '1px solid rgb(39, 39, 42)',
-                background: 'rgba(0, 0, 0, 0.3)',
-                marginTop: '0'
-              }}>
-                {filteredPosts.length === postsToShow && (
-                  <div style={{
-                    padding: '10px',
-                    background: 'rgba(161, 161, 170, 0.1)',
-                    border: '1px solid rgb(39, 39, 42)',
-                    borderRadius: '4px',
-                    margin: '0 0 15px 0',
-                    fontSize: '14px',
-                    color: 'rgb(161, 161, 170)',
-                    textAlign: 'center'
-                  }}>
-                    Showing {postsToShow} / {totalAvailablePosts.length} articles
-                  </div>
-                )}
-                
-                {/* Load More Button */}
-                {totalAvailablePosts.length > postsToShow && (
-                  <button
-                    onClick={() => setPostsToShow(prev => prev + 21)}
-                    style={{
-                      padding: '0.625rem 1.25rem',
-                      background: '#ffffff',
-                      color: '#000000',
-                      border: 'none',
-                      borderRadius: '0.375rem',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem',
-                      fontWeight: '500',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = '#f4f4f5';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = '#ffffff';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    Load More
-                  </button>
+              <div className={styles.readerListFooter}>
+                <div className={styles.readerListStatus} role="status" aria-live="polite">
+                  Showing {Math.min(postsToShow, totalAvailableCount)} / {totalAvailableCount} articles
+                </div>
+                {hasMorePosts && (
+                  <>
+                    <div
+                      ref={loadMoreSentinelRef}
+                      className={styles.loadSentinel}
+                      aria-hidden
+                    />
+                    <p className={styles.loadMoreHint}>Scroll for more</p>
+                  </>
                 )}
               </div>
             )}
