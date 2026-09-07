@@ -4,7 +4,7 @@ import { Toaster } from "react-hot-toast";
 import Header from "@/components/Header";
 import { NostrProvider } from "@/contexts/NostrContext";
 import { BlogProvider } from "@/contexts/BlogContext";
-import { SupabaseProvider } from "@/contexts/SupabaseContext";
+import { PlatformStatusProvider } from "@/contexts/PlatformStatusContext";
 import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import "./globals.css";
 
@@ -38,7 +38,7 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <NostrProvider>
-          <SupabaseProvider>
+          <PlatformStatusProvider>
             <BlogProvider>
               <GlobalErrorHandler />
               <Header />
@@ -66,7 +66,7 @@ export default function RootLayout({
               }}
             />
             </BlogProvider>
-          </SupabaseProvider>
+          </PlatformStatusProvider>
         </NostrProvider>
       </body>
     </html>

@@ -30,7 +30,14 @@ export const KIND_GENERIC_REPOST = 16;
 /** Application-specific subscriber list */
 export const KIND_SUBSCRIBERS_LIST = 30000;
 
-/** NIP-78 arbitrary app data (Longform uses `d` tag `longform` for encrypted read-state) */
+/**
+ * NIP-78 arbitrary app data. Longform uses several dedicated `d` tags on this kind —
+ * `longform` (per-user encrypted read-state), `longform-emojis` (per-user custom emojis),
+ * `longform-profile` (per-user public profile data), and the platform-account-only
+ * `longform-pro-monthly` / `longform-pro-yearly` / `longform-legend` (see
+ * `src/server/platform-roster/constants.ts`). Each `d` tag must stay unique per author —
+ * do not reuse one of these for a new purpose.
+ */
 export const KIND_APP_SPECIFIC_DATA = 30078;
 
 /** NIP-23 longform article */

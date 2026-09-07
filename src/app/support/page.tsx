@@ -3,173 +3,96 @@
 import { useState, useEffect, useRef } from 'react';
 import { CheckIcon, ArrowTopRightOnSquareIcon, StarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
-import { useSupabase } from '@/contexts/SupabaseContext';
-import { formatExpirationDate, isExpiringSoon } from '@/utils/supabase';
-import { supabase } from '@/config/supabase';
+import { usePlatformStatus } from '@/contexts/PlatformStatusContext';
+import { formatExpirationDate, formatUnixDate, isExpiringSoon } from '@/utils/billingDisplay';
+import {
+  fetchLegendPriceSats,
+  fetchProPrices,
+  payLegendInvoice,
+  payProInvoice,
+  PRO_TERM_DAYS_MONTHLY,
+  PRO_TERM_DAYS_YEARLY,
+} from '@/utils/billingClient';
 import toast from 'react-hot-toast';
 import './page.css';
 
 const SupportPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLegend, setIsLegend] = useState(false);
-  const [isCheckingLegend, setIsCheckingLegend] = useState(false);
   const [isYearly, setIsYearly] = useState(false);
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
+  const [legendPriceSats, setLegendPriceSats] = useState(100_000);
+  const [proMonthlySats, setProMonthlySats] = useState(1_000);
+  const [proYearlySats, setProYearlySats] = useState(10_000);
   const hasLaunchedPaymentRef = useRef(false);
   const { currentUser } = useNostr();
-  const { proStatus, isLoading, checkLegendStatus, refreshProStatus } = useSupabase();
+  const { proStatus, meStatus, isLoading, isLegend, refreshProStatus } = usePlatformStatus();
 
-  // Refresh PRO status when user changes or page loads
   useEffect(() => {
-    if (currentUser?.npub) {
-      refreshProStatus();
-    }
-  }, [currentUser?.npub, refreshProStatus]);
+    void fetchLegendPriceSats().then(setLegendPriceSats);
+    void fetchProPrices().then(({ monthly, yearly }) => {
+      setProMonthlySats(monthly);
+      setProYearlySats(yearly);
+    });
+  }, []);
 
-  // Check legend status when user changes
-  useEffect(() => {
-    if (currentUser?.npub) {
-      setIsCheckingLegend(true);
-      checkLegendStatus(currentUser.npub)
-        .then(setIsLegend)
-        .catch(error => {
-          console.error('Error checking legend status:', error);
-          setIsLegend(false);
-        })
-        .finally(() => {
-          setIsCheckingLegend(false);
-        });
-    } else {
-      setIsLegend(false);
-      setIsCheckingLegend(false);
-    }
-  }, [currentUser?.npub, checkLegendStatus]);
+  const proPriceSats = isYearly ? proYearlySats : proMonthlySats;
+  const termDays = isYearly ? PRO_TERM_DAYS_YEARLY : PRO_TERM_DAYS_MONTHLY;
 
-  const handleSubscribe = () => {
-    setIsSubmitting(true);
-
-    // Get the user's npub or use 'Anon' as fallback
-    const npub = currentUser?.npub || 'Anon';
-    
-    // Construct the payerdata JSON
-    const payerdata = JSON.stringify({ npub });
-    
-    // Construct the subscription URL
-    const subscriptionUrl = new URL('https://zapplanner.albylabs.com/confirm');
-    subscriptionUrl.searchParams.set('amount', isYearly ? '10000' : '1000');
-    subscriptionUrl.searchParams.set('recipient', 'bullish@getalby.com');
-    subscriptionUrl.searchParams.set('timeframe', isYearly ? '365d' : '30d');
-    subscriptionUrl.searchParams.set('comment', ` Longform PRO ${isYearly ? 'yearly' : 'monthly'} subscription`);
-    subscriptionUrl.searchParams.set('payerdata', payerdata);
-
-    // Open in new tab/window
-    window.open(subscriptionUrl.toString(), '_blank');
-
-    // Reset loading state after a short delay
-    setTimeout(() => {
-      setIsSubmitting(false);
-    }, 1000);
-  };
-
-  const handleLegendSubscribe = async () => {
-    if (!currentUser?.npub) {
-      toast.error('Please log in to become a Legend');
+  const handleProSubscribe = async () => {
+    if (!currentUser?.pubkey) {
+      toast.error('Please log in to subscribe to PRO');
       return;
     }
-
-    if (hasLaunchedPaymentRef.current) return; // Prevent duplicate launches
+    if (hasLaunchedPaymentRef.current) return;
     hasLaunchedPaymentRef.current = true;
+    setIsSubmitting(true);
 
     try {
-      setIsGeneratingInvoice(true);
-      
-      // Dynamically import Lightning libraries to avoid SSR issues
-      const { LightningAddress } = await import('@getalby/lightning-tools/lnurl');
-      const { launchPaymentModal } = await import('@getalby/bitcoin-connect');
-      
-      // Create Lightning Address instance
-      const ln = new LightningAddress("bullish@getalby.com");
-      
-      // Fetch the Lightning Address details
-      await ln.fetch();
-      
-      // Request an invoice for the specified amount
-      const invoice = await ln.requestInvoice({ 
-        satoshi: 100000,
-        comment: "Longform PRO" 
-      });
-
-      // Launch the payment modal
-      const { setPaid } = launchPaymentModal({
-        invoice: invoice.paymentRequest,
-        onPaid: async () => {
-          clearInterval(checkPaymentInterval);
-          
-          try {
-            // Insert user into legends table
-            const { error } = await supabase
-              .from('legends')
-              .insert({
-                npub: currentUser.npub,
-                created_at: new Date().toISOString()
-              });
-
-            if (error) {
-              throw error;
-            }
-
-            // Update legend status
-            setIsLegend(true);
-            setIsGeneratingInvoice(false);
-            hasLaunchedPaymentRef.current = false;
-            
-            // Show success message
-            toast.success('Congratulations! You are now a Longform Legend!');
-          } catch (err) {
-            console.error('Error updating legend status:', err);
-            toast.error('Payment successful but there was an error updating your status. Please contact support.');
-            setIsGeneratingInvoice(false);
-            hasLaunchedPaymentRef.current = false;
-          }
-        },
-        onCancelled: () => {
-          clearInterval(checkPaymentInterval);
-          toast.error('Payment cancelled');
-          setIsGeneratingInvoice(false);
-          hasLaunchedPaymentRef.current = false;
-        },
-      });
-
-      // Start polling for payment verification
-      const checkPaymentInterval = setInterval(async () => {
-        try {
-          const paid = await invoice.verifyPayment();
-          
-          if (paid && invoice.preimage) {
-            setPaid({
-              preimage: invoice.preimage,
-            });
-          }
-        } catch (err) {
-          console.error('Payment verification error:', err);
+      const result = await payProInvoice(currentUser.pubkey, termDays);
+      if (!result.ok) {
+        if (result.error !== 'Cancelled') {
+          toast.error(result.error);
         }
-      }, 1000);
-
-      // Stop polling after 10 minutes
-      setTimeout(() => {
-        clearInterval(checkPaymentInterval);
-        setIsGeneratingInvoice(false);
-        hasLaunchedPaymentRef.current = false;
-      }, 600000);
-      
+        return;
+      }
+      await refreshProStatus();
+      toast.success('PRO subscription updated!');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to generate invoice';
-      toast.error(`Payment error: ${errorMessage}`);
-      setIsGeneratingInvoice(false);
+      const msg = err instanceof Error ? err.message : 'Payment failed';
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
       hasLaunchedPaymentRef.current = false;
     }
   };
 
+  const handleLegendSubscribe = async () => {
+    if (!currentUser?.pubkey) {
+      toast.error('Please log in to become a Legend');
+      return;
+    }
+    if (hasLaunchedPaymentRef.current) return;
+    hasLaunchedPaymentRef.current = true;
+
+    try {
+      setIsGeneratingInvoice(true);
+      const result = await payLegendInvoice(currentUser.pubkey);
+      if (!result.ok) {
+        if (result.error !== 'Cancelled') {
+          toast.error(result.error);
+        }
+        return;
+      }
+      await refreshProStatus();
+      toast.success('Congratulations! You are now a Longform Legend!');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate invoice';
+      toast.error(`Payment error: ${msg}`);
+    } finally {
+      setIsGeneratingInvoice(false);
+      hasLaunchedPaymentRef.current = false;
+    }
+  };
 
   const benefits = [
     'PRO badge on your profile page',
@@ -186,6 +109,15 @@ const SupportPage: React.FC = () => {
     'Moar bragging rights on Nostr',
   ];
 
+  const graceEndsLabel =
+    meStatus?.graceEndsAt != null ? formatUnixDate(meStatus.graceEndsAt) : null;
+  const proEndsLabel =
+    meStatus?.proEndsAt != null
+      ? formatUnixDate(meStatus.proEndsAt)
+      : proStatus?.expiresAt
+        ? formatExpirationDate(proStatus.expiresAt)
+        : null;
+
   return (
     <main>
       <div className="support-container">
@@ -198,10 +130,9 @@ const SupportPage: React.FC = () => {
           </div>
 
           <div className="pro-card">
-            {/* PRO Status Display */}
             {currentUser && (
               <>
-                {(isLoading || isCheckingLegend) && !proStatus ? (
+                {isLoading && !proStatus ? (
                   <div className="pro-status-section">
                     <div className="pro-status-loading">
                       <div className="loading-spinner" />
@@ -212,7 +143,7 @@ const SupportPage: React.FC = () => {
                   <div className="pro-status-active pro-status-legend">
                     <div className="pro-status-header">
                       <StarIcon className="pro-badge" />
-                        <h3>YOU&apos;RE A LEGEND!</h3>
+                      <h3>YOU&apos;RE A LEGEND!</h3>
                     </div>
                     <div className="pro-status-details">
                       <p className="legend-info">
@@ -221,37 +152,39 @@ const SupportPage: React.FC = () => {
                     </div>
                   </div>
                 ) : proStatus?.isPro ? (
-                  <div className={`pro-status-active ${proStatus.isInBuffer ? 'pro-status-buffer' : ''}`}>
+                  <div
+                    className={`pro-status-active ${proStatus.isInBuffer ? 'pro-status-buffer' : ''}`}
+                  >
                     <div className="pro-status-header">
                       <StarIcon className="pro-badge" />
-                      <h3>{proStatus.isInBuffer ? 'PRO Expired' : 'PRO Active'}</h3>
+                      <h3>
+                        {proStatus.isInBuffer ? 'PRO — renewal grace' : 'PRO Active'}
+                      </h3>
                     </div>
                     <div className="pro-status-details">
-                      {proStatus.lastPayment && (
-                        <p className="payment-info">
-                          Last payment: {formatExpirationDate(proStatus.lastPayment)}
-                        </p>
-                      )}
-                      {proStatus.expiresAt && (
+                      {proEndsLabel && !proStatus.isInBuffer && (
                         <p className="expiration-info">
-                          {proStatus.isInBuffer ? (
-                            <span className="expired-status">
-                              <ExclamationTriangleIcon className="warning-icon" />
-                              Expired on: {formatExpirationDate(proStatus.expiresAt)}
-                            </span>
-                          ) : isExpiringSoon(proStatus.expiresAt) ? (
+                          {proStatus.expiresAt && isExpiringSoon(proStatus.expiresAt) ? (
                             <span className="expiring-soon">
                               <ExclamationTriangleIcon className="warning-icon" />
-                              Expires: {formatExpirationDate(proStatus.expiresAt)}
+                              Expires: {proEndsLabel}
                             </span>
                           ) : (
-                            <span>Expires: {formatExpirationDate(proStatus.expiresAt)}</span>
+                            <span>Expires: {proEndsLabel}</span>
                           )}
                         </p>
                       )}
-                      {proStatus.isInBuffer && (
+                      {proStatus.isInBuffer && proEndsLabel && (
+                        <p className="expiration-info">
+                          <span className="expired-status">
+                            <ExclamationTriangleIcon className="warning-icon" />
+                            Subscription ended: {proEndsLabel}
+                          </span>
+                        </p>
+                      )}
+                      {proStatus.isInBuffer && graceEndsLabel && (
                         <p className="buffer-info">
-                          You have 14 days to renew before losing PRO access
+                          Renew by {graceEndsLabel} to keep PRO access (21-day grace period)
                         </p>
                       )}
                     </div>
@@ -270,7 +203,7 @@ const SupportPage: React.FC = () => {
             <div className="pro-header">
               <h2 className="pro-title">Longform PRO</h2>
               <div className="pro-price">
-                <span className="price-amount">{isYearly ? '10,000' : '1,000'}</span>
+                <span className="price-amount">{proPriceSats.toLocaleString()}</span>
                 <span className="price-currency">sats</span>
                 <span className="price-period">/{isYearly ? 'year' : 'month'}</span>
               </div>
@@ -278,12 +211,14 @@ const SupportPage: React.FC = () => {
                 <button
                   className={`toggle-button ${!isYearly ? 'active' : ''}`}
                   onClick={() => setIsYearly(false)}
+                  type="button"
                 >
                   Monthly
                 </button>
                 <button
                   className={`toggle-button ${isYearly ? 'active' : ''}`}
                   onClick={() => setIsYearly(true)}
+                  type="button"
                 >
                   Yearly
                   <span className={`savings-badge ${isYearly ? 'active' : ''}`}>17% off</span>
@@ -305,38 +240,21 @@ const SupportPage: React.FC = () => {
 
             <div className="subscription-form">
               {isLegend ? (
-                <button
-                  disabled={true}
-                  className="subscribe-button legend-button"
-                >
-                  <span>Legend - No Subscription Needed</span>
-                </button>
-              ) : proStatus?.isPro ? (
-                <button
-                  onClick={handleSubscribe}
-                  disabled={isSubmitting}
-                  className="subscribe-button renew-button"
-                >
-                  {isSubmitting ? (
-                    <div className="loading-spinner" />
-                  ) : (
-                    <>
-                      <span>Renew PRO Subscription</span>
-                      <ArrowTopRightOnSquareIcon className="button-icon" />
-                    </>
-                  )}
+                <button disabled type="button" className="subscribe-button legend-button">
+                  <span>Legend — No Subscription Needed</span>
                 </button>
               ) : (
                 <button
-                  onClick={handleSubscribe}
+                  onClick={handleProSubscribe}
                   disabled={isSubmitting}
-                  className="subscribe-button"
+                  type="button"
+                  className={`subscribe-button ${proStatus?.isPro ? 'renew-button' : ''}`}
                 >
                   {isSubmitting ? (
                     <div className="loading-spinner" />
                   ) : (
                     <>
-                      <span>Subscribe to PRO</span>
+                      <span>{proStatus?.isPro ? 'Renew PRO' : 'Subscribe to PRO'}</span>
                       <ArrowTopRightOnSquareIcon className="button-icon" />
                     </>
                   )}
@@ -346,17 +264,17 @@ const SupportPage: React.FC = () => {
 
             <div className="pro-note">
               <p>
-                NOTE: Clicking the button will bring you to ZapPlanner to set up a subscription. Please allow 21 hours for it to take effect. Subscribers are currently managed manually while an automated solution is in the works.
+                PRO is a Lightning payment. Your subscription is recorded on the platform roster
+                and takes effect immediately after payment.
               </p>
             </div>
           </div>
 
-          {/* LEGEND Card */}
           <div className="legend-card">
             <div className="legend-header">
               <h2 className="legend-title">Longform LEGEND</h2>
               <div className="legend-price">
-                <span className="price-amount">100,000</span>
+                <span className="price-amount">{legendPriceSats.toLocaleString()}</span>
                 <span className="price-currency">sats</span>
               </div>
             </div>
@@ -375,24 +293,20 @@ const SupportPage: React.FC = () => {
 
             <div className="subscription-form legend-subscription-form">
               {isLegend ? (
-                <button
-                  disabled={true}
-                  className="subscribe-button legend-button"
-                >
+                <button disabled type="button" className="subscribe-button legend-button">
                   <span>Already a Legend!</span>
                 </button>
               ) : (
                 <button
                   onClick={handleLegendSubscribe}
                   disabled={isSubmitting || isGeneratingInvoice}
+                  type="button"
                   className="subscribe-button legend-subscribe-button"
                 >
-                  {isSubmitting ? (
-                    <div className="loading-spinner" />
-                  ) : isGeneratingInvoice ? (
+                  {isGeneratingInvoice ? (
                     <>
                       <div className="loading-spinner" />
-                      <span>Generating invoice...</span>
+                      <span>Opening payment...</span>
                     </>
                   ) : (
                     <>
@@ -406,10 +320,10 @@ const SupportPage: React.FC = () => {
 
             <div className="legend-note">
               <p>
-                NOTE: LEGEND is a one-time payment that grants permanent PRO access plus exclusive LEGEND benefits.
+                LEGEND is a one-time payment that grants permanent PRO access plus exclusive LEGEND
+                benefits.
               </p>
             </div>
-
           </div>
 
           <div className="support-info">
@@ -417,15 +331,24 @@ const SupportPage: React.FC = () => {
             <div className="info-grid">
               <div className="info-item">
                 <h4>Decentralized Future</h4>
-                <p>We&apos;re building the future of content creation on Nostr, free from centralized control.</p>
+                <p>
+                  We&apos;re building the future of content creation on Nostr, free from centralized
+                  control.
+                </p>
               </div>
               <div className="info-item">
                 <h4>Community Driven</h4>
-                <p>Your support directly funds development and helps us prioritize features that matter to you.</p>
+                <p>
+                  Your support directly funds development and helps us prioritize features that matter
+                  to you.
+                </p>
               </div>
               <div className="info-item">
                 <h4>Sustainable Development</h4>
-                <p>PRO subscriptions ensure we can continue building and maintaining Longform for blocks to come.</p>
+                <p>
+                  PRO subscriptions ensure we can continue building and maintaining Longform for blocks
+                  to come.
+                </p>
               </div>
             </div>
           </div>

@@ -101,11 +101,6 @@ const Header: React.FC = () => {
                 Dashboard
               </Link>
             )}
-            {isAuthenticated && (
-              <Link href="/subscribers" className="menu-link" onClick={handleLinkClick}>
-                Subscribers
-              </Link>
-            )}
             <Link href="/support" className="menu-link" onClick={handleLinkClick}>
               Support
             </Link>

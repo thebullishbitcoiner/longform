@@ -21,8 +21,13 @@ import toast from 'react-hot-toast';
 import { AuthGuard } from '@/components/AuthGuard';
 import { cleanupStorage } from '@/utils/storage';
 import { ProFeature } from '@/components/ProFeature';
-import { getCustomEmojis, addCustomEmoji, removeCustomEmoji } from '@/utils/supabase';
-import { CustomEmoji, EmojiSet } from '@/config/supabase';
+import {
+  loadCustomEmojis,
+  publishCustomEmojis,
+  type CustomEmojiEntry,
+} from '@/nostr/customEmojis';
+import { CustomEmoji, EmojiSet } from '@/types/emoji';
+import { Nip07Signer } from '@/utils/nip07Signer';
 import { hardcodedEmojiSets } from '@/data/emojiSets';
 import JSZip from 'jszip';
 import {
@@ -376,12 +381,17 @@ export default function SettingsPage() {
     }, [loadCacheData]);
 
     // Load custom emojis from Supabase
-    const loadCustomEmojis = useCallback(async () => {
-        if (!currentUser?.npub) return;
-        
+    const loadCustomEmojisFromNostr = useCallback(async () => {
+        if (!currentUser?.pubkey || !ndk?.signer) return;
+
         setIsLoadingEmojis(true);
         try {
-            const emojis = await getCustomEmojis(currentUser.npub);
+            const signer = ndk.signer;
+            if (!(signer instanceof Nip07Signer)) {
+                setCustomEmojis([]);
+                return;
+            }
+            const emojis = await loadCustomEmojis(ndk, signer, currentUser.pubkey);
             setCustomEmojis(emojis);
         } catch (error) {
             console.error('Error loading custom emojis:', error);
@@ -389,14 +399,14 @@ export default function SettingsPage() {
         } finally {
             setIsLoadingEmojis(false);
         }
-    }, [currentUser?.npub]);
+    }, [currentUser?.pubkey, ndk]);
 
     // Load custom emojis on component mount
     useEffect(() => {
-        if (isAuthenticated && currentUser?.npub) {
-            loadCustomEmojis();
+        if (isAuthenticated && currentUser?.pubkey) {
+            loadCustomEmojisFromNostr();
         }
-    }, [isAuthenticated, currentUser?.npub, loadCustomEmojis]);
+    }, [isAuthenticated, currentUser?.pubkey, loadCustomEmojisFromNostr]);
 
     // Load emoji sets from hardcoded data
     const loadEmojiSets = useCallback(async () => {
@@ -486,19 +496,21 @@ export default function SettingsPage() {
     // Custom emoji functions
 
     const handleRemoveCustomEmoji = async (name: string) => {
-        if (!currentUser?.npub) {
+        if (!currentUser?.pubkey || !ndk?.signer) {
             toast.error('User not authenticated');
+            return;
+        }
+        const signer = ndk.signer;
+        if (!(signer instanceof Nip07Signer)) {
+            toast.error('NIP-44 signer required');
             return;
         }
 
         try {
-            const success = await removeCustomEmoji(currentUser.npub, name);
-            if (success) {
-                setCustomEmojis(prev => prev.filter(emoji => emoji.name !== name));
-                toast.success('Custom emoji removed');
-            } else {
-                toast.error('Failed to remove custom emoji');
-            }
+            const next = customEmojis.filter((emoji) => emoji.name !== name);
+            await publishCustomEmojis(ndk, signer, next);
+            setCustomEmojis(next);
+            toast.success('Custom emoji removed');
         } catch (error) {
             console.error('Error removing custom emoji:', error);
             toast.error('Failed to remove custom emoji');
@@ -537,38 +549,36 @@ export default function SettingsPage() {
     };
 
     const addSelectedEmojis = async () => {
-        if (!currentUser?.npub || !selectedEmojiSet || selectedEmojis.size === 0) {
+        if (!currentUser?.pubkey || !ndk?.signer || !selectedEmojiSet || selectedEmojis.size === 0) {
             toast.error('Please select at least one emoji');
+            return;
+        }
+        const signer = ndk.signer;
+        if (!(signer instanceof Nip07Signer)) {
+            toast.error('NIP-44 signer required');
             return;
         }
 
         try {
-            let addedCount = 0;
+            const toAdd: CustomEmojiEntry[] = [];
             for (const emojiName of selectedEmojis) {
-                const emoji = selectedEmojiSet.emojis.find(e => e.name === emojiName);
-                if (emoji) {
-                    // Check if emoji already exists
-                    if (!customEmojis.some(e => e.name === emoji.name)) {
-                        const newEmoji = await addCustomEmoji(
-                            currentUser.npub,
-                            emoji.name,
-                            emoji.url
-                        );
-                        if (newEmoji) {
-                            setCustomEmojis(prev => [newEmoji, ...prev]);
-                            addedCount++;
-                        }
-                    }
+                const emoji = selectedEmojiSet.emojis.find((e) => e.name === emojiName);
+                if (emoji && !customEmojis.some((e) => e.name === emoji.name)) {
+                    toAdd.push({ name: emoji.name, url: emoji.url });
                 }
             }
 
-            if (addedCount > 0) {
-                toast.success(`Added ${addedCount} emoji${addedCount > 1 ? 's' : ''} to your collection`);
-                setShowEmojiSetModal(false);
-                setSelectedEmojis(new Set());
-            } else {
+            if (toAdd.length === 0) {
                 toast.error('No new emojis were added (they may already exist)');
+                return;
             }
+
+            const next = [...toAdd, ...customEmojis];
+            await publishCustomEmojis(ndk, signer, next);
+            setCustomEmojis(next);
+            toast.success(`Added ${toAdd.length} emoji${toAdd.length > 1 ? 's' : ''} to your collection`);
+            setShowEmojiSetModal(false);
+            setSelectedEmojis(new Set());
         } catch (error) {
             console.error('Error adding selected emojis:', error);
             toast.error('Failed to add selected emojis');
@@ -962,7 +972,7 @@ export default function SettingsPage() {
                         ) : (
                             <div className="emojis-listbox" role="listbox" aria-label="Custom emojis list">
                                 {customEmojis.map((emoji) => (
-                                    <div key={`${emoji.npub}-${emoji.name}`} className="emoji-item" role="option" aria-selected="false">
+                                    <div key={emoji.name} className="emoji-item" role="option" aria-selected="false">
                                         <div className="emoji-preview">
                                             <Image 
                                                 src={emoji.url} 

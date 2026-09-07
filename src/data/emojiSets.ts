@@ -1,4 +1,4 @@
-import { EmojiSet } from '@/config/supabase';
+import { EmojiSet } from '@/types/emoji';
 
 export const hardcodedEmojiSets: EmojiSet[] = [
   {

@@ -3,9 +3,8 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useNostr } from '@/contexts/NostrContext';
-import { useSupabase } from '@/contexts/SupabaseContext';
-import { supabase } from '@/config/supabase';
-import { getLongformProfile } from '@/utils/supabase';
+import { usePlatformStatus } from '@/contexts/PlatformStatusContext';
+import { loadProfileBackground } from '@/nostr/profileData';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
 import NDK, { NDKEvent } from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
@@ -67,9 +66,9 @@ type TabType = 'posts' | 'highlights';
 
 export default function ProfilePage() {
   const params = useParams();
-  const { ndk: contextNdk, isAuthenticated, currentUser } = useNostr();
+  const { ndk: contextNdk, isAuthenticated } = useNostr();
   const { getAuthorProfile, fetchProfileOnce } = useBlog();
-  const { checkProStatus, checkLegendStatus } = useSupabase();
+  const { checkProStatus, checkLegendStatus } = usePlatformStatus();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [highlights, setHighlights] = useState<ProfileHighlight[]>([]);
@@ -92,8 +91,6 @@ export default function ProfilePage() {
   });
   const [isProfilePro, setIsProfilePro] = useState(false);
   const [isProfileLegend, setIsProfileLegend] = useState(false);
-  const [isSubscribing, setIsSubscribing] = useState(false);
-  const [isSubscribed, setIsSubscribed] = useState(false);
   const [profileBackground, setProfileBackground] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -664,10 +661,8 @@ export default function ProfilePage() {
         // Fetch profile customizations (only for PRO/Legend users)
         if (isPro || isLegend) {
           try {
-            const longformProfile = await getLongformProfile(npub);
-            if (longformProfile?.background) {
-              setProfileBackground(longformProfile.background);
-            }
+            const bg = await loadProfileBackground(ndkToUse, pubkey);
+            if (bg) setProfileBackground(bg);
           } catch (error) {
             console.error('Error fetching profile customizations:', error);
           }
@@ -771,46 +766,6 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('Failed to copy note ID:', error);
       toast.error('Failed to copy note ID');
-    }
-  };
-
-  const handleSubscribe = async () => {
-    if (!isAuthenticated || !currentUser?.npub || !profile) {
-      toast.error('Please log in to subscribe');
-      return;
-    }
-
-    setIsSubscribing(true);
-    try {
-      const action = isSubscribed ? 'unsubscribe' : 'subscribe';
-      
-      const { error } = await supabase
-        .from('action_queue')
-        .insert({
-          author: profile.npub,
-          reader: currentUser.npub,
-          action: action,
-          created_at: new Date().toISOString()
-        });
-
-      if (error) {
-        console.error(`Error creating ${action} request:`, error);
-        // Check if it's a duplicate key error (user already has pending request)
-        if (error.code === '23505') {
-          // If already subscribed and trying to unsubscribe, or vice versa
-          setIsSubscribed(!isSubscribed);
-        } else {
-          toast.error(`Failed to ${action}. Please try again.`);
-        }
-        return;
-      }
-
-      setIsSubscribed(!isSubscribed);
-    } catch (error) {
-      console.error('Error with subscription action:', error);
-      toast.error('Failed to process request. Please try again.');
-    } finally {
-      setIsSubscribing(false);
     }
   };
 
@@ -1324,18 +1279,6 @@ export default function ProfilePage() {
                 <div className={styles.profileIdentifier}>
                   <span className={styles.identifierLabel}>NIP-05:</span>
                   <span className={styles.identifierValue}>{profile.nip05}</span>
-                </div>
-              )}
-              {/* Subscribe button for PRO and Legend users */}
-              {isAuthenticated && (isProfilePro || isProfileLegend) && (
-                <div className={styles.subscribeSection}>
-                  <button 
-                    className={styles.subscribeButton}
-                    onClick={handleSubscribe}
-                    disabled={isSubscribing}
-                  >
-                    {isSubscribed ? 'Subscribed ✓' : 'Subscribe'}
-                  </button>
                 </div>
               )}
               {profile.about && (

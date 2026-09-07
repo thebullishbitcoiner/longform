@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import toast from 'react-hot-toast';
-import { getCustomEmojis } from '@/utils/supabase';
+import { loadCustomEmojis } from '@/nostr/customEmojis';
+import { Nip07Signer } from '@/utils/nip07Signer';
+import { npubToHex } from '@/utils/nostr';
 import { KIND_LONGFORM_ARTICLE, KIND_REACTION, longformArticleCoordinate } from '@/nostr/kinds';
 import type { BlogPost } from '@/contexts/BlogContext';
 
@@ -44,19 +46,25 @@ export function useEmojiReactions({
     []
   );
 
-  const loadCustomEmojis = useCallback(async () => {
-    if (!isPro || !currentUserNpub) return;
+  const loadCustomEmojisForUser = useCallback(async () => {
+    if (!isPro || !currentUserNpub || !ndk?.signer) return;
+
+    const hex = npubToHex(currentUserNpub);
+    if (!hex) return;
+
+    const signer = ndk.signer;
+    if (!(signer instanceof Nip07Signer)) return;
 
     setIsLoadingCustomEmojis(true);
     try {
-      const emojis = await getCustomEmojis(currentUserNpub);
+      const emojis = await loadCustomEmojis(ndk, signer, hex);
       setCustomEmojis(emojis);
     } catch (error) {
       console.error('Error loading custom emojis:', error);
     } finally {
       setIsLoadingCustomEmojis(false);
     }
-  }, [currentUserNpub, isPro]);
+  }, [currentUserNpub, isPro, ndk]);
 
   const loadPreferredEmojis = useCallback(() => {
     try {
@@ -95,11 +103,11 @@ export function useEmojiReactions({
 
   useEffect(() => {
     if (isPro) {
-      loadCustomEmojis();
+      void loadCustomEmojisForUser();
     } else {
       setCustomEmojis([]);
     }
-  }, [isPro, loadCustomEmojis]);
+  }, [isPro, loadCustomEmojisForUser]);
 
   const handleHeartClick = useCallback(() => {
     if (!isAuthenticated) {
