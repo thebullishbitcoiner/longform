@@ -445,8 +445,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
             const pubkey = currentUser.pubkey;
             nostrDebug('Editor: User pubkey from context:', pubkey);
 
-            // Try the NIP-37 draft wrap first
-            if (ndk.signer instanceof Nip07Signer) {
+            // NIP-37 draft-wrap ids are our own minted `<timestamp>_<rand>` identifiers —
+            // never a 64-char hex string. A hex id is always a relay-assigned event id
+            // (a legacy plain draft or a published article), so skip the wrap lookup
+            // entirely for those instead of wasting a relay round trip that can never hit.
+            const looksLikeDraftWrapId = !/^[0-9a-f]{64}$/i.test(id);
+
+            if (looksLikeDraftWrapId && ndk.signer instanceof Nip07Signer) {
               const wrapped = await loadDraftWrap(ndk, ndk.signer, pubkey, id);
               if (wrapped) {
                 const title = wrapped.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
@@ -1520,7 +1525,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         <main className="container">
           <div className="loading-content">
             <div className="loading-spinner"></div>
-            <p className="loading-text">Loading draft...</p>
+            <p className="loading-text">Loading...</p>
           </div>
         </main>
       ) : !draft ? null : (
