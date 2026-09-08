@@ -3,7 +3,6 @@ import type NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import toast from 'react-hot-toast';
 import { loadCustomEmojis } from '@/nostr/customEmojis';
-import { Nip07Signer } from '@/utils/nip07Signer';
 import { npubToHex } from '@/utils/nostr';
 import { KIND_LONGFORM_ARTICLE, KIND_REACTION, longformArticleCoordinate } from '@/nostr/kinds';
 import type { BlogPost } from '@/contexts/BlogContext';
@@ -47,17 +46,14 @@ export function useEmojiReactions({
   );
 
   const loadCustomEmojisForUser = useCallback(async () => {
-    if (!isPro || !currentUserNpub || !ndk?.signer) return;
+    if (!isPro || !currentUserNpub || !ndk) return;
 
     const hex = npubToHex(currentUserNpub);
     if (!hex) return;
 
-    const signer = ndk.signer;
-    if (!(signer instanceof Nip07Signer)) return;
-
     setIsLoadingCustomEmojis(true);
     try {
-      const emojis = await loadCustomEmojis(ndk, signer, hex);
+      const emojis = await loadCustomEmojis(ndk, hex);
       setCustomEmojis(emojis);
     } catch (error) {
       console.error('Error loading custom emojis:', error);

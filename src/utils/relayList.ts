@@ -104,26 +104,44 @@ export function saveRelayList(pubkey: string, relays: RelayInfo[]): void {
 }
 
 /**
- * Convert PreferredRelay format to RelayInfo format
- * @param preferredRelays - Array of PreferredRelay objects
- * @returns Array of RelayInfo objects
+ * Validate a relay URL
+ * @param url - The relay URL to validate
+ * @returns true if valid, false otherwise
  */
-export function convertPreferredToRelayInfo(preferredRelays: Array<{url: string, policy: 'read' | 'write' | 'readwrite'}>): RelayInfo[] {
-  return preferredRelays.map(relay => ({
-    url: relay.url,
-    read: relay.policy === 'read' || relay.policy === 'readwrite',
-    write: relay.policy === 'write' || relay.policy === 'readwrite'
-  }));
+export function isValidRelayUrl(url: string): boolean {
+  if (!url.trim()) return false;
+
+  if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
+    return false;
+  }
+
+  try {
+    const urlObj = new URL(url);
+    return urlObj.protocol === 'wss:' || urlObj.protocol === 'ws:';
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Convert RelayInfo format to PreferredRelay format
- * @param relayInfos - Array of RelayInfo objects
- * @returns Array of PreferredRelay objects
+ * Test connection to a relay
+ * @param url - The relay URL to test
+ * @returns Promise that resolves to true if connection successful, false otherwise
  */
-export function convertRelayInfoToPreferred(relayInfos: RelayInfo[]): Array<{url: string, policy: 'read' | 'write' | 'readwrite'}> {
-  return relayInfos.map(relay => ({
-    url: relay.url,
-    policy: relay.read && relay.write ? 'readwrite' : relay.read ? 'read' : 'write'
-  }));
-} 
+export async function testRelayConnection(url: string): Promise<boolean> {
+  try {
+    const { default: NDK } = await import('@nostr-dev-kit/ndk');
+
+    const testNDK = new NDK({
+      explicitRelayUrls: [url]
+    });
+
+    await testNDK.connect();
+    const connectedRelays = testNDK.pool.connectedRelays();
+
+    return connectedRelays.length > 0;
+  } catch (error) {
+    console.error('Error testing relay connection:', error);
+    return false;
+  }
+}

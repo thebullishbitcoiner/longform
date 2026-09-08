@@ -23,6 +23,7 @@ import {
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
 import { resolveNip05 } from '@/utils/nostr';
+import { getAuthorRelaySet } from '@/utils/relayDiscovery';
 
 import ArticleEngagement from './ArticleEngagement';
 import ArticleHeader from './ArticleHeader';
@@ -476,13 +477,20 @@ export default function BlogPost() {
 
     try {
       nostrDebug('Fetching events with:', { pubkey, dTag, kind: KIND_LONGFORM_ARTICLE });
-      
+
+      // Outbox model: also query the author's own NIP-65 write relays, if resolvable
+      const authorRelaySet = await getAuthorRelaySet(ndkToUse, pubkey);
+
       // Fetch the most recent event with the given author and d tag
-      const events = await ndkToUse.fetchEvents({
-        kinds: [KIND_LONGFORM_ARTICLE],
-        authors: [pubkey],
-        '#d': [dTag]
-      });
+      const events = await ndkToUse.fetchEvents(
+        {
+          kinds: [KIND_LONGFORM_ARTICLE],
+          authors: [pubkey],
+          '#d': [dTag]
+        },
+        undefined,
+        authorRelaySet
+      );
 
       nostrDebug('Fetched events count:', events.size);
 

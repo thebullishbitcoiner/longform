@@ -12,9 +12,6 @@ export const KIND_TEXT_NOTE = 1;
 /** NIP-02 contact list */
 export const KIND_CONTACT_LIST = 3;
 
-/** NIP-04 encrypted direct message */
-export const KIND_ENCRYPTED_DM = 4;
-
 /** NIP-09 deletion request */
 export const KIND_DELETION = 5;
 
@@ -27,30 +24,42 @@ export const KIND_REACTION = 7;
 /** NIP-18 generic repost */
 export const KIND_GENERIC_REPOST = 16;
 
-/** Application-specific subscriber list */
-export const KIND_SUBSCRIBERS_LIST = 30000;
-
 /**
  * NIP-78 arbitrary app data. Longform uses several dedicated `d` tags on this kind —
- * `longform` (per-user encrypted read-state), `longform-emojis` (per-user custom emojis),
- * `longform-profile` (per-user public profile data), and the platform-account-only
- * `longform-pro-monthly` / `longform-pro-yearly` / `longform-legend` (see
- * `src/server/platform-roster/constants.ts`). Each `d` tag must stay unique per author —
- * do not reuse one of these for a new purpose.
+ * `longform` (per-user encrypted read-state), `longform-profile` (per-user public
+ * profile data), and the platform-account-only `longform-pro-monthly` /
+ * `longform-pro-yearly` / `longform-legend` (see `src/server/platform-roster/constants.ts`).
+ * Each `d` tag must stay unique per author — do not reuse one of these for a new purpose.
+ *
+ * `longform-emojis` (per-user custom emojis) is legacy — superseded by the standard
+ * NIP-51 kind-10030 list (`KIND_EMOJI_LIST`), see `src/nostr/customEmojis.ts`. Still
+ * read once for one-time migration of pre-existing data; never written anymore.
  */
 export const KIND_APP_SPECIFIC_DATA = 30078;
 
 /** NIP-23 longform article */
 export const KIND_LONGFORM_ARTICLE = 30023;
 
-/** Longform draft (replaceable; client pairing with NIP-23) */
+/**
+ * Kind of the unsigned draft event wrapped inside a NIP-37 draft wrap (kind 31234).
+ * Never published directly on its own — see `src/nostr/draftWraps.ts`.
+ */
 export const KIND_LONGFORM_DRAFT = 30024;
 
 /** NIP-65 relay list */
 export const KIND_RELAY_LIST = 10002;
 
-/** NIP-37 preferred relays */
+/** NIP-37 draft wrap: encrypted storage for an unsigned draft event of any kind */
+export const KIND_DRAFT_WRAP = 31234;
+
+/**
+ * NIP-37 "preferred relays" — per spec, "the user's preferred relays to store
+ * private events like Draft Wraps". See `src/nostr/preferredRelays.ts`.
+ */
 export const KIND_PREFERRED_RELAYS = 10013;
+
+/** NIP-51 "Emojis" — a user's personal custom emoji list */
+export const KIND_EMOJI_LIST = 10030;
 
 /** NIP-84 highlight */
 export const KIND_HIGHLIGHT = 9802;

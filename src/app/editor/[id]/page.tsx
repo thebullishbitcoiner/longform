@@ -17,6 +17,8 @@ import './page.css';
 import { KIND_LONGFORM_ARTICLE, KIND_LONGFORM_DRAFT } from '@/nostr/kinds';
 import { nostrDebug } from '@/nostr/debug';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
+import { Nip07Signer } from '@/utils/nip07Signer';
+import { loadDraft as loadDraftWrap, saveDraft, deleteDraft } from '@/nostr/draftWraps';
 import Image from 'next/image';
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -441,10 +443,40 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           try {
             const pubkey = currentUser.pubkey;
             nostrDebug('Editor: User pubkey from context:', pubkey);
-            
-            // Query the specific event from Nostr
+
+            // Try the NIP-37 draft wrap first
+            if (ndk.signer instanceof Nip07Signer) {
+              const wrapped = await loadDraftWrap(ndk, ndk.signer, pubkey, id);
+              if (wrapped) {
+                const title = wrapped.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled';
+                const coverImage = wrapped.tags.find(tag => tag[0] === 'image')?.[1];
+                const summary = wrapped.tags.find(tag => tag[0] === 'summary')?.[1];
+                const hashtags = wrapped.tags
+                  .filter(tag => tag[0] === 't' && tag[1] !== 'longform')
+                  .map(tag => tag[1]);
+                const nostrDraft: Draft = {
+                  id,
+                  title,
+                  content: wrapped.content,
+                  lastModified: new Date(wrapped.created_at * 1000).toISOString(),
+                  sources: ['nostr'],
+                  dTag: id,
+                  coverImage,
+                  summary,
+                  hashtags,
+                  originalTags: wrapped.tags,
+                  kind: wrapped.kind
+                };
+                nostrDebug('Editor: Loaded NIP-37 draft wrap:', nostrDraft);
+                setDraft(nostrDraft);
+                setIsLoading(false);
+                return;
+              }
+            }
+
+            // Fall back to a legacy plain kind-30024 draft, or an already-published post
             nostrDebug('Editor: Querying event from Nostr...');
-            const event = await ndk.fetchEvent({ 
+            const event = await ndk.fetchEvent({
               ids: [id],
               kinds: [KIND_LONGFORM_DRAFT as NDKKind, KIND_LONGFORM_ARTICLE as NDKKind], // Query both drafts and published posts
               authors: [pubkey]
@@ -707,7 +739,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     const isTemporaryDraft = updatedDraft.id.startsWith('temp_');
     
     if (isTemporaryDraft) {
-      if (!ndk || !isAuthenticated) {
+      if (!ndk || !isAuthenticated || !currentUser?.pubkey || !(ndk.signer instanceof Nip07Signer)) {
         toast.error('Please log in to save drafts.');
         return;
       }
@@ -763,29 +795,39 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         
         ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
-        // Try to publish with a timeout
-        const publishPromise = ndkEvent.publish();
-        const timeoutPromise = new Promise((_, reject) => 
+        // First save: mint a stable id (the draft wrap's `d` tag) that the URL
+        // will use for the rest of this draft's life — no more id-changes-after-save.
+        const stableId = updatedDraft.id.replace(/^temp_/, '');
+        const draftEvent = {
+          kind: ndkEvent.kind!,
+          tags: ndkEvent.tags,
+          content: ndkEvent.content,
+          created_at: ndkEvent.created_at,
+        };
+
+        // Try to save with a timeout
+        const savePromise = saveDraft(ndk, ndk.signer, currentUser.pubkey, stableId, draftEvent);
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Publishing timed out')), 10000)
         );
 
-        await Promise.race([publishPromise, timeoutPromise]);
-        
-        // Update the draft with the new Nostr ID and sources
+        await Promise.race([savePromise, timeoutPromise]);
+
+        // Update the draft with the new stable ID and sources
         const savedDraft: Draft = {
           ...updatedDraft,
-          id: ndkEvent.id,
+          id: stableId,
           sources: ['nostr']
         };
         setDraft(savedDraft);
         setHasUnsavedChanges(false);
-        
+
         // Clear the auto-saved draft since it's now saved to Nostr
         clearLastDraft();
-        
-        // Update the URL to reflect the new Nostr event ID
-        router.replace(`/editor/${ndkEvent.id}`);
-        
+
+        // Update the URL to reflect the stable draft id
+        router.replace(`/editor/${stableId}`);
+
         toast.success('Draft saved to Nostr!');
       } catch (error: unknown) {
         console.error('Editor: Error saving temporary draft to Nostr:', error);
@@ -805,7 +847,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       }
     } else {
       // Update existing Nostr draft
-      if (!ndk || !isAuthenticated) {
+      if (!ndk || !isAuthenticated || !currentUser?.pubkey || !(ndk.signer instanceof Nip07Signer)) {
         toast.error('Please log in to save drafts.');
         return;
       }
@@ -978,12 +1020,17 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           dTagInTags: ndkEvent.tags.find(tag => tag[0] === 'd')
         });
 
-        await ndkEvent.publish();
-        
-        // Update the draft with the new Nostr ID and preserve the original tags
+        const draftEvent = {
+          kind: ndkEvent.kind!,
+          tags: ndkEvent.tags,
+          content: ndkEvent.content,
+          created_at: ndkEvent.created_at!,
+        };
+        await saveDraft(ndk, ndk.signer, currentUser.pubkey, updatedDraft.id, draftEvent);
+
+        // Update the draft, preserving the (unchanged) stable id and the original tags
         const savedDraft: Draft = {
           ...updatedDraft,
-          id: ndkEvent.id,
           content: updatedDraft.content, // Include the current content
           lastModified: new Date().toISOString(),
           sources: ['nostr'],
@@ -992,13 +1039,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         };
         setDraft(savedDraft);
         setHasUnsavedChanges(false);
-        
+
         // Clear the auto-saved draft since it's now saved to Nostr
         clearLastDraft();
-        
-        // Update the URL to reflect the new Nostr event ID
-        router.replace(`/editor/${ndkEvent.id}`);
-        
+
         toast.success('Draft saved.');
       } catch (error: unknown) {
         console.error('Editor: Error updating Nostr draft:', error);
@@ -1427,7 +1471,20 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       });
 
       await ndkEvent.publish();
-      
+
+      // Best-effort cleanup: this article started life as a draft wrap, now that
+      // it's published there's no reason for the wrap to keep lingering on relays.
+      if (
+        draft.kind === KIND_LONGFORM_DRAFT &&
+        !draft.id.startsWith('temp_') &&
+        currentUser?.pubkey &&
+        ndk.signer instanceof Nip07Signer
+      ) {
+        deleteDraft(ndk, ndk.signer, currentUser.pubkey, draft.id).catch((error) => {
+          console.error('Editor: Failed to clean up draft wrap after publish:', error);
+        });
+      }
+
       // Update the draft with the new Nostr ID and preserve the original tags
       const savedDraft: Draft = {
         ...draft,

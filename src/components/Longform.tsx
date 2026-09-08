@@ -7,6 +7,8 @@ import { useNostr } from '@/contexts/NostrContext';
 import { KIND_DELETION, KIND_LONGFORM_ARTICLE, KIND_LONGFORM_DRAFT } from '@/nostr/kinds';
 import { nostrDebug } from '@/nostr/debug';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
+import { Nip07Signer } from '@/utils/nip07Signer';
+import { listDrafts, deleteDraft, type ListedDraft } from '@/nostr/draftWraps';
 import type { PublishedNote } from '@/types/content';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { getTagValue } from '@/utils/nostrTags';
@@ -126,6 +128,15 @@ export default function Longform() {
         const pubkey = currentUser.pubkey;
         nostrDebug('Longform: Using pubkey from context:', pubkey);
 
+        // Kick off the NIP-37 draft-wrap lookup in parallel with the legacy subscriptions below
+        const wrappedDraftsPromise: Promise<ListedDraft[]> =
+          ndk.signer instanceof Nip07Signer
+            ? listDrafts(ndk, ndk.signer, pubkey).catch((error) => {
+                console.error('Longform: Failed to load NIP-37 draft wraps:', error);
+                return [] as ListedDraft[];
+              })
+            : Promise.resolve([]);
+
         // Try to load from cache first
         const cachedDrafts = getCachedDrafts(pubkey);
         const cachedPosts = getCachedPosts(pubkey);
@@ -216,7 +227,7 @@ export default function Longform() {
         
         nostrDebug(`Longform: Setting timeout for ${timeoutDuration}ms`);
         
-        setTimeout(() => {
+        setTimeout(async () => {
           nostrDebug('Longform: Processing draft events:', eventsRef.current.length);
           
           // Get all deleted event IDs from deletion events
@@ -274,13 +285,29 @@ export default function Longform() {
             return !isReferenced;
           });
           
-          nostrDebug(`Longform: Final drafts after cleanup: ${finalDrafts.length}`);
-          
-          setDrafts(finalDrafts);
+          nostrDebug(`Longform: Final drafts after cleanup (legacy kind-30024): ${finalDrafts.length}`);
+
+          // Merge in NIP-37 draft wraps (the current format) — these take priority;
+          // the legacy subscription above is a temporary backward-compat fallback
+          // for any drafts saved before this migration, safe to remove once none remain.
+          const wrappedDrafts = await wrappedDraftsPromise;
+          const wrappedAsDrafts: Draft[] = wrappedDrafts.map(d => ({
+            id: d.id,
+            title: d.tags.find(tag => tag[0] === 'title')?.[1] || 'Untitled',
+            content: d.content,
+            lastModified: new Date(d.wrapCreatedAt * 1000).toISOString(),
+            dTag: d.tags.find(tag => tag[0] === 'd')?.[1],
+          }));
+          const wrappedIds = new Set(wrappedAsDrafts.map(d => d.id));
+          const mergedDrafts = [...wrappedAsDrafts, ...finalDrafts.filter(d => !wrappedIds.has(d.id))];
+
+          nostrDebug(`Longform: Merged drafts (${wrappedAsDrafts.length} wraps + ${finalDrafts.length} legacy): ${mergedDrafts.length}`);
+
+          setDrafts(mergedDrafts);
           setIsLoading(false);
 
           // Cache the processed drafts
-          const cachedDrafts: CachedDraft[] = finalDrafts.map(draft => {
+          const cachedDrafts: CachedDraft[] = mergedDrafts.map(draft => {
             const event = eventsRef.current.find(event => event.id === draft.id);
             return {
               id: draft.id,
@@ -494,7 +521,7 @@ export default function Longform() {
   };
 
   const performDeleteDraft = async (id: string) => {
-    if (!ndk || !isAuthenticated) {
+    if (!ndk || !isAuthenticated || !currentUser?.pubkey) {
       toast.error('Please log in to delete drafts.');
       return;
     }
@@ -506,18 +533,27 @@ export default function Longform() {
         return;
       }
 
-      // Create a deletion event (kind 5)
-      const deleteEvent = new NDKEvent(ndk);
-      deleteEvent.kind = KIND_DELETION;
-      deleteEvent.content = 'Deleted draft'; // Optional reason
-      deleteEvent.tags = [
-        ['e', id] // Reference to the event being deleted
-      ];
-      deleteEvent.created_at = Math.floor(Date.now() / 1000);
+      // A stable NIP-37 draft-wrap id (not a legacy relay-assigned hex event id)
+      const isDraftWrap = !/^[0-9a-f]{64}$/i.test(id);
 
-      // Publish the deletion event
-      await deleteEvent.publish();
-      
+      if (isDraftWrap) {
+        if (!(ndk.signer instanceof Nip07Signer)) {
+          toast.error('NIP-44 capable signer required to delete drafts.');
+          return;
+        }
+        await deleteDraft(ndk, ndk.signer, currentUser.pubkey, id);
+      } else {
+        // Legacy plain kind-30024 draft — delete via NIP-09
+        const deleteEvent = new NDKEvent(ndk);
+        deleteEvent.kind = KIND_DELETION;
+        deleteEvent.content = 'Deleted draft'; // Optional reason
+        deleteEvent.tags = [
+          ['e', id] // Reference to the event being deleted
+        ];
+        deleteEvent.created_at = Math.floor(Date.now() / 1000);
+        await deleteEvent.publish();
+      }
+
       // Remove from local state
       setDrafts(drafts.filter(draft => draft.id !== id));
       

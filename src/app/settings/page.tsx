@@ -4,15 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
-import { NDKKind } from '@nostr-dev-kit/ndk';
 import {
     isValidRelayUrl,
     testRelayConnection,
-    createPreferredRelaysEvent,
-    parsePreferredRelaysEvent,
-    type PreferredRelay
-} from '@/utils/preferredRelays';
-import {
     createRelayListEvent,
     parseRelayListEvent,
     type RelayInfo
@@ -27,14 +21,13 @@ import {
   type CustomEmojiEntry,
 } from '@/nostr/customEmojis';
 import { CustomEmoji, EmojiSet } from '@/types/emoji';
-import { Nip07Signer } from '@/utils/nip07Signer';
 import { hardcodedEmojiSets } from '@/data/emojiSets';
 import JSZip from 'jszip';
+import { Nip07Signer } from '@/utils/nip07Signer';
+import { loadPreferredRelays, publishPreferredRelays } from '@/nostr/preferredRelays';
 import {
     KIND_DELETION,
     KIND_LONGFORM_ARTICLE,
-    KIND_LONGFORM_DRAFT,
-    KIND_PREFERRED_RELAYS,
     KIND_RELAY_LIST,
 } from '@/nostr/kinds';
 import './page.css';
@@ -49,16 +42,19 @@ interface BackupPost {
 }
 
 export default function SettingsPage() {
-    const { isAuthenticated, currentUser, ndk } = useNostr();
-    const [preferredRelays, setPreferredRelays] = useState<PreferredRelay[]>([]);
+    const { isAuthenticated, currentUser, ndk, refreshRelaySet } = useNostr();
     const [relayList, setRelayList] = useState<RelayInfo[]>([]);
     const [newRelayUrl, setNewRelayUrl] = useState('');
     const [newRelayPolicy, setNewRelayPolicy] = useState<'read' | 'write' | 'readwrite'>('readwrite');
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingRelayList, setIsLoadingRelayList] = useState(false);
-    const [showInfoModal, setShowInfoModal] = useState(false);
     const [showRelayListInfoModal, setShowRelayListInfoModal] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
+    const [preferredRelays, setPreferredRelays] = useState<string[]>([]);
+    const [newPreferredRelayUrl, setNewPreferredRelayUrl] = useState('');
+    const [isLoadingPreferredRelays, setIsLoadingPreferredRelays] = useState(false);
+    const [isPublishingPreferredRelays, setIsPublishingPreferredRelays] = useState(false);
+    const [showPreferredRelaysInfoModal, setShowPreferredRelaysInfoModal] = useState(false);
     const [cacheData, setCacheData] = useState<Array<{key: string, value: string, size: number}>>([]);
     const [showCacheInfoModal, setShowCacheInfoModal] = useState(false);
     const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
@@ -73,34 +69,6 @@ export default function SettingsPage() {
     const [selectedEmojiSet, setSelectedEmojiSet] = useState<EmojiSet | null>(null);
     const [selectedEmojis, setSelectedEmojis] = useState<Set<string>>(new Set());
     const [showEmojiSetModal, setShowEmojiSetModal] = useState(false);
-
-    const loadPreferredRelays = useCallback(async () => {
-        if (currentUser?.pubkey) {
-            setIsLoading(true);
-            try {
-                const events = await ndk.fetchEvents({
-                    kinds: [KIND_PREFERRED_RELAYS as NDKKind],
-                    authors: [currentUser.pubkey],
-                    limit: 1
-                });
-                
-                if (events.size > 0) {
-                    const latestEvent = Array.from(events)[0];
-                    
-                    // Parse NIP-44 encrypted private tags from the event
-                    const networkRelays = await parsePreferredRelaysEvent(latestEvent, ndk);
-                    setPreferredRelays(networkRelays);
-                } else {
-                    setPreferredRelays([]);
-                }
-            } catch (error) {
-                console.warn('Failed to fetch preferred relays from Nostr:', error);
-                setPreferredRelays([]);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-    }, [currentUser?.pubkey, ndk]);
 
     const loadRelayList = useCallback(async () => {
         if (currentUser?.pubkey) {
@@ -128,17 +96,32 @@ export default function SettingsPage() {
         }
     }, [currentUser?.pubkey, ndk]);
 
-    // Load relays from localStorage on component mount
+    // Load preferred relays (NIP-37 kind 10013) on component mount
+    const loadPreferredRelaysFromNostr = useCallback(async () => {
+        if (!currentUser?.pubkey || !(ndk?.signer instanceof Nip07Signer)) return;
+        setIsLoadingPreferredRelays(true);
+        try {
+            const relays = await loadPreferredRelays(ndk, ndk.signer, currentUser.pubkey);
+            setPreferredRelays(relays);
+        } catch (error) {
+            console.warn('Failed to fetch preferred relays from Nostr:', error);
+            setPreferredRelays([]);
+        } finally {
+            setIsLoadingPreferredRelays(false);
+        }
+    }, [currentUser?.pubkey, ndk]);
+
+    // Load relay list on component mount
     useEffect(() => {
         if (isAuthenticated && currentUser) {
-            loadPreferredRelays();
             loadRelayList();
+            loadPreferredRelaysFromNostr();
         }
-    }, [isAuthenticated, currentUser, loadPreferredRelays, loadRelayList]);
+    }, [isAuthenticated, currentUser, loadRelayList, loadPreferredRelaysFromNostr]);
 
     // Prevent scrolling when modal is open
     useEffect(() => {
-        if (showInfoModal || showRelayListInfoModal || showCacheInfoModal || showAddEmojiModal || showEmojiSetModal) {
+        if (showRelayListInfoModal || showPreferredRelaysInfoModal || showCacheInfoModal || showAddEmojiModal || showEmojiSetModal) {
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = 'unset';
@@ -148,54 +131,7 @@ export default function SettingsPage() {
         return () => {
             document.body.style.overflow = 'unset';
         };
-    }, [showInfoModal, showRelayListInfoModal, showCacheInfoModal, showAddEmojiModal, showEmojiSetModal]);
-
-    const handleSavePreferredRelays = (relays: PreferredRelay[]) => {
-        setPreferredRelays(relays);
-    };
-
-    const addRelay = () => {
-        if (!newRelayUrl.trim()) {
-            toast.error('Please enter a relay URL');
-            return;
-        }
-
-        // Basic URL validation
-        if (!isValidRelayUrl(newRelayUrl)) {
-            toast.error('Please enter a valid relay URL (must start with wss:// or ws://)');
-            return;
-        }
-
-        // Check if relay already exists
-        if (preferredRelays.some(relay => relay.url === newRelayUrl)) {
-            toast.error('This relay is already in your preferred list');
-            return;
-        }
-
-        const newRelay: PreferredRelay = {
-            url: newRelayUrl.trim(),
-            policy: newRelayPolicy
-        };
-
-        const updatedRelays = [...preferredRelays, newRelay];
-        handleSavePreferredRelays(updatedRelays);
-
-        // Reset form
-        setNewRelayUrl('');
-        setNewRelayPolicy('readwrite');
-    };
-
-    const removeRelay = (url: string) => {
-        const updatedRelays = preferredRelays.filter(relay => relay.url !== url);
-        handleSavePreferredRelays(updatedRelays);
-    };
-
-    const updateRelayPolicy = (url: string, policy: 'read' | 'write' | 'readwrite') => {
-        const updatedRelays = preferredRelays.map(relay =>
-            relay.url === url ? { ...relay, policy } : relay
-        );
-        handleSavePreferredRelays(updatedRelays);
-    };
+    }, [showRelayListInfoModal, showPreferredRelaysInfoModal, showCacheInfoModal, showAddEmojiModal, showEmojiSetModal]);
 
     const handleTestRelayConnection = async (url: string) => {
         setIsLoading(true);
@@ -276,6 +212,7 @@ export default function SettingsPage() {
             
             await event.publish();
             toast.success('Relay list published to Nostr network');
+            await refreshRelaySet();
         } catch (error) {
             console.error('Error publishing relay list:', error);
             toast.error('Failed to publish relay list');
@@ -284,27 +221,43 @@ export default function SettingsPage() {
         }
     };
 
+    // Draft storage relays (NIP-37 kind 10013) functions
+    const addPreferredRelay = () => {
+        if (!newPreferredRelayUrl.trim()) {
+            toast.error('Please enter a relay URL');
+            return;
+        }
+        if (!isValidRelayUrl(newPreferredRelayUrl)) {
+            toast.error('Please enter a valid relay URL (must start with wss:// or ws://)');
+            return;
+        }
+        if (preferredRelays.includes(newPreferredRelayUrl.trim())) {
+            toast.error('This relay is already in your draft storage list');
+            return;
+        }
+        setPreferredRelays([...preferredRelays, newPreferredRelayUrl.trim()]);
+        setNewPreferredRelayUrl('');
+    };
 
+    const removePreferredRelay = (url: string) => {
+        setPreferredRelays(preferredRelays.filter(r => r !== url));
+    };
 
-    const publishPreferredRelays = async () => {
-        if (!currentUser?.pubkey || preferredRelays.length === 0) {
+    const publishPreferredRelaysToNostr = async () => {
+        if (!currentUser?.pubkey || !(ndk?.signer instanceof Nip07Signer) || preferredRelays.length === 0) {
             toast.error('No preferred relays to publish');
             return;
         }
 
-        setIsPublishing(true);
+        setIsPublishingPreferredRelays(true);
         try {
-            // Create a NIP-37 preferred relays event with NIP-44 encrypted private tags
-            const event = await createPreferredRelaysEvent(ndk, preferredRelays);
-            event.tags.push(['client', 'Longform._']);
-            
-            await event.publish();
-            toast.success('Preferred relays published to Nostr network (NIP-44 encrypted)');
+            await publishPreferredRelays(ndk, ndk.signer, currentUser.pubkey, preferredRelays);
+            toast.success('Draft storage relays published to Nostr network (NIP-44 encrypted)');
         } catch (error) {
             console.error('Error publishing preferred relays:', error);
             toast.error('Failed to publish preferred relays');
         } finally {
-            setIsPublishing(false);
+            setIsPublishingPreferredRelays(false);
         }
     };
 
@@ -380,18 +333,13 @@ export default function SettingsPage() {
         loadCacheData();
     }, [loadCacheData]);
 
-    // Load custom emojis from Supabase
+    // Load custom emojis (NIP-51 kind 10030)
     const loadCustomEmojisFromNostr = useCallback(async () => {
-        if (!currentUser?.pubkey || !ndk?.signer) return;
+        if (!currentUser?.pubkey || !ndk) return;
 
         setIsLoadingEmojis(true);
         try {
-            const signer = ndk.signer;
-            if (!(signer instanceof Nip07Signer)) {
-                setCustomEmojis([]);
-                return;
-            }
-            const emojis = await loadCustomEmojis(ndk, signer, currentUser.pubkey);
+            const emojis = await loadCustomEmojis(ndk, currentUser.pubkey);
             setCustomEmojis(emojis);
         } catch (error) {
             console.error('Error loading custom emojis:', error);
@@ -500,15 +448,10 @@ export default function SettingsPage() {
             toast.error('User not authenticated');
             return;
         }
-        const signer = ndk.signer;
-        if (!(signer instanceof Nip07Signer)) {
-            toast.error('NIP-44 signer required');
-            return;
-        }
 
         try {
             const next = customEmojis.filter((emoji) => emoji.name !== name);
-            await publishCustomEmojis(ndk, signer, next);
+            await publishCustomEmojis(ndk, next);
             setCustomEmojis(next);
             toast.success('Custom emoji removed');
         } catch (error) {
@@ -553,11 +496,6 @@ export default function SettingsPage() {
             toast.error('Please select at least one emoji');
             return;
         }
-        const signer = ndk.signer;
-        if (!(signer instanceof Nip07Signer)) {
-            toast.error('NIP-44 signer required');
-            return;
-        }
 
         try {
             const toAdd: CustomEmojiEntry[] = [];
@@ -574,7 +512,7 @@ export default function SettingsPage() {
             }
 
             const next = [...toAdd, ...customEmojis];
-            await publishCustomEmojis(ndk, signer, next);
+            await publishCustomEmojis(ndk, next);
             setCustomEmojis(next);
             toast.success(`Added ${toAdd.length} emoji${toAdd.length > 1 ? 's' : ''} to your collection`);
             setShowEmojiSetModal(false);
@@ -655,17 +593,12 @@ export default function SettingsPage() {
 
     return (
         <AuthGuard>
-            {isLoading || isLoadingRelayList ? (
+            {isLoadingRelayList ? (
                 <main className="container">
                     <div className="loading-content">
                         <div className="loading-spinner"></div>
                         <p className="loading-text">
-                            {isLoading && isLoadingRelayList 
-                                ? `Loading kinds ${KIND_PREFERRED_RELAYS} and ${KIND_RELAY_LIST}...` 
-                                : isLoading 
-                                ? `Loading kind ${KIND_PREFERRED_RELAYS} (NIP-37 preferred relays)...` 
-                                : `Loading kind ${KIND_RELAY_LIST} (NIP-65 relay list)...`
-                            }
+                            {`Loading kind ${KIND_RELAY_LIST} (NIP-65 relay list)...`}
                         </p>
                     </div>
                 </main>
@@ -676,107 +609,6 @@ export default function SettingsPage() {
             </div>
 
             <div className="settings-content">
-                <section className="settings-section">
-                    <div className="section-header">
-                        <h2>Preferred Relays</h2>
-                        <button
-                            onClick={() => setShowInfoModal(true)}
-                            className="info-button"
-                            title="Learn more about preferred relays"
-                        >
-                            <InformationCircleIcon />
-                        </button>
-                    </div>
-
-                    {preferredRelays.length === 0 && (
-                        <p className="no-relays">No preferred relays configured. Add some relays below.</p>
-                    )}
-
-                    <div className="add-relay-form">
-                        <div className="form-row">
-                            <input
-                                type="text"
-                                value={newRelayUrl}
-                                onChange={(e) => setNewRelayUrl(e.target.value)}
-                                placeholder="wss://relay.example.com"
-                                className="relay-url-input"
-                            />
-                            <select
-                                value={newRelayPolicy}
-                                onChange={(e) => setNewRelayPolicy(e.target.value as 'read' | 'write' | 'readwrite')}
-                                className="policy-select"
-                            >
-                                <option value="read">Read Only</option>
-                                <option value="write">Write Only</option>
-                                <option value="readwrite">Read & Write</option>
-                            </select>
-                            <button onClick={addRelay} className="add-button">
-                                <PlusIcon />
-                                Add
-                            </button>
-                        </div>
-                    </div>
-
-                    {preferredRelays.length > 0 ? (
-                        <div className="preferred-relays-listbox" role="listbox" aria-label="Preferred relays list">
-                            {preferredRelays.map((relay, index) => (
-                                <div key={index} className="relay-item" role="option" aria-selected="false">
-                                    <div className="relay-info">
-                                        <span className="relay-url">{relay.url}</span>
-                                    </div>
-                                    <div className="relay-controls">
-                                        <div className="permission-toggles">
-                                            <label className="permission-toggle">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={relay.policy === 'read' || relay.policy === 'readwrite'}
-                                                    onChange={(e) => updateRelayPolicy(relay.url, e.target.checked ? (relay.policy === 'write' ? 'readwrite' : 'read') : (relay.policy === 'readwrite' ? 'write' : 'write'))}
-                                                />
-                                                Read
-                                            </label>
-                                            <label className="permission-toggle">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={relay.policy === 'write' || relay.policy === 'readwrite'}
-                                                    onChange={(e) => updateRelayPolicy(relay.url, e.target.checked ? (relay.policy === 'read' ? 'readwrite' : 'write') : (relay.policy === 'readwrite' ? 'read' : 'read'))}
-                                                />
-                                                Write
-                                            </label>
-                                        </div>
-                                        <div className="relay-actions">
-                                            <button
-                                                onClick={() => handleTestRelayConnection(relay.url)}
-                                                disabled={isLoading}
-                                                className="test-button"
-                                                title="Test connection"
-                                            >
-                                                Test
-                                            </button>
-                                            <button
-                                                onClick={() => removeRelay(relay.url)}
-                                                className="remove-button"
-                                                title="Remove relay"
-                                            >
-                                                <TrashIcon />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                    </div>
-                    ) : null}
-                    
-                    <div className="section-actions">
-                        <button
-                            onClick={publishPreferredRelays}
-                            className="save-button"
-                            disabled={preferredRelays.length === 0 || isPublishing}
-                        >
-                            {isPublishing ? 'Saving...' : 'Save'}
-                        </button>
-                    </div>
-                </section>
-
                 <section className="settings-section">
                     <div className="section-header">
                         <h2>Relay List ({relayList.length})</h2>
@@ -790,7 +622,7 @@ export default function SettingsPage() {
                     </div>
 
                     {relayList.length === 0 && (
-                        <p className="no-relays">No relay list configured. Add some relays below or sync from preferred relays.</p>
+                        <p className="no-relays">No relay list configured. Add some relays below.</p>
                     )}
 
                     <div className="add-relay-form">
@@ -874,6 +706,78 @@ export default function SettingsPage() {
                             disabled={relayList.length === 0 || isPublishing}
                         >
                             {isPublishing ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
+                </section>
+
+                <section className="settings-section">
+                    <div className="section-header">
+                        <h2>Preferred Relays ({preferredRelays.length})</h2>
+                        <button
+                            onClick={() => setShowPreferredRelaysInfoModal(true)}
+                            className="info-button"
+                            title="Learn more about preferred relays"
+                        >
+                            <InformationCircleIcon />
+                        </button>
+                    </div>
+
+                    {!isLoadingPreferredRelays && preferredRelays.length === 0 && (
+                        <p className="no-relays">No preferred relays configured — your NIP-65 write relays will be used automatically the first time you save a draft.</p>
+                    )}
+
+                    <div className="add-relay-form">
+                        <div className="form-row">
+                            <input
+                                type="text"
+                                value={newPreferredRelayUrl}
+                                onChange={(e) => setNewPreferredRelayUrl(e.target.value)}
+                                placeholder="wss://relay.example.com"
+                                className="relay-url-input"
+                            />
+                            <button onClick={addPreferredRelay} className="add-button">
+                                <PlusIcon />
+                                Add
+                            </button>
+                        </div>
+                    </div>
+
+                    {preferredRelays.length > 0 && (
+                        <div className="relays-listbox" role="listbox" aria-label="Draft storage relays list">
+                            {preferredRelays.map((url, index) => (
+                                <div key={index} className="relay-item" role="option" aria-selected="false">
+                                    <div className="relay-info">
+                                        <span className="relay-url">{url}</span>
+                                    </div>
+                                    <div className="relay-actions">
+                                        <button
+                                            onClick={() => handleTestRelayConnection(url)}
+                                            disabled={isLoading}
+                                            className="test-button"
+                                            title="Test connection"
+                                        >
+                                            Test
+                                        </button>
+                                        <button
+                                            onClick={() => removePreferredRelay(url)}
+                                            className="remove-button"
+                                            title="Remove relay"
+                                        >
+                                            <TrashIcon />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="section-actions">
+                        <button
+                            onClick={publishPreferredRelaysToNostr}
+                            className="save-button"
+                            disabled={preferredRelays.length === 0 || isPublishingPreferredRelays}
+                        >
+                            {isPublishingPreferredRelays ? 'Saving...' : 'Save'}
                         </button>
                     </div>
                 </section>
@@ -1101,45 +1005,6 @@ export default function SettingsPage() {
 
             </div>
 
-            {/* Info Modal */}
-            {showInfoModal && (
-                <div className="modal-overlay" onClick={() => setShowInfoModal(false)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>About Preferred Relays</h3>
-                            <button
-                                onClick={() => setShowInfoModal(false)}
-                                className="modal-close-button"
-                                title="Close"
-                            >
-                                <XMarkIcon />
-                            </button>
-                        </div>
-                        <div className="modal-body">
-                            <p>
-                                According to {' '}<a
-                                    href="https://github.com/nostr-protocol/nips/blob/master/37.md"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="external-link"
-                                >
-                                    NIP-37
-                                </a>, private events should be sent to a subset of relays that the user trusts.
-                                These relays are used for:
-                            </p>
-                            <ul>
-                                <li><strong>Read Only:</strong> Only receive private events from this relay</li>
-                                <li><strong>Write Only:</strong> Only send private events to this relay</li>
-                                <li><strong>Read & Write:</strong> Both send and receive private events with this relay</li>
-                            </ul>
-                            <p>
-                                This setting only affects your draft events (kind {KIND_LONGFORM_DRAFT}). Public events will continue to use your relay lists configuration.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Relay List Info Modal */}
             {showRelayListInfoModal && (
                 <div className="modal-overlay" onClick={() => setShowRelayListInfoModal(false)}>
@@ -1179,6 +1044,42 @@ export default function SettingsPage() {
                             </p>
                             <p>
                                 Publishing your relay list makes it available to other Nostr clients and helps build a more connected network.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Preferred Relays Info Modal */}
+            {showPreferredRelaysInfoModal && (
+                <div className="modal-overlay" onClick={() => setShowPreferredRelaysInfoModal(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>About Preferred Relays (NIP-37)</h3>
+                            <button
+                                onClick={() => setShowPreferredRelaysInfoModal(false)}
+                                className="modal-close-button"
+                                title="Close"
+                            >
+                                <XMarkIcon />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p>
+                                According to {' '}<a
+                                    href="https://github.com/nostr-protocol/nips/blob/master/37.md"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="external-link"
+                                >
+                                    NIP-37
+                                </a>, your drafts are stored as encrypted &quot;draft wraps&quot; that only you can read.
+                                This list tells Longform (and other NIP-37-compatible clients) which relays hold those
+                                encrypted drafts — separate from the public relays your published articles use.
+                            </p>
+                            <p>
+                                If you don&apos;t configure this, Longform automatically uses your NIP-65 write relays
+                                the first time you save a draft — most people never need to touch this.
                             </p>
                         </div>
                     </div>

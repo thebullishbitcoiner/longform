@@ -6,6 +6,7 @@ import { useNostr } from '@/contexts/NostrContext';
 import { usePlatformStatus } from '@/contexts/PlatformStatusContext';
 import { loadProfileBackground } from '@/nostr/profileData';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
+import { getAuthorRelaySet } from '@/utils/relayDiscovery';
 import NDK, { NDKEvent } from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
 import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
@@ -484,19 +485,30 @@ export default function ProfilePage() {
 
   // Function to fetch and cache posts
   const fetchAndCachePosts = async (ndkToUse: NDK, pubkey: string) => {
+    // Outbox model: also query the author's own NIP-65 write relays, if resolvable
+    const authorRelaySet = await getAuthorRelaySet(ndkToUse, pubkey);
+
     // Fetch user's blog posts (kind 30023)
-    const postsQuery = await ndkToUse.fetchEvents({
-      kinds: [KIND_LONGFORM_ARTICLE],
-      authors: [pubkey],
-      limit: 50,
-    });
+    const postsQuery = await ndkToUse.fetchEvents(
+      {
+        kinds: [KIND_LONGFORM_ARTICLE],
+        authors: [pubkey],
+        limit: 50,
+      },
+      undefined,
+      authorRelaySet
+    );
 
     // Fetch deletion events (kind 5) to filter out deleted posts
-    const deletionQuery = await ndkToUse.fetchEvents({
-      kinds: [KIND_DELETION],
-      authors: [pubkey],
-      limit: 100,
-    });
+    const deletionQuery = await ndkToUse.fetchEvents(
+      {
+        kinds: [KIND_DELETION],
+        authors: [pubkey],
+        limit: 100,
+      },
+      undefined,
+      authorRelaySet
+    );
 
     // Create a set of deleted event IDs
     const deletedEventIds = new Set<string>();

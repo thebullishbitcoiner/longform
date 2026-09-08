@@ -1,14 +1,12 @@
 'use client';
 
-import NDK, { NDKKind } from '@nostr-dev-kit/ndk';
+import NDK, { getRelayListForUser } from '@nostr-dev-kit/ndk';
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 
 import { Nip07Signer } from '@/utils/nip07Signer';
 import { DEFAULT_RELAYS } from '@/config/relays';
-import { KIND_PREFERRED_RELAYS } from '@/nostr/kinds';
 import { nostrDebug } from '@/nostr/debug';
 import { hexToNpub } from '@/utils/nostr';
-import { parsePreferredRelaysEvent, savePreferredRelays } from '@/utils/preferredRelays';
 
 const CONNECT_TIMEOUT_MS = 10000;
 const CONNECTION_POLL_MS = 30000;
@@ -125,6 +123,7 @@ interface NostrContextType {
   isAuthenticated: boolean;
   currentUser: UserProfile | null;
   checkAuthentication: () => Promise<boolean>;
+  refreshRelaySet: () => Promise<void>;
   logout: () => void;
 }
 
@@ -135,6 +134,7 @@ const NostrContext = createContext<NostrContextType>({
   isAuthenticated: false,
   currentUser: null,
   checkAuthentication: async () => false,
+  refreshRelaySet: async () => {},
   logout: () => {}
 });
 
@@ -174,20 +174,10 @@ export function NostrProvider({ children }: NostrProviderProps) {
     let fromNetwork: string[] = [];
 
     try {
-      const events = await ndkRef.current.fetchEvents({
-        kinds: [KIND_PREFERRED_RELAYS as NDKKind],
-        authors: [pubkey],
-        limit: 1,
-      });
-
-      if (events.size > 0) {
-        const latest = Array.from(events)[0];
-        const parsed = await parsePreferredRelaysEvent(latest, ndkRef.current);
-        savePreferredRelays(pubkey, parsed);
-        fromNetwork = parsed.map((relay) => relay.url);
-      }
+      const relayList = await getRelayListForUser(pubkey, ndkRef.current);
+      fromNetwork = relayList.bothRelayUrls;
     } catch (error) {
-      console.warn('NDK: Failed to load preferred relays from network:', error);
+      console.warn('NDK: Failed to load NIP-65 relay list from network:', error);
     }
 
     const mergedRelays = uniqueRelays([
@@ -301,6 +291,14 @@ export function NostrProvider({ children }: NostrProviderProps) {
     return authPromise;
   }, [applyRelayPreferences]);
 
+  /** Re-reads the current user's NIP-65 relay list and reconnects — used after publishing a new list. */
+  const refreshRelaySet = useCallback(async (): Promise<void> => {
+    const pubkey = currentUserRef.current?.pubkey;
+    if (!pubkey || !ndkRef.current.signer) return;
+    const effectiveNDK = await applyRelayPreferences(pubkey, ndkRef.current.signer as Nip07Signer);
+    effectiveNDK.signer = ndkRef.current.signer;
+  }, [applyRelayPreferences]);
+
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -340,7 +338,7 @@ export function NostrProvider({ children }: NostrProviderProps) {
   }, [checkAuthentication]);
 
   return (
-    <NostrContext.Provider value={{ ndk, isLoading, isConnected, isAuthenticated, currentUser, checkAuthentication, logout }}>
+    <NostrContext.Provider value={{ ndk, isLoading, isConnected, isAuthenticated, currentUser, checkAuthentication, refreshRelaySet, logout }}>
       {children}
     </NostrContext.Provider>
   );
