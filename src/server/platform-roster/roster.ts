@@ -1,3 +1,4 @@
+import { nip19 } from 'nostr-tools';
 import type {
   PlatformLegendRosterV1,
   PlatformProRosterV1,
@@ -12,6 +13,22 @@ export const PRO_RENEWAL_GRACE_SEC = 21 * 24 * 60 * 60;
 export function normalizePubkeyHex(pk: string): string | null {
   const s = pk.trim().toLowerCase();
   return HEX64.test(s) ? s : null;
+}
+
+/** Accepts either a hex pubkey or an npub and returns lowercase hex, or null if invalid. */
+export function resolvePubkeyHex(raw: string): string | null {
+  const direct = normalizePubkeyHex(raw);
+  if (direct) return direct;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('npub')) {
+    try {
+      const d = nip19.decode(trimmed);
+      if (d.type === 'npub') return normalizePubkeyHex(d.data as string);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 export function pruneExpiredProEntries(

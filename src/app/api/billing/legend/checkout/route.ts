@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizePubkeyHex } from '@/server/platform-roster/roster';
 import { startCheckout } from '@/server/billing/checkout';
+import { hexToNpub } from '@/utils/nostr';
 import { LEGEND_INVOICE_EXPIRY_SEC, getLegendPriceSats } from '@/server/billing/legendPayment';
 
 export const runtime = 'nodejs';
@@ -23,9 +24,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const npub = hexToNpub(pk) ?? pk;
     const invoice = await startCheckout({
       amountSats: getLegendPriceSats(),
-      description: 'Longform Legend',
+      description: `Longform Legend — ${npub}`,
       expirySec: LEGEND_INVOICE_EXPIRY_SEC,
     });
     return NextResponse.json(invoice);

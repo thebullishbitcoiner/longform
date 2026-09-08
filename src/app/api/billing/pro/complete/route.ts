@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { nip19 } from 'nostr-tools';
 import { loadPlatformKeysFromEnv } from '@/server/platform-roster/keys';
 import { grantProOnRoster } from '@/server/platform-roster/grant';
-import { normalizePubkeyHex } from '@/server/platform-roster/roster';
+import { resolvePubkeyHex } from '@/server/platform-roster/roster';
 import { checkCheckoutStatus } from '@/server/billing/checkout';
 import {
   PRO_TERM_DAYS_MONTHLY,
@@ -18,21 +17,6 @@ type CompleteBody = {
   termDays: number;
 };
 
-function resolvePubkey(raw: string): string | null {
-  const direct = normalizePubkeyHex(raw);
-  if (direct) return direct;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith('npub')) {
-    try {
-      const d = nip19.decode(trimmed);
-      if (d.type === 'npub') return normalizePubkeyHex(d.data as string);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 export async function POST(req: NextRequest) {
   const keys = loadPlatformKeysFromEnv();
   if (!keys) {
@@ -46,7 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const pk = resolvePubkey(body.pubkey ?? '');
+  const pk = resolvePubkeyHex(body.pubkey ?? '');
   if (!pk) {
     return NextResponse.json({ error: 'Invalid pubkey' }, { status: 400 });
   }

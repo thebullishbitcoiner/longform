@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadPlatformKeysFromEnv } from '@/server/platform-roster/keys';
-import { normalizePubkeyHex } from '@/server/platform-roster/roster';
+import { resolvePubkeyHex } from '@/server/platform-roster/roster';
 import { grantLegendOnRoster, grantProOnRoster } from '@/server/platform-roster/grant';
 import { PRO_TERM_DAYS_MONTHLY, PRO_TERM_DAYS_YEARLY } from '@/server/billing/proPayment';
 
 export const runtime = 'nodejs';
 
 type ConfirmBody = {
+  /** Either an npub or a hex pubkey. */
   pubkey: string;
   tier: 'pro' | 'legend';
   /** Subscription length for PRO: 30 (monthly) or 365 (yearly). Ignored for legend. */
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const pk = normalizePubkeyHex(body.pubkey);
+  const pk = resolvePubkeyHex(body.pubkey ?? '');
   if (!pk) {
     return NextResponse.json({ error: 'Invalid pubkey' }, { status: 400 });
   }

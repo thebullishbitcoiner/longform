@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizePubkeyHex } from '@/server/platform-roster/roster';
 import { startCheckout } from '@/server/billing/checkout';
+import { hexToNpub } from '@/utils/nostr';
 import {
   PRO_INVOICE_EXPIRY_SEC,
   PRO_TERM_DAYS_MONTHLY,
@@ -33,7 +34,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const description = `Longform PRO ${body.termDays === PRO_TERM_DAYS_YEARLY ? 'yearly' : 'monthly'}`;
+    const term = body.termDays === PRO_TERM_DAYS_YEARLY ? 'yearly' : 'monthly';
+    const npub = hexToNpub(pk) ?? pk;
+    const description = `Longform PRO ${term} — ${npub}`;
     const invoice = await startCheckout({
       amountSats: expectedSatsForTerm(body.termDays),
       description,
