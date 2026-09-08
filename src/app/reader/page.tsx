@@ -16,6 +16,7 @@ import { CONTACT_LIST_RELAYS } from '@/config/relays';
 import { getCachedFollows, cacheFollows } from '@/utils/storage';
 import { KIND_CONTACT_LIST, KIND_LONGFORM_ARTICLE } from '@/nostr/kinds';
 import { getTagValue, getTagValues } from '@/utils/nostrTags';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 const PAGE_SIZE = 21;
 
@@ -404,7 +405,7 @@ export default function ReaderPage() {
       const fetchFromRelay = async (relayUrl: string) => {
         if (isNavigating) return null;
         try {
-          const events = await ndk.fetchEvents({
+          const events = await fetchEventsBounded(ndk, {
             kinds: [KIND_CONTACT_LIST],
             authors: [user.pubkey],
             limit: 1

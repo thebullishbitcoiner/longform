@@ -5,6 +5,7 @@ import { KIND_DRAFT_WRAP, KIND_LONGFORM_DRAFT } from '@/nostr/kinds';
 import type { Nip07Signer } from '@/utils/nip07Signer';
 import { DEFAULT_RELAYS } from '@/config/relays';
 import { ensurePreferredRelays, loadPreferredRelays } from './preferredRelays';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 /** Refreshed on every save, per NIP-40's recommended usage in NIP-37. */
 const DRAFT_EXPIRATION_SEC = 90 * 24 * 60 * 60;
@@ -71,7 +72,8 @@ export async function loadDraft(
 ): Promise<UnsignedDraftEvent | null> {
   const storageRelays = await loadPreferredRelays(ndk, signer, pubkey);
   const relaySet = await relaySetFor(ndk, storageRelays);
-  const events = await ndk.fetchEvents(
+  const events = await fetchEventsBounded(
+    ndk,
     { kinds: [KIND_DRAFT_WRAP], authors: [pubkey], '#d': [id], limit: 1 },
     undefined,
     relaySet
@@ -88,7 +90,8 @@ export async function listDrafts(
 ): Promise<ListedDraft[]> {
   const storageRelays = await loadPreferredRelays(ndk, signer, pubkey);
   const relaySet = await relaySetFor(ndk, storageRelays);
-  const events = await ndk.fetchEvents(
+  const events = await fetchEventsBounded(
+    ndk,
     { kinds: [KIND_DRAFT_WRAP], authors: [pubkey] },
     undefined,
     relaySet

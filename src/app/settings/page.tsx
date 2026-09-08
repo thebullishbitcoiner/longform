@@ -25,6 +25,7 @@ import { hardcodedEmojiSets } from '@/data/emojiSets';
 import JSZip from 'jszip';
 import { Nip07Signer } from '@/utils/nip07Signer';
 import { loadPreferredRelays, publishPreferredRelays } from '@/nostr/preferredRelays';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 import {
     KIND_DELETION,
     KIND_LONGFORM_ARTICLE,
@@ -74,7 +75,7 @@ export default function SettingsPage() {
         if (currentUser?.pubkey) {
             setIsLoadingRelayList(true);
             try {
-                const events = await ndk.fetchEvents({
+                const events = await fetchEventsBounded(ndk, {
                     kinds: [KIND_RELAY_LIST],
                     authors: [currentUser.pubkey],
                     limit: 1
@@ -384,14 +385,14 @@ export default function SettingsPage() {
         setIsLoadingBackup(true);
         try {
             // Fetch user's published posts (kind 30023)
-            const postsQuery = await ndk.fetchEvents({
+            const postsQuery = await fetchEventsBounded(ndk, {
                 kinds: [KIND_LONGFORM_ARTICLE],
                 authors: [currentUser.pubkey],
                 limit: 100,
             });
 
             // Fetch deletion events (kind 5) to filter out deleted posts
-            const deletionQuery = await ndk.fetchEvents({
+            const deletionQuery = await fetchEventsBounded(ndk, {
                 kinds: [KIND_DELETION],
                 authors: [currentUser.pubkey],
                 limit: 100,

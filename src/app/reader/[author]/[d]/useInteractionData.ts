@@ -11,6 +11,7 @@ import {
   longformArticleCoordinate,
 } from '@/nostr/kinds';
 import { nostrDebug } from '@/nostr/debug';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 import type { ReactionData, RepostData, TopZapBadge, ZapData } from './interactionTypes';
 
 /** Bolt11 / NIP-57 description payload may embed a JSON zap request with a `content` comment. */
@@ -178,8 +179,8 @@ export function useInteractionData({
       const promise = (async () => {
         try {
           const aCoordinate = getArticleCoordinate();
-          const zapsByE = await ndk.fetchEvents({ kinds: [KIND_ZAP], '#e': [targetPostId] });
-          const zapsByA = aCoordinate ? await ndk.fetchEvents({ kinds: [KIND_ZAP], '#a': [aCoordinate] }) : new Set();
+          const zapsByE = await fetchEventsBounded(ndk, { kinds: [KIND_ZAP], '#e': [targetPostId] });
+          const zapsByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [KIND_ZAP], '#a': [aCoordinate] }) : new Set();
 
           const uniqueZaps = new Map<string, NDKEvent>();
           for (const ev of zapsByE) uniqueZaps.set(ev.id, ev);
@@ -245,8 +246,8 @@ export function useInteractionData({
       const promise = (async () => {
         try {
           const aCoordinate = getArticleCoordinate();
-          const reactionsByE = await ndk.fetchEvents({ kinds: [KIND_REACTION], '#e': [targetPostId] });
-          const reactionsByA = aCoordinate ? await ndk.fetchEvents({ kinds: [KIND_REACTION], '#a': [aCoordinate] }) : new Set();
+          const reactionsByE = await fetchEventsBounded(ndk, { kinds: [KIND_REACTION], '#e': [targetPostId] });
+          const reactionsByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [KIND_REACTION], '#a': [aCoordinate] }) : new Set();
 
           const uniqueReactions = new Map<string, NDKEvent>();
           for (const ev of reactionsByE) uniqueReactions.set(ev.id, ev);
@@ -310,10 +311,10 @@ export function useInteractionData({
       const promise = (async () => {
         try {
           const aCoordinate = getArticleCoordinate();
-          const repostsByE = await ndk.fetchEvents({ kinds: [...KINDS_REPOST], '#e': [targetPostId] });
-          const repostsByA = aCoordinate ? await ndk.fetchEvents({ kinds: [...KINDS_REPOST], '#a': [aCoordinate] }) : new Set();
-          const quoteRepostsByE = await ndk.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#q': [targetPostId] });
-          const quoteRepostsByA = aCoordinate ? await ndk.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#q': [aCoordinate] }) : new Set();
+          const repostsByE = await fetchEventsBounded(ndk, { kinds: [...KINDS_REPOST], '#e': [targetPostId] });
+          const repostsByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [...KINDS_REPOST], '#a': [aCoordinate] }) : new Set();
+          const quoteRepostsByE = await fetchEventsBounded(ndk, { kinds: [KIND_TEXT_NOTE], '#q': [targetPostId] });
+          const quoteRepostsByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [KIND_TEXT_NOTE], '#q': [aCoordinate] }) : new Set();
 
           const repostsById = new Map<string, NDKEvent>();
           for (const ev of repostsByE) repostsById.set(ev.id, ev);
@@ -403,18 +404,18 @@ export function useInteractionData({
           setStatsSection({ likes, comments, zaps, reposts, isLoading: true });
         };
 
-        const reactionsByE = await ndk.fetchEvents({ kinds: [KIND_REACTION], '#e': [targetPostId] });
-        const reactionsByA = aCoordinate ? await ndk.fetchEvents({ kinds: [KIND_REACTION], '#a': [aCoordinate] }) : new Set();
+        const reactionsByE = await fetchEventsBounded(ndk, { kinds: [KIND_REACTION], '#e': [targetPostId] });
+        const reactionsByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [KIND_REACTION], '#a': [aCoordinate] }) : new Set();
         const reactionsById = new Map<string, NDKEvent>();
         for (const ev of reactionsByE) reactionsById.set(ev.id, ev);
         for (const ev of reactionsByA as Set<NDKEvent>) reactionsById.set(ev.id, ev);
         likes = Array.from(reactionsById.values()).filter((event) => event.content.trim() !== '').length;
         updateStats();
 
-        const nip22ByE = await ndk.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#e': [targetPostId] });
-        const nip22ByA = aCoordinate ? await ndk.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#a': [aCoordinate] }) : new Set();
-        const kind1ByE = await ndk.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#e': [targetPostId] });
-        const kind1ByA = aCoordinate ? await ndk.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#a': [aCoordinate] }) : new Set();
+        const nip22ByE = await fetchEventsBounded(ndk, { kinds: [KIND_NIP22_COMMENT], '#e': [targetPostId] });
+        const nip22ByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [KIND_NIP22_COMMENT], '#a': [aCoordinate] }) : new Set();
+        const kind1ByE = await fetchEventsBounded(ndk, { kinds: [KIND_TEXT_NOTE], '#e': [targetPostId] });
+        const kind1ByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [KIND_TEXT_NOTE], '#a': [aCoordinate] }) : new Set();
 
         const commentIds = new Set<string>();
         for (const ev of nip22ByE) commentIds.add(ev.id);
@@ -424,8 +425,8 @@ export function useInteractionData({
         comments = commentIds.size;
         updateStats();
 
-        const zapsByE = await ndk.fetchEvents({ kinds: [KIND_ZAP], '#e': [targetPostId] });
-        const zapsByA = aCoordinate ? await ndk.fetchEvents({ kinds: [KIND_ZAP], '#a': [aCoordinate] }) : new Set();
+        const zapsByE = await fetchEventsBounded(ndk, { kinds: [KIND_ZAP], '#e': [targetPostId] });
+        const zapsByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [KIND_ZAP], '#a': [aCoordinate] }) : new Set();
         const uniqueZapsForStats = new Map<string, NDKEvent>();
         for (const ev of zapsByE) uniqueZapsForStats.set(ev.id, ev);
         for (const ev of zapsByA as Set<NDKEvent>) uniqueZapsForStats.set(ev.id, ev);
@@ -475,8 +476,8 @@ export function useInteractionData({
         );
         setTopZapBadges(topBadges);
 
-        const repostsByE = await ndk.fetchEvents({ kinds: [...KINDS_REPOST], '#e': [targetPostId] });
-        const repostsByA = aCoordinate ? await ndk.fetchEvents({ kinds: [...KINDS_REPOST], '#a': [aCoordinate] }) : new Set();
+        const repostsByE = await fetchEventsBounded(ndk, { kinds: [...KINDS_REPOST], '#e': [targetPostId] });
+        const repostsByA = aCoordinate ? await fetchEventsBounded(ndk, { kinds: [...KINDS_REPOST], '#a': [aCoordinate] }) : new Set();
         const uniqueRepostIds = new Set<string>();
         for (const ev of repostsByE) uniqueRepostIds.add(ev.id);
         for (const ev of repostsByA as Set<NDKEvent>) uniqueRepostIds.add(ev.id);

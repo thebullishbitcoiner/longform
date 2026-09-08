@@ -9,6 +9,7 @@ import { nostrDebug } from '@/nostr/debug';
 import { NDKKind, NDKEvent } from '@nostr-dev-kit/ndk';
 import { Nip07Signer } from '@/utils/nip07Signer';
 import { listDrafts, deleteDraft, type ListedDraft } from '@/nostr/draftWraps';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 import type { PublishedNote } from '@/types/content';
 import { hexToNote1, generateNip05Url, getUserIdentifier, getCurrentUserIdentifier } from '@/utils/nostr';
 import { getTagValue } from '@/utils/nostrTags';
@@ -178,35 +179,14 @@ export default function Longform() {
         nostrDebug('Longform: Fetching drafts, deletions, and published articles from Nostr...');
 
         // Each fetch resolves as soon as its relays genuinely finish (EOSE) rather than
-        // waiting a fixed duration — but bounded independently, so a single slow or
-        // unresponsive relay (more likely now that login connects to the user's full
-        // NIP-65 relay list, not just two defaults) can never hang the page forever.
-        // Every fetch races its own timeout, so one hanging query doesn't block the others.
-        const FETCH_TIMEOUT_MS = 15000;
-        const fetchEventsWithTimeout = async (
-          filter: Parameters<typeof ndk.fetchEvents>[0],
-          label: string
-        ): Promise<Set<NDKEvent>> => {
-          try {
-            return await Promise.race([
-              ndk.fetchEvents(filter),
-              new Promise<Set<NDKEvent>>((resolve) => {
-                setTimeout(() => {
-                  console.warn(`Longform: ${label} fetch timed out after ${FETCH_TIMEOUT_MS}ms, showing partial results`);
-                  resolve(new Set<NDKEvent>());
-                }, FETCH_TIMEOUT_MS);
-              }),
-            ]);
-          } catch (error) {
-            console.error(`Longform: ${label} fetch failed:`, error);
-            return new Set<NDKEvent>();
-          }
-        };
-
+        // waiting a fixed duration — but bounded independently (fetchEventsBounded), so a
+        // single slow or unresponsive relay (more likely now that login connects to the
+        // user's full NIP-65 relay list, not just two defaults) can never hang the page
+        // forever, and one hanging query doesn't block the others.
         const [draftEvents, deletionEvents, publishedEvents] = await Promise.all([
-          fetchEventsWithTimeout({ kinds: [KIND_LONGFORM_DRAFT as NDKKind], authors: [pubkey] }, 'draft'),
-          fetchEventsWithTimeout({ kinds: [KIND_DELETION as NDKKind], authors: [pubkey] }, 'deletion'),
-          fetchEventsWithTimeout({ kinds: [KIND_LONGFORM_ARTICLE as NDKKind], authors: [pubkey] }, 'published article'),
+          fetchEventsBounded(ndk, { kinds: [KIND_LONGFORM_DRAFT as NDKKind], authors: [pubkey] }),
+          fetchEventsBounded(ndk, { kinds: [KIND_DELETION as NDKKind], authors: [pubkey] }),
+          fetchEventsBounded(ndk, { kinds: [KIND_LONGFORM_ARTICLE as NDKKind], authors: [pubkey] }),
         ]);
         eventsRef.current = [...draftEvents];
         deletionEventsRef.current = [...deletionEvents];

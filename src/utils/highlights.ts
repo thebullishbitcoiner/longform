@@ -8,6 +8,7 @@ import {
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { KIND_DELETION, KIND_HIGHLIGHT } from '@/nostr/kinds';
 import { nostrDebug } from '@/nostr/debug';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 export interface Highlight {
   id: string;
@@ -78,7 +79,7 @@ export function useHighlights(options?: { autoFetch?: boolean }) {
 
     try {
       // Fetch user's highlights (NIP-84)
-      const highlightsQuery = await ndk.fetchEvents({
+      const highlightsQuery = await fetchEventsBounded(ndk, {
         kinds: [KIND_HIGHLIGHT],
         authors: [currentUser.pubkey],
         limit: 500, // Increased limit to get more highlights

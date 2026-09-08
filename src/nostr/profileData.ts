@@ -2,6 +2,7 @@ import type NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 import { KIND_APP_SPECIFIC_DATA } from '@/nostr/kinds';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 export const PROFILE_DATA_D_TAG = 'longform-profile';
 
@@ -42,7 +43,7 @@ export async function fetchLatestProfileDataEvent(
   ndk: NDK,
   authorPubkey: string
 ): Promise<NDKEvent | null> {
-  const res = await ndk.fetchEvents({
+  const res = await fetchEventsBounded(ndk, {
     kinds: [KIND_APP_SPECIFIC_DATA],
     authors: [authorPubkey],
     '#d': [PROFILE_DATA_D_TAG],

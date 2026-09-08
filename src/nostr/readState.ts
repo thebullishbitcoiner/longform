@@ -3,6 +3,7 @@ import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 import { KIND_APP_SPECIFIC_DATA } from '@/nostr/kinds';
 import type { Nip07Signer } from '@/utils/nip07Signer';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 /** NIP-78 `d` tag for replaceable read-state document */
 export const READ_STATE_D_TAG = 'longform';
@@ -36,7 +37,7 @@ export function pickLatestReadStateEvent(events: NDKEvent[]): NDKEvent | null {
 }
 
 export async function fetchLatestReadStateEvent(ndk: NDK, pubkey: string): Promise<NDKEvent | null> {
-  const res = await ndk.fetchEvents({
+  const res = await fetchEventsBounded(ndk, {
     kinds: [KIND_APP_SPECIFIC_DATA],
     authors: [pubkey],
     '#d': [READ_STATE_D_TAG],

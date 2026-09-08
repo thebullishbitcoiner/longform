@@ -4,6 +4,7 @@ import type NDK from '@nostr-dev-kit/ndk';
 import toast from 'react-hot-toast';
 import { type CommentData, findCommentById } from './commentTypes';
 import { KIND_LONGFORM_ARTICLE, KIND_NIP22_COMMENT, KIND_TEXT_NOTE, longformArticleCoordinate } from '@/nostr/kinds';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 interface UseCommentsDataParams {
   readNdk: NDK | null;
@@ -53,12 +54,12 @@ export function useCommentsData({
           const aCoordinate = postPubkey && currentDTag ? longformArticleCoordinate(postPubkey, currentDTag) : undefined;
 
           const [nip22ByE, nip22ByEUpper, nip22ByA, kind1ByE, kind1ByEUpper, kind1ByA] = await Promise.all([
-            readNdk.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#e': [targetPostId], limit: 200 }),
-            readNdk.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#E': [targetPostId], limit: 200 }),
-            aCoordinate ? readNdk.fetchEvents({ kinds: [KIND_NIP22_COMMENT], '#a': [aCoordinate], limit: 200 }) : Promise.resolve(new Set()),
-            readNdk.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#e': [targetPostId], limit: 500 }),
-            readNdk.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#E': [targetPostId], limit: 500 }),
-            aCoordinate ? readNdk.fetchEvents({ kinds: [KIND_TEXT_NOTE], '#a': [aCoordinate], limit: 500 }) : Promise.resolve(new Set()),
+            fetchEventsBounded(readNdk, { kinds: [KIND_NIP22_COMMENT], '#e': [targetPostId], limit: 200 }),
+            fetchEventsBounded(readNdk, { kinds: [KIND_NIP22_COMMENT], '#E': [targetPostId], limit: 200 }),
+            aCoordinate ? fetchEventsBounded(readNdk, { kinds: [KIND_NIP22_COMMENT], '#a': [aCoordinate], limit: 200 }) : Promise.resolve(new Set<NDKEvent>()),
+            fetchEventsBounded(readNdk, { kinds: [KIND_TEXT_NOTE], '#e': [targetPostId], limit: 500 }),
+            fetchEventsBounded(readNdk, { kinds: [KIND_TEXT_NOTE], '#E': [targetPostId], limit: 500 }),
+            aCoordinate ? fetchEventsBounded(readNdk, { kinds: [KIND_TEXT_NOTE], '#a': [aCoordinate], limit: 500 }) : Promise.resolve(new Set<NDKEvent>()),
           ]);
 
           const combined: NDKEvent[] = [];

@@ -7,6 +7,7 @@ import { usePlatformStatus } from '@/contexts/PlatformStatusContext';
 import { loadProfileBackground } from '@/nostr/profileData';
 import { resolveNip05, hexToNpub } from '@/utils/nostr';
 import { getAuthorRelaySet } from '@/utils/relayDiscovery';
+import { fetchEventsBounded, fetchEventBounded } from '@/utils/ndkFetch';
 import NDK, { NDKEvent } from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
 import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
@@ -260,7 +261,7 @@ export default function ProfilePage() {
 
       // Fetch user's highlights (kind 9802) if no cache available
       nostrDebug(`Profile: Fetching highlights from network for ${profile.pubkey}`);
-      const highlightsQuery = await ndkToUse.fetchEvents({
+      const highlightsQuery = await fetchEventsBounded(ndkToUse, {
         kinds: [KIND_HIGHLIGHT],
         authors: [profile.pubkey],
         limit: 100,
@@ -489,7 +490,8 @@ export default function ProfilePage() {
     const authorRelaySet = await getAuthorRelaySet(ndkToUse, pubkey);
 
     // Fetch user's blog posts (kind 30023)
-    const postsQuery = await ndkToUse.fetchEvents(
+    const postsQuery = await fetchEventsBounded(
+      ndkToUse,
       {
         kinds: [KIND_LONGFORM_ARTICLE],
         authors: [pubkey],
@@ -500,7 +502,8 @@ export default function ProfilePage() {
     );
 
     // Fetch deletion events (kind 5) to filter out deleted posts
-    const deletionQuery = await ndkToUse.fetchEvents(
+    const deletionQuery = await fetchEventsBounded(
+      ndkToUse,
       {
         kinds: [KIND_DELETION],
         authors: [pubkey],
@@ -810,7 +813,7 @@ export default function ProfilePage() {
           const ndkToUse = contextNdk || standaloneNdk;
           if (ndkToUse) {
             // Try to fetch the original event by ID
-            const originalEvent = await ndkToUse.fetchEvent(highlight.id);
+            const originalEvent = await fetchEventBounded(ndkToUse, highlight.id);
             if (originalEvent) {
               nostrDebug('Successfully fetched original highlight event');
               const fullEvent = {
@@ -894,7 +897,7 @@ export default function ProfilePage() {
           const ndkToUse = contextNdk || standaloneNdk;
           if (ndkToUse) {
             // Try to fetch the original event by ID
-            const originalEvent = await ndkToUse.fetchEvent(post.id);
+            const originalEvent = await fetchEventBounded(ndkToUse, post.id);
             if (originalEvent) {
               nostrDebug('Successfully fetched original post event');
               const fullEvent = {

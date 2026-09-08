@@ -24,6 +24,7 @@ import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
 import { resolveNip05 } from '@/utils/nostr';
 import { getAuthorRelaySet } from '@/utils/relayDiscovery';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 import ArticleEngagement from './ArticleEngagement';
 import ArticleHeader from './ArticleHeader';
@@ -482,7 +483,8 @@ export default function BlogPost() {
       const authorRelaySet = await getAuthorRelaySet(ndkToUse, pubkey);
 
       // Fetch the most recent event with the given author and d tag
-      const events = await ndkToUse.fetchEvents(
+      const events = await fetchEventsBounded(
+        ndkToUse,
         {
           kinds: [KIND_LONGFORM_ARTICLE],
           authors: [pubkey],

@@ -19,6 +19,7 @@ import { nostrDebug } from '@/nostr/debug';
 import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 import { Nip07Signer } from '@/utils/nip07Signer';
 import { loadDraft as loadDraftWrap, saveDraft, deleteDraft } from '@/nostr/draftWraps';
+import { fetchEventBounded } from '@/utils/ndkFetch';
 import Image from 'next/image';
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -476,7 +477,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
             // Fall back to a legacy plain kind-30024 draft, or an already-published post
             nostrDebug('Editor: Querying event from Nostr...');
-            const event = await ndk.fetchEvent({
+            const event = await fetchEventBounded(ndk, {
               ids: [id],
               kinds: [KIND_LONGFORM_DRAFT as NDKKind, KIND_LONGFORM_ARTICLE as NDKKind], // Query both drafts and published posts
               authors: [pubkey]

@@ -3,6 +3,7 @@ import { NDKEvent, NDKKind, NDKRelayList, getRelayListForUser } from '@nostr-dev
 import { KIND_PREFERRED_RELAYS } from '@/nostr/kinds';
 import type { Nip07Signer } from '@/utils/nip07Signer';
 import { DEFAULT_RELAYS } from '@/config/relays';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 function pickLatest(events: NDKEvent[]): NDKEvent | null {
   if (events.length === 0) return null;
@@ -22,7 +23,7 @@ async function getRelayListForUserBounded(pubkey: string, ndk: NDK): Promise<NDK
 }
 
 async function fetchPreferredRelaysEvent(ndk: NDK, pubkey: string): Promise<NDKEvent | null> {
-  const res = await ndk.fetchEvents({
+  const res = await fetchEventsBounded(ndk, {
     kinds: [KIND_PREFERRED_RELAYS as NDKKind],
     authors: [pubkey],
     limit: 1,

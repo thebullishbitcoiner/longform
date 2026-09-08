@@ -3,6 +3,7 @@ import { NDKEvent } from '@nostr-dev-kit/ndk';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 import { KIND_APP_SPECIFIC_DATA, KIND_EMOJI_LIST } from '@/nostr/kinds';
 import { Nip07Signer } from '@/utils/nip07Signer';
+import { fetchEventsBounded } from '@/utils/ndkFetch';
 
 /** Legacy (pre-NIP-51) storage location — read-only, for one-time forward migration. */
 const LEGACY_CUSTOM_EMOJIS_D_TAG = 'longform-emojis';
@@ -38,7 +39,7 @@ function isValidEntry(e: { name?: unknown; url?: unknown }): e is CustomEmojiEnt
 
 /** NIP-51 kind 10030 "Emojis" — plaintext, one per author, no `d` tag needed. */
 async function fetchLatestEmojiListEvent(ndk: NDK, pubkey: string): Promise<NDKEvent | null> {
-  const res = await ndk.fetchEvents({
+  const res = await fetchEventsBounded(ndk, {
     kinds: [KIND_EMOJI_LIST],
     authors: [pubkey],
     limit: 1,
@@ -57,7 +58,7 @@ function parseEmojiListEvent(event: NDKEvent, authorPubkey: string): CustomEmoji
 }
 
 async function fetchLegacyCustomEmojisEvent(ndk: NDK, pubkey: string): Promise<NDKEvent | null> {
-  const res = await ndk.fetchEvents({
+  const res = await fetchEventsBounded(ndk, {
     kinds: [KIND_APP_SPECIFIC_DATA],
     authors: [pubkey],
     '#d': [LEGACY_CUSTOM_EMOJIS_D_TAG],
