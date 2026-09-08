@@ -175,59 +175,24 @@ export default function Longform() {
           nostrDebug('Longform: No valid cache found, fetching from Nostr...');
         }
         
-        nostrDebug('Longform: Setting up Nostr subscriptions...');
-        
-        // Subscribe to draft events (KIND_LONGFORM_DRAFT)
-        const draftSubscription = ndk.subscribe(
-          { 
-            kinds: [KIND_LONGFORM_DRAFT as NDKKind], // Draft events only
-            authors: [pubkey] 
-          },
-          { closeOnEose: true },
-          {
-            onEvent: (event) => {
-              eventsRef.current.push(event);
-            }
-          }
-        );
-        nostrDebug('Longform: Draft subscription active');
+        nostrDebug('Longform: Fetching drafts, deletions, and published articles from Nostr...');
 
-        // Subscribe to deletion events (kind 5)
-        const deletionSubscription = ndk.subscribe(
-          { 
-            kinds: [KIND_DELETION as NDKKind], // Deletion events
-            authors: [pubkey] 
-          },
-          { closeOnEose: true },
-          {
-            onEvent: (event) => {
-              deletionEventsRef.current.push(event);
-            }
-          }
-        );
-        nostrDebug('Longform: Deletion subscription active');
+        // Fetch everything in parallel and wait for real EOSE-based completion from every
+        // connected relay, instead of racing a fixed timer. A fixed wait either cuts off
+        // slower relays before they've finished (missing content when there's a lot of it,
+        // or when more relays are connected) or wastes time waiting past when every relay
+        // has already reported done.
+        const [draftEvents, deletionEvents, publishedEvents] = await Promise.all([
+          ndk.fetchEvents({ kinds: [KIND_LONGFORM_DRAFT as NDKKind], authors: [pubkey] }),
+          ndk.fetchEvents({ kinds: [KIND_DELETION as NDKKind], authors: [pubkey] }),
+          ndk.fetchEvents({ kinds: [KIND_LONGFORM_ARTICLE as NDKKind], authors: [pubkey] }),
+        ]);
+        eventsRef.current = [...draftEvents];
+        deletionEventsRef.current = [...deletionEvents];
+        publishedEventsRef.current = [...publishedEvents];
+        nostrDebug(`Longform: Fetched ${eventsRef.current.length} draft events, ${deletionEventsRef.current.length} deletion events, ${publishedEventsRef.current.length} published events`);
 
-        // Subscribe to published longform events (KIND_LONGFORM_ARTICLE)
-        const publishedSubscription = ndk.subscribe(
-          { 
-            kinds: [KIND_LONGFORM_ARTICLE as NDKKind], // Published longform events
-            authors: [pubkey] 
-          },
-          { closeOnEose: true },
-          {
-            onEvent: (event) => {
-              publishedEventsRef.current.push(event);
-            }
-          }
-        );
-        nostrDebug('Longform: Published subscription active');
-
-        // Set a timeout to process all events after they're received
-        const timeoutDuration = 8000; // 8 seconds for all devices
-        
-        nostrDebug(`Longform: Setting timeout for ${timeoutDuration}ms`);
-        
-        setTimeout(async () => {
+        {
           nostrDebug('Longform: Processing draft events:', eventsRef.current.length);
           
           // Get all deleted event IDs from deletion events
@@ -471,13 +436,7 @@ export default function Longform() {
           cacheUserPosts(pubkey, cachedPosts);
 
           nostrDebug(`Longform: Loading complete! Found ${finalDrafts.length} drafts and ${sortedPublishedNotes.length} published articles`);
-        }, timeoutDuration);
-
-        return () => {
-          draftSubscription.stop();
-          publishedSubscription.stop();
-          deletionSubscription.stop();
-        };
+        }
       } catch (error) {
         console.error('Longform: Error loading Nostr content:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
