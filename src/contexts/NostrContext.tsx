@@ -174,7 +174,11 @@ export function NostrProvider({ children }: NostrProviderProps) {
     let fromNetwork: string[] = [];
 
     try {
-      const relayList = await getRelayListForUser(pubkey, ndkRef.current);
+      // Bounded: an unresponsive relay must never be able to block login entirely.
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('NIP-65 relay list lookup timed out')), 5000);
+      });
+      const relayList = await Promise.race([getRelayListForUser(pubkey, ndkRef.current), timeout]);
       fromNetwork = relayList.bothRelayUrls;
     } catch (error) {
       console.warn('NDK: Failed to load NIP-65 relay list from network:', error);

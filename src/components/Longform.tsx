@@ -177,15 +177,36 @@ export default function Longform() {
         
         nostrDebug('Longform: Fetching drafts, deletions, and published articles from Nostr...');
 
-        // Fetch everything in parallel and wait for real EOSE-based completion from every
-        // connected relay, instead of racing a fixed timer. A fixed wait either cuts off
-        // slower relays before they've finished (missing content when there's a lot of it,
-        // or when more relays are connected) or wastes time waiting past when every relay
-        // has already reported done.
+        // Each fetch resolves as soon as its relays genuinely finish (EOSE) rather than
+        // waiting a fixed duration — but bounded independently, so a single slow or
+        // unresponsive relay (more likely now that login connects to the user's full
+        // NIP-65 relay list, not just two defaults) can never hang the page forever.
+        // Every fetch races its own timeout, so one hanging query doesn't block the others.
+        const FETCH_TIMEOUT_MS = 15000;
+        const fetchEventsWithTimeout = async (
+          filter: Parameters<typeof ndk.fetchEvents>[0],
+          label: string
+        ): Promise<Set<NDKEvent>> => {
+          try {
+            return await Promise.race([
+              ndk.fetchEvents(filter),
+              new Promise<Set<NDKEvent>>((resolve) => {
+                setTimeout(() => {
+                  console.warn(`Longform: ${label} fetch timed out after ${FETCH_TIMEOUT_MS}ms, showing partial results`);
+                  resolve(new Set<NDKEvent>());
+                }, FETCH_TIMEOUT_MS);
+              }),
+            ]);
+          } catch (error) {
+            console.error(`Longform: ${label} fetch failed:`, error);
+            return new Set<NDKEvent>();
+          }
+        };
+
         const [draftEvents, deletionEvents, publishedEvents] = await Promise.all([
-          ndk.fetchEvents({ kinds: [KIND_LONGFORM_DRAFT as NDKKind], authors: [pubkey] }),
-          ndk.fetchEvents({ kinds: [KIND_DELETION as NDKKind], authors: [pubkey] }),
-          ndk.fetchEvents({ kinds: [KIND_LONGFORM_ARTICLE as NDKKind], authors: [pubkey] }),
+          fetchEventsWithTimeout({ kinds: [KIND_LONGFORM_DRAFT as NDKKind], authors: [pubkey] }, 'draft'),
+          fetchEventsWithTimeout({ kinds: [KIND_DELETION as NDKKind], authors: [pubkey] }, 'deletion'),
+          fetchEventsWithTimeout({ kinds: [KIND_LONGFORM_ARTICLE as NDKKind], authors: [pubkey] }, 'published article'),
         ]);
         eventsRef.current = [...draftEvents];
         deletionEventsRef.current = [...deletionEvents];

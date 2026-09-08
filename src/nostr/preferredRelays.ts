@@ -1,5 +1,5 @@
 import type NDK from '@nostr-dev-kit/ndk';
-import { NDKEvent, NDKKind, getRelayListForUser } from '@nostr-dev-kit/ndk';
+import { NDKEvent, NDKKind, NDKRelayList, getRelayListForUser } from '@nostr-dev-kit/ndk';
 import { KIND_PREFERRED_RELAYS } from '@/nostr/kinds';
 import type { Nip07Signer } from '@/utils/nip07Signer';
 import { DEFAULT_RELAYS } from '@/config/relays';
@@ -7,6 +7,18 @@ import { DEFAULT_RELAYS } from '@/config/relays';
 function pickLatest(events: NDKEvent[]): NDKEvent | null {
   if (events.length === 0) return null;
   return [...events].sort((a, b) => b.created_at - a.created_at)[0];
+}
+
+/** Bounded: an unresponsive relay must never be able to hang draft save/load. */
+async function getRelayListForUserBounded(pubkey: string, ndk: NDK): Promise<NDKRelayList | null> {
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('NIP-65 relay list lookup timed out')), 5000);
+    });
+    return await Promise.race([getRelayListForUser(pubkey, ndk), timeout]);
+  } catch {
+    return null;
+  }
 }
 
 async function fetchPreferredRelaysEvent(ndk: NDK, pubkey: string): Promise<NDKEvent | null> {
@@ -53,13 +65,8 @@ export async function publishPreferredRelays(
   ndkEvent.tags = [];
   ndkEvent.created_at = Math.floor(Date.now() / 1000);
 
-  let writeRelays: string[] = [];
-  try {
-    const relayList = await getRelayListForUser(pubkey, ndk);
-    writeRelays = relayList.writeRelayUrls;
-  } catch {
-    // fall through to default relays below
-  }
+  const relayList = await getRelayListForUserBounded(pubkey, ndk);
+  const writeRelays = relayList?.writeRelayUrls ?? [];
 
   const publishTargets = writeRelays.length > 0 ? writeRelays : DEFAULT_RELAYS;
   const { NDKRelaySet } = await import('@nostr-dev-kit/ndk');
@@ -78,13 +85,8 @@ export async function ensurePreferredRelays(
   const existing = await loadPreferredRelays(ndk, signer, pubkey);
   if (existing.length > 0) return existing;
 
-  let defaults: string[] = DEFAULT_RELAYS;
-  try {
-    const relayList = await getRelayListForUser(pubkey, ndk);
-    if (relayList.writeRelayUrls.length > 0) defaults = relayList.writeRelayUrls;
-  } catch {
-    // use DEFAULT_RELAYS
-  }
+  const relayList = await getRelayListForUserBounded(pubkey, ndk);
+  const defaults = relayList && relayList.writeRelayUrls.length > 0 ? relayList.writeRelayUrls : DEFAULT_RELAYS;
 
   await publishPreferredRelays(ndk, signer, pubkey, defaults);
   return defaults;
