@@ -760,6 +760,7 @@ export default function ProfilePage() {
   }
 
   const displayName = profile.displayName || profile.name || profile.npub.slice(0, 8) + '...';
+  const truncatedNpub = `${profile.npub.slice(0, 12)}…${profile.npub.slice(-6)}`;
 
   const handleCopyNpub = async () => {
     try {
@@ -1247,12 +1248,12 @@ export default function ProfilePage() {
           <div className={styles.profileHeader}>
             <div className={styles.profileImage}>
               {profile.picture ? (
-                <Image 
-                  src={profile.picture} 
+                <Image
+                  src={profile.picture}
                   alt={displayName}
-                  width={120}
-                  height={120}
-                  sizes="(max-width: 768px) 80px, 120px"
+                  width={104}
+                  height={104}
+                  sizes="(max-width: 640px) 88px, 104px"
                   className={`${styles.avatar} ${isProfileLegend ? styles.legendAvatar : ''}`}
                   unoptimized
                   onError={(e) => {
@@ -1281,8 +1282,8 @@ export default function ProfilePage() {
                 )}
               </div>
               <div className={styles.npubSection}>
-                <span className={styles.npubValue}>{profile.npub}</span>
-                <button 
+                <span className={styles.npubValue} title={profile.npub}>{truncatedNpub}</span>
+                <button
                   onClick={handleCopyNpub}
                   className={styles.copyButton}
                   title="Copy npub"
