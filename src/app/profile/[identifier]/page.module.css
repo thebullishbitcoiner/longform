@@ -411,7 +411,7 @@
 
 @media (max-width: 640px) {
   .postCard {
-    height: 10.5rem;
+    height: 9.5rem;
     border: none;
     border-radius: 0;
     border-bottom: 1px solid rgb(39 39 42);
@@ -548,8 +548,8 @@
 
 @media (max-width: 640px) {
   .postImage {
-    width: 14rem;
-    height: 10.5rem;
+    width: 7.6rem;
+    height: 9.5rem;
   }
 }
 
