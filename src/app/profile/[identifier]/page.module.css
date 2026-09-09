@@ -411,11 +411,12 @@
 
 @media (max-width: 640px) {
   .postCard {
+    height: 10.5rem;
     border: none;
     border-radius: 0;
     border-bottom: 1px solid rgb(39 39 42);
     padding: 0;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .postCardWrapper:last-child .postCard {
@@ -423,7 +424,17 @@
   }
 
   .postContent {
-    padding: 1rem 1rem 1rem 0;
+    padding: 0.75rem 1rem 0.75rem 0;
+    overflow: hidden;
+  }
+
+  .postTitle {
+    margin-bottom: 0.25rem;
+  }
+
+  .postSummary {
+    -webkit-line-clamp: 1;
+    margin-bottom: 0.375rem;
   }
 }
 
@@ -490,10 +501,9 @@
 }
 
 .postDate {
+  display: block;
   font-size: 0.8rem;
   color: rgb(113 113 122);
-  flex-shrink: 0;
-  margin-left: auto;
 }
 
 .postTitle {
@@ -520,17 +530,6 @@
   overflow: hidden;
 }
 
-.postTags {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-}
-
-.tag {
-  color: rgb(113 113 122);
-  font-size: 0.75rem;
-}
-
 .postImage {
   width: 40%;
   aspect-ratio: 4 / 3;
@@ -549,16 +548,12 @@
 
 @media (max-width: 640px) {
   .postImage {
-    width: 42%;
+    width: 14rem;
+    height: 10.5rem;
   }
 }
 
-.moreTags {
-  color: rgb(113 113 122);
-  font-size: 0.75rem;
-}
-
-/* Posts remain single column on all screen sizes */ 
+/* Posts remain single column on all screen sizes */
 
 /* Tabbed Interface Styles */
 .tabsContainer {

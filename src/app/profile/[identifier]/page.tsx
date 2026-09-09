@@ -1164,24 +1164,14 @@ export default function ProfilePage() {
                       )}
                     </div>
                     <span className={styles.postAuthorName}>{displayName}</span>
-                    <time className={styles.postDate}>
-                      {new Date(post.published_at).toLocaleDateString()}
-                    </time>
                   </div>
                   <h3 className={styles.postTitle}>{post.title}</h3>
                   {post.summary && (
                     <p className={styles.postSummary}>{post.summary}</p>
                   )}
-                  {post.tags.length > 0 && (
-                    <div className={styles.postTags}>
-                      {post.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className={styles.tag}>#{tag}</span>
-                      ))}
-                      {post.tags.length > 3 && (
-                        <span className={styles.moreTags}>+{post.tags.length - 3}</span>
-                      )}
-                    </div>
-                  )}
+                  <time className={styles.postDate}>
+                    {new Date(post.published_at).toLocaleDateString()}
+                  </time>
                 </div>
               </Link>
             </div>
