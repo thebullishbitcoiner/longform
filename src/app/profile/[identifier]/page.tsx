@@ -10,7 +10,7 @@ import { getAuthorRelaySet } from '@/utils/relayDiscovery';
 import { fetchEventsBounded, fetchEventBounded } from '@/utils/ndkFetch';
 import NDK, { NDKEvent } from '@nostr-dev-kit/ndk';
 import Link from 'next/link';
-import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, DocumentTextIcon, PencilIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, UserIcon, ClipboardDocumentIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 import styles from './page.module.css';
 import { getCachedHighlights, cacheUserHighlights, getCachedPosts, cacheUserPosts } from '@/utils/storage';
@@ -36,6 +36,7 @@ interface UserProfile {
   name?: string;
   displayName?: string;
   picture?: string;
+  banner?: string;
   about?: string;
   nip05?: string;
   npub: string;
@@ -642,6 +643,7 @@ export default function ProfilePage() {
           name: userProfile?.name,
           displayName: userProfile?.displayName,
           picture: userProfile?.image,
+          banner: userProfile?.banner,
           about: userProfile?.bio,
           nip05: userProfile?.nip05,
         };
@@ -1114,7 +1116,7 @@ export default function ProfilePage() {
         <div className={styles.postsGrid}>
           {posts.map((post) => (
             <div key={post.id} className={styles.postCardWrapper}>
-              <Link 
+              <Link
                 href={`/reader/${encodeURIComponent(profile.nip05 || profile.npub)}/${post.dTag || post.id}`}
                 className={styles.postCard}
                 onClick={(e) => {
@@ -1126,19 +1128,19 @@ export default function ProfilePage() {
               >
                 {post.image && (
                   <div className={styles.postImage}>
-                    <Image 
-                      src={post.image} 
+                    <Image
+                      src={post.image}
                       alt={post.title}
                       width={400}
-                      height={200}
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 400px"
+                      height={300}
+                      sizes="(max-width: 640px) 40vw, 300px"
                       className={styles.postImageContent}
                     />
                   </div>
                 )}
                 <div className={styles.postContent}>
                   <div className={styles.postHeader}>
-                    <button 
+                    <button
                       className={styles.contextMenuButton}
                       onClick={(e) => openPostContextMenu(e, post.id)}
                       data-context-menu
@@ -1146,25 +1148,40 @@ export default function ProfilePage() {
                       <EllipsisVerticalIcon className={styles.contextMenuIcon} />
                     </button>
                   </div>
+                  <div className={styles.postByline}>
+                    <div className={styles.postAvatar}>
+                      {profile.picture ? (
+                        <Image
+                          src={profile.picture}
+                          alt={displayName}
+                          width={24}
+                          height={24}
+                          unoptimized
+                          className={styles.postAvatarImage}
+                        />
+                      ) : (
+                        <UserIcon className={styles.postAvatarPlaceholder} />
+                      )}
+                    </div>
+                    <span className={styles.postAuthorName}>{displayName}</span>
+                    <time className={styles.postDate}>
+                      {new Date(post.published_at).toLocaleDateString()}
+                    </time>
+                  </div>
                   <h3 className={styles.postTitle}>{post.title}</h3>
                   {post.summary && (
                     <p className={styles.postSummary}>{post.summary}</p>
                   )}
-                  <div className={styles.postMeta}>
-                    <time className={styles.postDate}>
-                      {new Date(post.published_at).toLocaleDateString()}
-                    </time>
-                    {post.tags.length > 0 && (
-                      <div className={styles.postTags}>
-                        {post.tags.slice(0, 3).map((tag) => (
-                          <span key={tag} className={styles.tag}>#{tag}</span>
-                        ))}
-                        {post.tags.length > 3 && (
-                          <span className={styles.moreTags}>+{post.tags.length - 3}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {post.tags.length > 0 && (
+                    <div className={styles.postTags}>
+                      {post.tags.slice(0, 3).map((tag) => (
+                        <span key={tag} className={styles.tag}>#{tag}</span>
+                      ))}
+                      {post.tags.length > 3 && (
+                        <span className={styles.moreTags}>+{post.tags.length - 3}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </Link>
             </div>
@@ -1245,7 +1262,11 @@ export default function ProfilePage() {
     >
       <div className={styles.mainContent}>
         <div className={styles.profile}>
-          <div className={styles.profileHeader}>
+          <div className={styles.bannerWrapper}>
+            <div
+              className={`${styles.banner} ${!profile.banner ? styles.bannerPlaceholder : ''}`}
+              style={profile.banner ? { backgroundImage: `url(${profile.banner})` } : undefined}
+            />
             <div className={styles.profileImage}>
               {profile.picture ? (
                 <Image
@@ -1268,7 +1289,9 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
-            
+          </div>
+
+          <div className={styles.profileHeader}>
             <div className={styles.profileInfo}>
               <div className={styles.profileNameContainer}>
                 <h1 className={styles.profileName}>
@@ -1281,8 +1304,10 @@ export default function ProfilePage() {
                   <span className={styles.proBadge}>PRO</span>
                 )}
               </div>
-              <div className={styles.npubSection}>
-                <span className={styles.npubValue} title={profile.npub}>{truncatedNpub}</span>
+              <div className={styles.handleRow}>
+                <span className={styles.handleValue} title={profile.npub}>
+                  {profile.nip05 || truncatedNpub}
+                </span>
                 <button
                   onClick={handleCopyNpub}
                   className={styles.copyButton}
@@ -1291,12 +1316,6 @@ export default function ProfilePage() {
                   <ClipboardDocumentIcon className={styles.copyIcon} />
                 </button>
               </div>
-              {profile.nip05 && (
-                <div className={styles.profileIdentifier}>
-                  <span className={styles.identifierLabel}>NIP-05:</span>
-                  <span className={styles.identifierValue}>{profile.nip05}</span>
-                </div>
-              )}
               {profile.about && (
                 <p className={styles.profileBio}>{profile.about}</p>
               )}
@@ -1309,18 +1328,16 @@ export default function ProfilePage() {
                 className={`${styles.tabButton} ${activeTab === 'posts' ? styles.activeTab : ''}`}
                 onClick={() => handleTabChange('posts')}
               >
-                <DocumentTextIcon className={styles.tabIcon} />
                 Posts ({posts.length})
               </button>
               <button
                 className={`${styles.tabButton} ${activeTab === 'highlights' ? styles.activeTab : ''}`}
                 onClick={() => handleTabChange('highlights')}
               >
-                <PencilIcon className={styles.tabIcon} />
                 Highlights ({highlights.length})
               </button>
             </div>
-            
+
             <div className={styles.tabContent}>
               {activeTab === 'posts' && renderPostsTab()}
               {activeTab === 'highlights' && renderHighlightsTab()}
