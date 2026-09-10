@@ -427,15 +427,6 @@
     padding: 0.75rem 1rem 0.75rem 0;
     overflow: hidden;
   }
-
-  .postTitle {
-    margin-bottom: 0.25rem;
-  }
-
-  .postSummary {
-    -webkit-line-clamp: 1;
-    margin-bottom: 0.375rem;
-  }
 }
 
 .postCard:hover {
@@ -550,6 +541,16 @@
   .postImage {
     width: 7.6rem;
     height: 9.5rem;
+  }
+
+  .postTitle {
+    margin-bottom: 0.25rem;
+  }
+
+  .postSummary {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    margin-bottom: 0.375rem;
   }
 }
 

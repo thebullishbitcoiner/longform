@@ -20,6 +20,7 @@ import {
   KIND_ZAP,
   longformArticleCoordinate,
 } from '@/nostr/kinds';
+import { DEFAULT_RELAYS } from '@/config/relays';
 import { extractCustomEmojis, renderCustomEmojis } from '@/utils/emoji';
 import { useHighlights, highlightTextInElement } from '@/utils/highlights';
 import { resolveNip05 } from '@/utils/nostr';
@@ -45,10 +46,7 @@ import styles from './page.module.css';
 // Create a standalone NDK instance for public access
 const createStandaloneNDK = () => {
   return new NDK({
-    explicitRelayUrls: [
-      'wss://relay.damus.io',
-      'wss://relay.primal.net'
-    ]
+    explicitRelayUrls: DEFAULT_RELAYS
   });
 };
 
