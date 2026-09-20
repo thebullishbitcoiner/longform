@@ -25,7 +25,6 @@ interface EmojiReactionModalProps {
   handleEmojiInputKeyPress: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   handleAddEmoji: () => void;
   handleEmojiSelect: (emoji: string) => void;
-  isPro: boolean;
   customEmojis: CustomEmoji[];
   isLoadingCustomEmojis: boolean;
 }
@@ -42,7 +41,6 @@ export default function EmojiReactionModal({
   handleEmojiInputKeyPress,
   handleAddEmoji,
   handleEmojiSelect,
-  isPro,
   customEmojis,
   isLoadingCustomEmojis,
 }: EmojiReactionModalProps) {
@@ -121,7 +119,7 @@ export default function EmojiReactionModal({
               </div>
             )}
 
-            {isPro && customEmojis.length > 0 && (
+            {customEmojis.length > 0 && (
               <>
                 <div className={styles.emojiDivider} />
                 {customEmojis.map((customEmoji) => (
@@ -145,7 +143,7 @@ export default function EmojiReactionModal({
               </>
             )}
 
-            {isPro && isLoadingCustomEmojis && (
+            {isLoadingCustomEmojis && (
               <div className={styles.emojiLoading}>Loading custom emojis...</div>
             )}
           </div>

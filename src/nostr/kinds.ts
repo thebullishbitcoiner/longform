@@ -61,6 +61,9 @@ export const KIND_PREFERRED_RELAYS = 10013;
 /** NIP-51 "Emojis" — a user's personal custom emoji list */
 export const KIND_EMOJI_LIST = 10030;
 
+/** NIP-51 "Emoji sets" — a reusable, independently-authored set of custom emojis */
+export const KIND_EMOJI_SET = 30030;
+
 /** NIP-84 highlight */
 export const KIND_HIGHLIGHT = 9802;
 
@@ -81,4 +84,11 @@ export const KINDS_REPOST = [KIND_REPOST, KIND_GENERIC_REPOST] as const;
  */
 export function longformArticleCoordinate(pubkey: string, dTag: string): string {
   return `${KIND_LONGFORM_ARTICLE}:${pubkey}:${dTag}`;
+}
+
+/**
+ * `a` tag coordinate for a NIP-51 emoji set: `30030:<pubkey>:<d-tag>`
+ */
+export function emojiSetCoordinate(pubkey: string, dTag: string): string {
+  return `${KIND_EMOJI_SET}:${pubkey}:${dTag}`;
 }

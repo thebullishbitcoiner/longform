@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import Image from 'next/image';
 import { PlusIcon, TrashIcon, InformationCircleIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { useNostr } from '@/contexts/NostrContext';
@@ -16,12 +16,13 @@ import { AuthGuard } from '@/components/AuthGuard';
 import { cleanupStorage } from '@/utils/storage';
 import { ProFeature } from '@/components/ProFeature';
 import {
-  loadCustomEmojis,
-  publishCustomEmojis,
-  type CustomEmojiEntry,
+  loadCustomEmojiList,
+  publishCustomEmojiList,
 } from '@/nostr/customEmojis';
-import { CustomEmoji, EmojiSet } from '@/types/emoji';
-import { hardcodedEmojiSets } from '@/data/emojiSets';
+import { fetchEmojiSet, fetchEmojiSets, discoverEmojiSets, decodeEmojiSetReference } from '@/nostr/emojiSets';
+import { hexToNpub } from '@/utils/nostr';
+import { EmojiEntry, EmojiList, EmojiSet } from '@/types/emoji';
+import { FEATURED_EMOJI_SETS } from '@/data/emojiSets';
 import JSZip from 'jszip';
 import { Nip07Signer } from '@/utils/nip07Signer';
 import { loadPreferredRelays, publishPreferredRelays } from '@/nostr/preferredRelays';
@@ -58,15 +59,25 @@ export default function SettingsPage() {
     const [showPreferredRelaysInfoModal, setShowPreferredRelaysInfoModal] = useState(false);
     const [cacheData, setCacheData] = useState<Array<{key: string, value: string, size: number}>>([]);
     const [showCacheInfoModal, setShowCacheInfoModal] = useState(false);
-    const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
-    const [showAddEmojiModal, setShowAddEmojiModal] = useState(false);
+    const [emojiList, setEmojiList] = useState<EmojiList>({ setRefs: [], looseEmojis: [] });
+    const [subscribedSets, setSubscribedSets] = useState<EmojiSet[]>([]);
     const [isLoadingEmojis, setIsLoadingEmojis] = useState(false);
+    const [newEmojiName, setNewEmojiName] = useState('');
+    const [newEmojiUrl, setNewEmojiUrl] = useState('');
+    const [showAddEmojiModal, setShowAddEmojiModal] = useState(false);
     const [backupPosts, setBackupPosts] = useState<BackupPost[]>([]);
     const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set());
     const [isLoadingBackup, setIsLoadingBackup] = useState(false);
     const [isCreatingBackup, setIsCreatingBackup] = useState(false);
-    const [emojiSets, setEmojiSets] = useState<EmojiSet[]>([]);
-    const [isLoadingEmojiSets, setIsLoadingEmojiSets] = useState(false);
+    const [featuredSets, setFeaturedSets] = useState<EmojiSet[]>([]);
+    const [isLoadingFeaturedSets, setIsLoadingFeaturedSets] = useState(false);
+    const [discoveredSets, setDiscoveredSets] = useState<EmojiSet[]>([]);
+    const [isLoadingDiscovery, setIsLoadingDiscovery] = useState(false);
+    const [discoveryFilter, setDiscoveryFilter] = useState('');
+    const [referenceInput, setReferenceInput] = useState('');
+    const [referenceDTag, setReferenceDTag] = useState('');
+    const [isResolvingReference, setIsResolvingReference] = useState(false);
+    const [referencePreview, setReferencePreview] = useState<EmojiSet | null>(null);
     const [selectedEmojiSet, setSelectedEmojiSet] = useState<EmojiSet | null>(null);
     const [selectedEmojis, setSelectedEmojis] = useState<Set<string>>(new Set());
     const [showEmojiSetModal, setShowEmojiSetModal] = useState(false);
@@ -334,14 +345,16 @@ export default function SettingsPage() {
         loadCacheData();
     }, [loadCacheData]);
 
-    // Load custom emojis (NIP-51 kind 10030)
+    // Load the user's NIP-51 kind-10030 emoji list, then resolve the subscribed sets for display
     const loadCustomEmojisFromNostr = useCallback(async () => {
         if (!currentUser?.pubkey || !ndk) return;
 
         setIsLoadingEmojis(true);
         try {
-            const emojis = await loadCustomEmojis(ndk, currentUser.pubkey);
-            setCustomEmojis(emojis);
+            const list = await loadCustomEmojiList(ndk, currentUser.pubkey);
+            setEmojiList(list);
+            const sets = await fetchEmojiSets(ndk, list.setRefs);
+            setSubscribedSets(sets);
         } catch (error) {
             console.error('Error loading custom emojis:', error);
             toast.error('Failed to load custom emojis');
@@ -357,26 +370,42 @@ export default function SettingsPage() {
         }
     }, [isAuthenticated, currentUser?.pubkey, loadCustomEmojisFromNostr]);
 
-    // Load emoji sets from hardcoded data
-    const loadEmojiSets = useCallback(async () => {
-        setIsLoadingEmojiSets(true);
+    // Resolve the featured emoji sets live from relays (never trust a stale local copy)
+    const loadFeaturedSets = useCallback(async () => {
+        if (!ndk) return;
+        setIsLoadingFeaturedSets(true);
         try {
-            // Use hardcoded emoji sets from external file
-            setEmojiSets(hardcodedEmojiSets);
+            const sets = await fetchEmojiSets(ndk, FEATURED_EMOJI_SETS);
+            setFeaturedSets(sets);
         } catch (error) {
-            console.error('Error loading emoji sets:', error);
+            console.error('Error loading featured emoji sets:', error);
             toast.error('Failed to load emoji sets');
         } finally {
-            setIsLoadingEmojiSets(false);
+            setIsLoadingFeaturedSets(false);
         }
-    }, []);
+    }, [ndk]);
 
-    // Load emoji sets on component mount
-    useEffect(() => {
-        if (isAuthenticated) {
-            loadEmojiSets();
+    // Best-effort browse of whatever emoji sets the discovery relays are carrying
+    const loadDiscoveredSets = useCallback(async () => {
+        if (!ndk) return;
+        setIsLoadingDiscovery(true);
+        try {
+            const sets = await discoverEmojiSets(ndk);
+            setDiscoveredSets(sets);
+        } catch (error) {
+            console.error('Error discovering emoji sets:', error);
+        } finally {
+            setIsLoadingDiscovery(false);
         }
-    }, [isAuthenticated, loadEmojiSets]);
+    }, [ndk]);
+
+    // Load the featured/discover catalog once the Add Emoji modal is opened
+    useEffect(() => {
+        if (showAddEmojiModal) {
+            loadFeaturedSets();
+            loadDiscoveredSets();
+        }
+    }, [showAddEmojiModal, loadFeaturedSets, loadDiscoveredSets]);
 
     // Backup functions
     const loadBackupPosts = useCallback(async () => {
@@ -444,20 +473,78 @@ export default function SettingsPage() {
 
     // Custom emoji functions
 
-    const handleRemoveCustomEmoji = async (name: string) => {
+    const handleUnsubscribeSet = async (set: EmojiSet) => {
         if (!currentUser?.pubkey || !ndk?.signer) {
             toast.error('User not authenticated');
             return;
         }
 
         try {
-            const next = customEmojis.filter((emoji) => emoji.name !== name);
-            await publishCustomEmojis(ndk, next);
-            setCustomEmojis(next);
+            const next: EmojiList = {
+                setRefs: emojiList.setRefs.filter((r) => !(r.pubkey === set.pubkey && r.dTag === set.dTag)),
+                looseEmojis: emojiList.looseEmojis,
+            };
+            await publishCustomEmojiList(ndk, next);
+            setEmojiList(next);
+            setSubscribedSets((prev) => prev.filter((s) => !(s.pubkey === set.pubkey && s.dTag === set.dTag)));
+            toast.success(`Unsubscribed from "${set.title}"`);
+        } catch (error) {
+            console.error('Error unsubscribing from emoji set:', error);
+            toast.error('Failed to unsubscribe from emoji set');
+        }
+    };
+
+    const handleRemoveLooseEmoji = async (name: string) => {
+        if (!currentUser?.pubkey || !ndk?.signer) {
+            toast.error('User not authenticated');
+            return;
+        }
+
+        try {
+            const next: EmojiList = {
+                setRefs: emojiList.setRefs,
+                looseEmojis: emojiList.looseEmojis.filter((emoji) => emoji.name !== name),
+            };
+            await publishCustomEmojiList(ndk, next);
+            setEmojiList(next);
             toast.success('Custom emoji removed');
         } catch (error) {
             console.error('Error removing custom emoji:', error);
             toast.error('Failed to remove custom emoji');
+        }
+    };
+
+    const handleAddIndividualEmoji = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!currentUser?.pubkey || !ndk?.signer) {
+            toast.error('User not authenticated');
+            return;
+        }
+
+        const name = newEmojiName.trim();
+        const url = newEmojiUrl.trim();
+        if (!name || !url) {
+            toast.error('Enter both a shortcode and an image URL');
+            return;
+        }
+        if (emojiList.looseEmojis.some((emoji) => emoji.name === name)) {
+            toast.error(`"${name}" is already in your list`);
+            return;
+        }
+
+        try {
+            const next: EmojiList = {
+                setRefs: emojiList.setRefs,
+                looseEmojis: [{ name, url }, ...emojiList.looseEmojis],
+            };
+            await publishCustomEmojiList(ndk, next);
+            setEmojiList(next);
+            setNewEmojiName('');
+            setNewEmojiUrl('');
+            toast.success('Custom emoji added');
+        } catch (error) {
+            console.error('Error adding custom emoji:', error);
+            toast.error('Failed to add custom emoji');
         }
     };
 
@@ -492,6 +579,9 @@ export default function SettingsPage() {
         setSelectedEmojis(new Set());
     };
 
+    const isSetAlreadySubscribed = (set: EmojiSet) =>
+        emojiList.setRefs.some((r) => r.pubkey === set.pubkey && r.dTag === set.dTag);
+
     const addSelectedEmojis = async () => {
         if (!currentUser?.pubkey || !ndk?.signer || !selectedEmojiSet || selectedEmojis.size === 0) {
             toast.error('Please select at least one emoji');
@@ -499,28 +589,74 @@ export default function SettingsPage() {
         }
 
         try {
-            const toAdd: CustomEmojiEntry[] = [];
-            for (const emojiName of selectedEmojis) {
-                const emoji = selectedEmojiSet.emojis.find((e) => e.name === emojiName);
-                if (emoji && !customEmojis.some((e) => e.name === emoji.name)) {
-                    toAdd.push({ name: emoji.name, url: emoji.url });
+            const wholeSetSelected = selectedEmojis.size === selectedEmojiSet.emojis.length;
+
+            if (wholeSetSelected) {
+                if (isSetAlreadySubscribed(selectedEmojiSet)) {
+                    toast.error('You already have this set');
+                    return;
                 }
+                const next: EmojiList = {
+                    setRefs: [...emojiList.setRefs, { pubkey: selectedEmojiSet.pubkey, dTag: selectedEmojiSet.dTag }],
+                    looseEmojis: emojiList.looseEmojis,
+                };
+                await publishCustomEmojiList(ndk, next);
+                setEmojiList(next);
+                setSubscribedSets((prev) => [...prev, selectedEmojiSet]);
+                toast.success(`Subscribed to "${selectedEmojiSet.title}"`);
+            } else {
+                const toAdd: EmojiEntry[] = [];
+                for (const emojiName of selectedEmojis) {
+                    const emoji = selectedEmojiSet.emojis.find((e) => e.name === emojiName);
+                    if (emoji && !emojiList.looseEmojis.some((e) => e.name === emoji.name)) {
+                        toAdd.push({ name: emoji.name, url: emoji.url });
+                    }
+                }
+
+                if (toAdd.length === 0) {
+                    toast.error('No new emojis were added (they may already exist)');
+                    return;
+                }
+
+                const next: EmojiList = {
+                    setRefs: emojiList.setRefs,
+                    looseEmojis: [...toAdd, ...emojiList.looseEmojis],
+                };
+                await publishCustomEmojiList(ndk, next);
+                setEmojiList(next);
+                toast.success(`Added ${toAdd.length} emoji${toAdd.length > 1 ? 's' : ''} to your collection`);
             }
 
-            if (toAdd.length === 0) {
-                toast.error('No new emojis were added (they may already exist)');
-                return;
-            }
-
-            const next = [...toAdd, ...customEmojis];
-            await publishCustomEmojis(ndk, next);
-            setCustomEmojis(next);
-            toast.success(`Added ${toAdd.length} emoji${toAdd.length > 1 ? 's' : ''} to your collection`);
             setShowEmojiSetModal(false);
             setSelectedEmojis(new Set());
         } catch (error) {
             console.error('Error adding selected emojis:', error);
             toast.error('Failed to add selected emojis');
+        }
+    };
+
+    const handlePreviewReference = async () => {
+        if (!ndk) return;
+        const ref = decodeEmojiSetReference(referenceInput, referenceDTag);
+        if (!ref) {
+            toast.error('Enter a valid naddr, or a pubkey/npub with a d-tag');
+            return;
+        }
+
+        setIsResolvingReference(true);
+        setReferencePreview(null);
+        try {
+            const set = await fetchEmojiSet(ndk, ref.pubkey, ref.dTag);
+            if (!set) {
+                toast.error('No emoji set found for that reference');
+                return;
+            }
+            setReferencePreview(set);
+        } catch (error) {
+            console.error('Error resolving emoji set reference:', error);
+            toast.error('Failed to resolve that reference');
+        } finally {
+            setIsResolvingReference(false);
         }
     };
 
@@ -590,7 +726,50 @@ export default function SettingsPage() {
         }
     };
 
+    const filteredDiscoveredSets = discoveredSets.filter((set) => {
+        const query = discoveryFilter.trim().toLowerCase();
+        if (!query) return true;
+        return set.title.toLowerCase().includes(query) || set.dTag.toLowerCase().includes(query);
+    });
 
+    const renderEmojiSetCard = (set: EmojiSet) => {
+        const npub = hexToNpub(set.pubkey);
+        const attribution = npub ? `${npub.slice(0, 12)}…${npub.slice(-4)}` : `${set.pubkey.slice(0, 8)}…`;
+        return (
+            <div
+                key={`${set.pubkey}:${set.dTag}`}
+                className="emoji-set-card"
+                onClick={() => openEmojiSet(set)}
+            >
+                <div className="emoji-set-header">
+                    <div className="emoji-set-title-section">
+                        <h4 className="emoji-set-title">{set.title} <span className="emoji-set-creator">by {attribution}</span></h4>
+                    </div>
+                    <span className="emoji-count">{set.emojis.length} emojis</span>
+                </div>
+                <div className="emoji-set-preview">
+                    {set.emojis.slice(0, 6).map((emoji, index) => (
+                        <Image
+                            key={index}
+                            src={emoji.url}
+                            alt={emoji.name}
+                            width={24}
+                            height={24}
+                            sizes="24px"
+                            unoptimized
+                            className="emoji-preview-small"
+                            onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                            }}
+                        />
+                    ))}
+                    {set.emojis.length > 6 && (
+                        <div className="emoji-more">+{set.emojis.length - 6}</div>
+                    )}
+                </div>
+            </div>
+        );
+    };
 
     return (
         <AuthGuard>
@@ -854,64 +1033,130 @@ export default function SettingsPage() {
 
                 <section className="settings-section">
                     <div className="section-header">
-                        <h2>Custom Emojis ({customEmojis.length})</h2>
-                        <ProFeature>
-                            <button
-                                onClick={() => setShowAddEmojiModal(true)}
-                                className="add-emoji-button"
-                                title="Add custom emoji"
-                            >
-                                <PlusIcon />
-                            </button>
-                        </ProFeature>
+                        <h2>Custom Emojis</h2>
                     </div>
 
-                    <ProFeature showUpgradePrompt={true}>
-                        {isLoadingEmojis ? (
-                            <div className="loading-emojis">
-                                <div className="loading-spinner"></div>
-                                <p>Loading custom emojis...</p>
-                            </div>
-                        ) : customEmojis.length === 0 ? (
-                            <p className="no-emojis">No custom emojis configured. Click the + button to add some emojis.</p>
-                        ) : (
-                            <div className="emojis-listbox" role="listbox" aria-label="Custom emojis list">
-                                {customEmojis.map((emoji) => (
-                                    <div key={emoji.name} className="emoji-item" role="option" aria-selected="false">
-                                        <div className="emoji-preview">
-                                            <Image 
-                                                src={emoji.url} 
+                    <div className="section-header">
+                        <h3>Emoji Sets ({subscribedSets.length})</h3>
+                        <button
+                            onClick={() => setShowAddEmojiModal(true)}
+                            className="add-emoji-button"
+                            title="Browse emoji sets"
+                        >
+                            <PlusIcon />
+                        </button>
+                    </div>
+
+                    {isLoadingEmojis ? (
+                        <div className="loading-emojis">
+                            <div className="loading-spinner"></div>
+                            <p>Loading custom emojis...</p>
+                        </div>
+                    ) : subscribedSets.length === 0 ? (
+                        <p className="no-emojis">No emoji sets yet. Click the + button to browse some.</p>
+                    ) : (
+                        <div className="emojis-listbox" role="listbox" aria-label="Subscribed emoji sets">
+                            {subscribedSets.map((set) => (
+                                <div key={`${set.pubkey}:${set.dTag}`} className="emoji-item" role="option" aria-selected="false">
+                                    <div className="emoji-set-preview">
+                                        {set.emojis.slice(0, 4).map((emoji, index) => (
+                                            <Image
+                                                key={index}
+                                                src={emoji.url}
                                                 alt={emoji.name}
-                                                width={32}
-                                                height={32}
-                                                sizes="32px"
-                                                className="emoji-image"
+                                                width={24}
+                                                height={24}
+                                                sizes="24px"
+                                                className="emoji-preview-small"
                                                 unoptimized
-                                                onError={(e) => {
-                                                    e.currentTarget.style.display = 'none';
-                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                                                }}
                                             />
-                                            <div className="emoji-fallback hidden">❓</div>
-                                        </div>
-                                        <div className="emoji-info">
-                                            <div className="emoji-name">{emoji.name}</div>
-                                            <div className="emoji-url">{emoji.url}</div>
-                                        </div>
-                                        <div className="emoji-actions">
-                                            <button
-                                                onClick={() => handleRemoveCustomEmoji(emoji.name)}
-                                                className="remove-emoji-button"
-                                                title="Remove emoji"
-                                            >
-                                                <TrashIcon />
-                                            </button>
-                                        </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                        )}
-                    </ProFeature>
+                                    <div className="emoji-info">
+                                        <div className="emoji-name">{set.title}</div>
+                                        <div className="emoji-url">{set.emojis.length} emojis</div>
+                                    </div>
+                                    <div className="emoji-actions">
+                                        <button
+                                            onClick={() => handleUnsubscribeSet(set)}
+                                            className="remove-emoji-button"
+                                            title="Unsubscribe from this set"
+                                        >
+                                            <TrashIcon />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="section-header">
+                        <h3>Individual Emojis ({emojiList.looseEmojis.length})</h3>
+                    </div>
+
+                    {isLoadingEmojis ? null : emojiList.looseEmojis.length === 0 ? (
+                        <p className="no-emojis">No individual emojis configured yet.</p>
+                    ) : (
+                        <div className="emojis-listbox" role="listbox" aria-label="Custom emojis list">
+                            {emojiList.looseEmojis.map((emoji) => (
+                                <div key={emoji.name} className="emoji-item" role="option" aria-selected="false">
+                                    <div className="emoji-preview">
+                                        <Image
+                                            src={emoji.url}
+                                            alt={emoji.name}
+                                            width={32}
+                                            height={32}
+                                            sizes="32px"
+                                            className="emoji-image"
+                                            unoptimized
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                            }}
+                                        />
+                                        <div className="emoji-fallback hidden">❓</div>
+                                    </div>
+                                    <div className="emoji-info">
+                                        <div className="emoji-name">{emoji.name}</div>
+                                        <div className="emoji-url">{emoji.url}</div>
+                                    </div>
+                                    <div className="emoji-actions">
+                                        <button
+                                            onClick={() => handleRemoveLooseEmoji(emoji.name)}
+                                            className="remove-emoji-button"
+                                            title="Remove emoji"
+                                        >
+                                            <TrashIcon />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <form className="emoji-form" onSubmit={handleAddIndividualEmoji}>
+                        <input
+                            type="text"
+                            className="emoji-input"
+                            placeholder="Shortcode (e.g. mycustomemoji)"
+                            value={newEmojiName}
+                            onChange={(e) => setNewEmojiName(e.target.value)}
+                        />
+                        <input
+                            type="url"
+                            className="emoji-input"
+                            placeholder="Image URL"
+                            value={newEmojiUrl}
+                            onChange={(e) => setNewEmojiUrl(e.target.value)}
+                        />
+                        <button
+                            type="submit"
+                            className="add-emoji-submit-button"
+                            disabled={!newEmojiName.trim() || !newEmojiUrl.trim()}
+                        >
+                            Add
+                        </button>
+                    </form>
                 </section>
 
                 <section className="settings-section">
@@ -1143,53 +1388,79 @@ export default function SettingsPage() {
                         </div>
                         <div className="modal-body">
                             <div className="emoji-sets-modal-content">
-                                <p className="modal-description">Choose from popular emoji sets to add to your collection.</p>
-                                
-                                {isLoadingEmojiSets ? (
+                                <p className="modal-description">Featured emoji sets.</p>
+
+                                {isLoadingFeaturedSets ? (
                                     <div className="loading-emoji-sets">
                                         <div className="loading-spinner"></div>
                                         <p>Loading emoji sets...</p>
                                     </div>
-                                ) : emojiSets.length === 0 ? (
+                                ) : featuredSets.length === 0 ? (
                                     <p className="no-emoji-sets">No emoji sets available.</p>
                                 ) : (
                                     <div className="emoji-sets-grid">
-                                        {emojiSets.map((emojiSet) => (
-                                            <div 
-                                                key={emojiSet.id} 
-                                                className="emoji-set-card"
-                                                onClick={() => openEmojiSet(emojiSet)}
-                                            >
-                                                <div className="emoji-set-header">
-                                                    <div className="emoji-set-title-section">
-                                                        <h4 className="emoji-set-title">{emojiSet.title} <span className="emoji-set-creator">by {emojiSet.creator}</span></h4>
-                                                    </div>
-                                                    <span className="emoji-count">{emojiSet.emojis.length} emojis</span>
-                                                </div>
-                                                <div className="emoji-set-preview">
-                                                    {emojiSet.emojis.slice(0, 6).map((emoji, index) => (
-                                                        <Image
-                                                            key={index}
-                                                            src={emoji.url}
-                                                            alt={emoji.name}
-                                                            width={24}
-                                                            height={24}
-                                                            sizes="24px"
-                                                            unoptimized
-                                                            className="emoji-preview-small"
-                                                            onError={(e) => {
-                                                                e.currentTarget.style.display = 'none';
-                                                            }}
-                                                        />
-                                                    ))}
-                                                    {emojiSet.emojis.length > 6 && (
-                                                        <div className="emoji-more">+{emojiSet.emojis.length - 6}</div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
+                                        {featuredSets.map(renderEmojiSetCard)}
                                     </div>
                                 )}
+
+                                <div className="current-emojis-section">
+                                    <h3>Add by reference</h3>
+                                    <p className="modal-description">Paste an naddr, or an npub/pubkey with its d-tag.</p>
+                                    <div className="emoji-form">
+                                        <input
+                                            type="text"
+                                            className="emoji-input"
+                                            placeholder="naddr1... or npub1.../pubkey"
+                                            value={referenceInput}
+                                            onChange={(e) => { setReferenceInput(e.target.value); setReferencePreview(null); }}
+                                        />
+                                        {!referenceInput.trim().startsWith('naddr1') && (
+                                            <input
+                                                type="text"
+                                                className="emoji-input"
+                                                placeholder="d-tag"
+                                                value={referenceDTag}
+                                                onChange={(e) => { setReferenceDTag(e.target.value); setReferencePreview(null); }}
+                                            />
+                                        )}
+                                        <button
+                                            type="button"
+                                            className="add-emoji-submit-button"
+                                            onClick={handlePreviewReference}
+                                            disabled={isResolvingReference || !referenceInput.trim()}
+                                        >
+                                            {isResolvingReference ? 'Looking up…' : 'Preview'}
+                                        </button>
+                                    </div>
+                                    {referencePreview && (
+                                        <div className="emoji-sets-grid">
+                                            {renderEmojiSetCard(referencePreview)}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="current-emojis-section">
+                                    <h3>Discover</h3>
+                                    <input
+                                        type="text"
+                                        className="emoji-input"
+                                        placeholder="Filter by title…"
+                                        value={discoveryFilter}
+                                        onChange={(e) => setDiscoveryFilter(e.target.value)}
+                                    />
+                                    {isLoadingDiscovery ? (
+                                        <div className="loading-emoji-sets">
+                                            <div className="loading-spinner"></div>
+                                            <p>Searching relays…</p>
+                                        </div>
+                                    ) : filteredDiscoveredSets.length === 0 ? (
+                                        <p className="no-emoji-sets">No sets found. Discovery is best-effort and only reflects a couple of relays.</p>
+                                    ) : (
+                                        <div className="emoji-sets-grid">
+                                            {filteredDiscoveredSets.map(renderEmojiSetCard)}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

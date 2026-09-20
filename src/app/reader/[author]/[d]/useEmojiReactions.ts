@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type NDK from '@nostr-dev-kit/ndk';
 import { NDKEvent } from '@nostr-dev-kit/ndk';
 import toast from 'react-hot-toast';
-import { loadCustomEmojis } from '@/nostr/customEmojis';
+import { loadCustomEmojiList, resolveCustomEmojis } from '@/nostr/customEmojis';
 import { npubToHex } from '@/utils/nostr';
 import { KIND_LONGFORM_ARTICLE, KIND_REACTION, longformArticleCoordinate } from '@/nostr/kinds';
 import type { BlogPost } from '@/contexts/BlogContext';
@@ -10,7 +10,6 @@ import type { BlogPost } from '@/contexts/BlogContext';
 interface UseEmojiReactionsParams {
   post: BlogPost | null;
   isAuthenticated: boolean;
-  isPro: boolean;
   currentUserNpub?: string;
   ndk: NDK | null;
   dParam?: string;
@@ -20,7 +19,6 @@ interface UseEmojiReactionsParams {
 export function useEmojiReactions({
   post,
   isAuthenticated,
-  isPro,
   currentUserNpub,
   ndk,
   dParam,
@@ -46,21 +44,22 @@ export function useEmojiReactions({
   );
 
   const loadCustomEmojisForUser = useCallback(async () => {
-    if (!isPro || !currentUserNpub || !ndk) return;
+    if (!currentUserNpub || !ndk) return;
 
     const hex = npubToHex(currentUserNpub);
     if (!hex) return;
 
     setIsLoadingCustomEmojis(true);
     try {
-      const emojis = await loadCustomEmojis(ndk, hex);
+      const list = await loadCustomEmojiList(ndk, hex);
+      const emojis = await resolveCustomEmojis(ndk, list);
       setCustomEmojis(emojis);
     } catch (error) {
       console.error('Error loading custom emojis:', error);
     } finally {
       setIsLoadingCustomEmojis(false);
     }
-  }, [currentUserNpub, isPro, ndk]);
+  }, [currentUserNpub, ndk]);
 
   const loadPreferredEmojis = useCallback(() => {
     try {
@@ -98,12 +97,8 @@ export function useEmojiReactions({
   }, [loadPreferredEmojis]);
 
   useEffect(() => {
-    if (isPro) {
-      void loadCustomEmojisForUser();
-    } else {
-      setCustomEmojis([]);
-    }
-  }, [isPro, loadCustomEmojisForUser]);
+    void loadCustomEmojisForUser();
+  }, [loadCustomEmojisForUser]);
 
   const handleHeartClick = useCallback(() => {
     if (!isAuthenticated) {

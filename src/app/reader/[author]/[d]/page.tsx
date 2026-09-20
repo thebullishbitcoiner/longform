@@ -11,7 +11,6 @@ import JsonModal from '@/components/JsonModal';
 import { useBlog } from '@/contexts/BlogContext';
 import type { BlogPost } from '@/contexts/BlogContext';
 import { useNostr } from '@/contexts/NostrContext';
-import { useProStatus } from '@/hooks/useProStatus';
 import { nostrDebug } from '@/nostr/debug';
 import {
   KIND_HIGHLIGHT,
@@ -56,8 +55,7 @@ export default function BlogPost() {
   const { addPost, markPostAsRead, getAuthorProfile, fetchProfileOnce, updateAuthorProfile, getPostByAuthorAndD } = useBlog();
   const { ndk: contextNdk, isAuthenticated, currentUser } = useNostr();
   const { getHighlightsForPost, addHighlight } = useHighlights();
-  const { isPro } = useProStatus();
-  
+
   // Core page state
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,7 +156,6 @@ export default function BlogPost() {
   } = useEmojiReactions({
     post,
     isAuthenticated,
-    isPro,
     currentUserNpub: currentUser?.npub,
     ndk: ndkToUse,
     dParam: typeof params.d === 'string' ? decodeURIComponent(params.d) : undefined,
@@ -977,7 +974,6 @@ export default function BlogPost() {
         handleEmojiInputKeyPress={handleEmojiInputKeyPress}
         handleAddEmoji={handleAddEmoji}
         handleEmojiSelect={handleEmojiSelect}
-        isPro={isPro}
         customEmojis={customEmojis}
         isLoadingCustomEmojis={isLoadingCustomEmojis}
       />
