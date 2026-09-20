@@ -56,12 +56,20 @@ async function fetchLatestEmojiListEvent(ndk: NDK, pubkey: string): Promise<NDKE
 async function decryptEmojiListTags(ndk: NDK, event: NDKEvent): Promise<string[][]> {
   if (!event.content) return [];
   const signer = ndk.signer;
-  if (!(signer instanceof Nip07Signer)) return [];
+  if (!(signer instanceof Nip07Signer)) {
+    console.warn('[customEmojis] kind-10030 has encrypted content but no Nip07Signer is attached to decrypt it');
+    return [];
+  }
   try {
     const plain = await signer.decryptNip44(event.content);
     const tags = JSON.parse(plain);
-    return Array.isArray(tags) ? tags.filter((t): t is string[] => Array.isArray(t)) : [];
-  } catch {
+    if (!Array.isArray(tags)) {
+      console.warn('[customEmojis] decrypted kind-10030 content is not a tags array:', plain.slice(0, 200));
+      return [];
+    }
+    return tags.filter((t): t is string[] => Array.isArray(t));
+  } catch (error) {
+    console.error('[customEmojis] failed to decrypt kind-10030 content:', error);
     return [];
   }
 }
